@@ -1,0 +1,167 @@
+// ============================================
+// Grafana Alloy Configuration for SIB
+// ============================================
+// Collects logs and metrics, ships to central SIB server
+// Edit SIB_SERVER below to point to your SIB instance
+// ============================================
+
+// ============================================
+// CONFIGURATION - EDIT THIS
+// ============================================
+local.file "config" {
+  filename = "/etc/alloy/config.alloy"
+}
+
+// SIB Server Address - CHANGE THIS
+argument "sib_server" {
+  optional = true
+  default  = "YOUR_SIB_SERVER_IP"
+}
+
+argument "hostname" {
+  optional = true
+  default  = env("HOSTNAME")
+}
+
+// ============================================
+// LOGGING - Ship to Loki
+// ============================================
+
+// System logs - syslog
+local.file_match "syslog" {
+  path_targets = [
+    {__path__ = "/var/log/syslog", job = "syslog", host = argument.hostname.value},
+    {__path__ = "/var/log/messages", job = "syslog", host = argument.hostname.value},
+  ]
+}
+
+loki.source.file "syslog" {
+  targets    = local.file_match.syslog.targets
+  forward_to = [loki.process.default.receiver]
+}
+
+// Auth logs
+local.file_match "auth" {
+  path_targets = [
+    {__path__ = "/var/log/auth.log", job = "auth", host = argument.hostname.value},
+    {__path__ = "/var/log/secure", job = "auth", host = argument.hostname.value},
+  ]
+}
+
+loki.source.file "auth" {
+  targets    = local.file_match.auth.targets
+  forward_to = [loki.process.default.receiver]
+}
+
+// Kernel logs
+local.file_match "kern" {
+  path_targets = [
+    {__path__ = "/var/log/kern.log", job = "kernel", host = argument.hostname.value},
+  ]
+}
+
+loki.source.file "kern" {
+  targets    = local.file_match.kern.targets
+  forward_to = [loki.process.default.receiver]
+}
+
+// Journal (systemd) logs
+loki.source.journal "journal" {
+  forward_to = [loki.process.default.receiver]
+  labels     = {
+    job  = "journal",
+    host = argument.hostname.value,
+  }
+}
+
+// Docker container logs
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker.output
+  forward_to = [loki.process.default.receiver]
+  labels     = {
+    job  = "docker",
+    host = argument.hostname.value,
+  }
+}
+
+// Process logs - add labels
+loki.process "default" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.static_labels {
+    values = {
+      collector = "alloy",
+    }
+  }
+}
+
+// Ship to Loki
+loki.write "default" {
+  endpoint {
+    url = "http://" + argument.sib_server.value + ":3100/loki/api/v1/push"
+  }
+}
+
+// ============================================
+// METRICS - Ship to Prometheus
+// ============================================
+
+// Node metrics (CPU, memory, disk, network)
+prometheus.exporter.unix "node" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+
+  disable_collectors = ["arp", "bcache", "bonding", "btrfs", "conntrack", 
+                        "drm", "fibrechannel", "infiniband", "ipvs", "lnstat",
+                        "mdadm", "nfs", "nfsd", "nvme", "powersupplyclass",
+                        "pressure", "rapl", "schedstat", "selinux", "sockstat",
+                        "softnet", "tapestats", "thermal_zone", "timex", "udp_queues",
+                        "xfs", "zfs"]
+}
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.relabel.node.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.relabel "node" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  rule {
+    target_label = "instance"
+    replacement  = argument.hostname.value
+  }
+
+  rule {
+    target_label = "job"
+    replacement  = "node"
+  }
+}
+
+// Ship to Prometheus
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://" + argument.sib_server.value + ":9090/api/v1/write"
+  }
+}

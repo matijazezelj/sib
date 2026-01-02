@@ -111,6 +111,12 @@ Default Grafana credentials: `admin` / `admin`
 - Event volume by rule
 - Filterable log view with priority and rule filters
 
+### Fleet Overview
+- Active hosts with collectors
+- CPU, memory, disk usage per host
+- Network traffic graphs
+- Log volume by host
+
 ## 🛠️ Commands
 
 ```bash
@@ -169,7 +175,14 @@ sib/
 │       └── dashboards/
 │           └── json/
 │               ├── security-overview.json
-│               └── events-explorer.json
+│               ├── events-explorer.json
+│               └── fleet-overview.json
+├── collectors/                 # Remote host collectors
+│   ├── compose.yaml            # Docker deployment
+│   ├── config/
+│   │   └── config.alloy        # Alloy configuration
+│   └── scripts/
+│       └── deploy.sh           # Remote deployment script
 └── examples/
     └── rules/                  # Example custom rules
 ```
@@ -224,6 +237,36 @@ SIDEKICK_UI_PORT=2802
 - Only Grafana and Sidekick UI are externally accessible
 - Falco requires privileged access for syscall monitoring
 - Change default Grafana password in production
+
+## 📡 Remote Collectors (Alloy)
+
+Deploy lightweight collectors to remote hosts to ship logs and metrics to SIB.
+
+### Enable Remote Mode
+
+```bash
+# On SIB server - enable external access for collectors
+make enable-remote
+```
+
+### Deploy Collector
+
+```bash
+# Deploy Alloy to a remote host
+make deploy-collector HOST=user@remote-host
+
+# Or manually
+./collectors/scripts/deploy.sh user@192.168.1.50 192.168.1.163
+```
+
+### What Gets Collected
+
+| Type | Sources |
+|------|---------|
+| **Logs** | syslog, auth.log, journal, Docker containers |
+| **Metrics** | CPU, memory, disk, network |
+
+Check the **Fleet Overview** dashboard in Grafana to see all connected hosts.
 
 ## 🐛 Troubleshooting
 

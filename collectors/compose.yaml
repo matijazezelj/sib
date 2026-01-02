@@ -1,0 +1,34 @@
+# Alloy Collector - Docker Compose
+# Deploy this on remote hosts to ship logs/metrics to SIB
+
+services:
+  alloy:
+    image: grafana/alloy:latest
+    container_name: sib-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - "127.0.0.1:12345:12345"  # Alloy UI (localhost only)
+    volumes:
+      - ./config/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+      # For system metrics
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+      - HOST_ROOT=/host/root
+    pid: host
+    network_mode: host
+    privileged: true
+
+volumes:
+  alloy-data:

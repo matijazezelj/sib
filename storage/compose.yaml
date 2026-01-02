@@ -1,4 +1,5 @@
 # Storage Stack - Loki + Prometheus
+# Remote mode: Set STORAGE_BIND=0.0.0.0 to accept connections from collectors
 
 services:
   loki:
@@ -6,7 +7,7 @@ services:
     container_name: sib-loki
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+      - "${STORAGE_BIND:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./config/loki-config.yml:/etc/loki/loki-config.yml:ro
@@ -25,7 +26,7 @@ services:
     container_name: sib-prometheus
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+      - "${STORAGE_BIND:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'

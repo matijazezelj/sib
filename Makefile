@@ -41,6 +41,9 @@ help: ## Show this help message
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|open-ui|info|ps|clean|check-ports|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Remote Collectors:$(RESET)"
+	@grep -E '^(enable-remote|deploy-collector):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Stack-specific commands:$(RESET)"
 	@echo "  Commands follow the pattern: $(GREEN)<action>-<stack>$(RESET)"
 	@echo "  Example: make install-detection, make stop-alerting, make logs-storage"
@@ -451,4 +454,44 @@ update: ## Pull latest images and restart all stacks
         restart restart-detection restart-alerting restart-storage restart-grafana \
         uninstall uninstall-detection uninstall-alerting uninstall-storage uninstall-grafana \
         status health doctor logs logs-falco logs-sidekick logs-storage logs-grafana \
-        test-alert demo test-rules open open-ui info ps check-ports validate clean update
+        test-alert demo test-rules open open-ui info ps check-ports validate clean update \
+        enable-remote deploy-collector
+
+# ==================== Remote Collectors ====================
+
+enable-remote: ## Enable remote connections from Alloy collectors
+	@echo "$(CYAN)🌐 Enabling remote connections for collectors...$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)This will expose Loki (3100) and Prometheus (9090) externally.$(RESET)"
+	@echo "$(YELLOW)Make sure your firewall is configured appropriately.$(RESET)"
+	@echo ""
+	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@if grep -q "^STORAGE_BIND=" .env 2>/dev/null; then \
+		sed -i.bak 's/^STORAGE_BIND=.*/STORAGE_BIND=0.0.0.0/' .env && rm -f .env.bak; \
+	else \
+		echo "STORAGE_BIND=0.0.0.0" >> .env; \
+	fi
+	@cd storage && $(DOCKER_COMPOSE) up -d
+	@echo ""
+	@echo "$(GREEN)✓ Remote connections enabled$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Collectors can now send data to:$(RESET)"
+	@echo "  Loki:       http://$$(hostname -I 2>/dev/null | awk '{print $$1}' || echo 'YOUR_IP'):3100"
+	@echo "  Prometheus: http://$$(hostname -I 2>/dev/null | awk '{print $$1}' || echo 'YOUR_IP'):9090"
+	@echo ""
+	@echo "$(CYAN)Deploy a collector with:$(RESET)"
+	@echo "  make deploy-collector HOST=user@remote-host"
+	@echo ""
+
+deploy-collector: ## Deploy Alloy collector to remote host (HOST=user@host)
+	@if [ -z "$(HOST)" ]; then \
+		echo "$(RED)✗ Please specify HOST=user@remote-host$(RESET)"; \
+		echo "  Example: make deploy-collector HOST=ubuntu@192.168.1.50"; \
+		exit 1; \
+	fi
+	@SIB_IP=$$(hostname -I 2>/dev/null | awk '{print $$1}'); \
+	if [ -z "$$SIB_IP" ]; then \
+		read -p "Enter SIB server IP: " SIB_IP; \
+	fi; \
+	chmod +x collectors/scripts/deploy.sh && \
+	./collectors/scripts/deploy.sh $(HOST) $$SIB_IP
