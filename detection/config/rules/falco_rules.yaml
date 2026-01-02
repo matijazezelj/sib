@@ -1,0 +1,308 @@
+# ==============================================
+# Falco Default Rules for SIB
+# ==============================================
+# This file contains commonly used rules from the
+# official Falco rules repository.
+# Full rules: https://github.com/falcosecurity/rules
+# ==============================================
+
+# ---------------------------------------------
+# Macros (reusable conditions)
+# ---------------------------------------------
+
+- macro: spawned_process
+  condition: (evt.type in (execve, execveat) and evt.dir=<)
+
+- macro: container
+  condition: (container.id != host)
+
+- macro: open_write
+  condition: (evt.type in (open, openat, openat2) and evt.is_open_write=true and fd.typechar='f')
+
+- macro: open_read
+  condition: (evt.type in (open, openat, openat2) and evt.is_open_read=true and fd.typechar='f')
+
+- macro: outbound
+  condition: >
+    ((evt.type = connect and evt.dir=<) or
+     (evt.type in (sendto, sendmsg, sendmmsg) and evt.dir=< and fd.l4proto != udp and fd.connected=false and fd.name_changed=true)) and
+    (fd.typechar = 4 or fd.typechar = 6) and
+    (fd.ip != "0.0.0.0" and fd.net != "127.0.0.0/8" and fd.net != "::1/128")
+
+- macro: inbound
+  condition: >
+    ((evt.type = accept and evt.dir=<) or
+     (evt.type in (recvfrom, recvmsg) and evt.dir=< and fd.l4proto != udp and fd.connected=false and fd.name_changed=true)) and
+    (fd.typechar = 4 or fd.typechar = 6)
+
+- macro: ssh_port
+  condition: (fd.sport = 22 or fd.lport = 22)
+
+- macro: never_true
+  condition: (evt.num=0)
+
+- macro: user_known_write_below_etc_activities
+  condition: (never_true)
+
+# Sensitive file directories
+- macro: sensitive_dirs
+  condition: >
+    fd.name startswith /etc or
+    fd.name startswith /usr/bin or
+    fd.name startswith /usr/sbin or
+    fd.name startswith /bin or
+    fd.name startswith /sbin
+
+# Shell binaries
+- list: shell_binaries
+  items: [bash, csh, ksh, sh, tcsh, zsh, dash, ash]
+
+# Package management binaries
+- list: package_mgmt_binaries
+  items: [apt, apt-get, aptitude, dpkg, yum, dnf, rpm, pacman, zypper, apk, pip, pip3, npm, gem]
+
+# Network tools
+- list: network_tool_binaries
+  items: [nc, ncat, netcat, nmap, socat, telnet, curl, wget]
+
+# Crypto mining
+- list: miner_binaries
+  items: [xmrig, minerd, cpuminer, ethminer, cgminer, bfgminer, nbminer, t-rex]
+
+# Sensitive files
+- list: sensitive_files
+  items: [/etc/shadow, /etc/passwd, /etc/sudoers, /etc/ssh/sshd_config]
+
+# ---------------------------------------------
+# File Integrity Rules
+# ---------------------------------------------
+
+- rule: Write below etc
+  desc: An attempt to write to any file below /etc
+  condition: >
+    open_write and
+    fd.name startswith /etc and
+    not user_known_write_below_etc_activities
+  output: >
+    File below /etc opened for writing 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     file=%fd.name parent=%proc.pname pcmdline=%proc.pcmdline 
+     gparent=%proc.aname[2] container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: ERROR
+  tags: [filesystem, mitre_persistence, T1078]
+
+- rule: Write below binary dir
+  desc: An attempt to write to any file below a binary directory
+  condition: >
+    open_write and
+    (fd.name startswith /bin or
+     fd.name startswith /sbin or
+     fd.name startswith /usr/bin or
+     fd.name startswith /usr/sbin)
+  output: >
+    File below binary directory opened for writing 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     file=%fd.name parent=%proc.pname container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: ERROR
+  tags: [filesystem, mitre_persistence]
+
+- rule: Read sensitive file untrusted
+  desc: An attempt to read any sensitive file by non-privileged process
+  condition: >
+    open_read and
+    fd.name in (sensitive_files) and
+    not proc.name in (sudo, su, passwd, shadow)
+  output: >
+    Sensitive file opened for reading 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     file=%fd.name parent=%proc.pname container_id=%container.id 
+     container_name=%container.name)
+  priority: WARNING
+  tags: [filesystem, mitre_credential_access, T1003]
+
+# ---------------------------------------------
+# Process Rules
+# ---------------------------------------------
+
+- rule: Terminal shell in container
+  desc: A shell was spawned in a container with an attached terminal
+  condition: >
+    spawned_process and 
+    container and
+    proc.name in (shell_binaries) and
+    proc.tty != 0
+  output: >
+    Terminal shell in container 
+    (user=%user.name user_uid=%user.uid shell=%proc.name 
+     parent=%proc.pname cmdline=%proc.cmdline terminal=%proc.tty 
+     container_id=%container.id container_name=%container.name 
+     image=%container.image.repository)
+  priority: NOTICE
+  tags: [container, shell, mitre_execution, T1059]
+
+- rule: Shell spawned by untrusted binary
+  desc: A shell was spawned by an unusual process
+  condition: >
+    spawned_process and
+    proc.name in (shell_binaries) and
+    proc.pname in (httpd, nginx, apache, apache2, php, php-fpm, python, 
+                   python3, java, node, ruby, perl)
+  output: >
+    Shell spawned by suspicious process 
+    (user=%user.name shell=%proc.name parent=%proc.pname 
+     grandparent=%proc.aname[2] cmdline=%proc.cmdline 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [process, shell, mitre_execution, T1059]
+
+- rule: Package management process launched
+  desc: Package management process was launched in container
+  condition: >
+    spawned_process and
+    container and
+    proc.name in (package_mgmt_binaries)
+  output: >
+    Package management process in container 
+    (user=%user.name command=%proc.cmdline container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: NOTICE
+  tags: [container, package_management, mitre_persistence]
+
+- rule: System procs network activity
+  desc: System process performed network activity
+  condition: >
+    (inbound or outbound) and
+    proc.name in (at, cron, atd, crond, systemd, journald, init)
+  output: >
+    System process network activity 
+    (user=%user.name command=%proc.cmdline connection=%fd.name 
+     container_id=%container.id)
+  priority: NOTICE
+  tags: [network, system, mitre_command_and_control]
+
+# ---------------------------------------------
+# Network Rules
+# ---------------------------------------------
+
+- rule: Network connection outside local net
+  desc: Detect any outbound network connection to non-local networks
+  condition: >
+    outbound and
+    not fd.net in (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+  output: >
+    Outbound connection to external network 
+    (user=%user.name command=%proc.cmdline connection=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: INFO
+  tags: [network, mitre_command_and_control]
+
+- rule: Netcat Remote Code Execution
+  desc: Netcat is used for remote code execution
+  condition: >
+    spawned_process and
+    proc.name in (nc, ncat, netcat) and
+    (proc.cmdline contains "-e" or
+     proc.cmdline contains "-c")
+  output: >
+    Netcat remote code execution 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [network, backdoor, mitre_execution, T1059]
+
+# ---------------------------------------------
+# Privilege Escalation
+# ---------------------------------------------
+
+- rule: Sudo to root
+  desc: Detected sudo to root
+  condition: >
+    spawned_process and
+    proc.name = sudo and
+    user.uid != 0
+  output: >
+    Sudo executed 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     parent=%proc.pname container_id=%container.id)
+  priority: NOTICE
+  tags: [users, mitre_privilege_escalation, T1548]
+
+- rule: Setuid or setgid bit set
+  desc: Detect setting of setuid or setgid bit
+  condition: >
+    evt.type = chmod and
+    (evt.arg.mode contains "S_ISUID" or
+     evt.arg.mode contains "S_ISGID")
+  output: >
+    Setuid/setgid bit set 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     file=%fd.name container_id=%container.id)
+  priority: WARNING
+  tags: [users, mitre_privilege_escalation, T1548.001]
+
+# ---------------------------------------------
+# Defense Evasion
+# ---------------------------------------------
+
+- rule: Clear log activities
+  desc: Detect clearing of log files
+  condition: >
+    open_write and
+    (fd.name startswith /var/log or
+     fd.name = /var/run/utmp or
+     fd.name = /var/run/wtmp) and
+    (proc.name in (truncate, shred, rm) or
+     evt.arg.flags contains O_TRUNC)
+  output: >
+    Log file cleared 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     file=%fd.name container_id=%container.id)
+  priority: WARNING
+  tags: [mitre_defense_evasion, T1070]
+
+- rule: Disable security tools
+  desc: Detect attempts to disable security tools
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "setenforce 0" or
+     proc.cmdline contains "systemctl stop apparmor" or
+     proc.cmdline contains "systemctl stop firewalld" or
+     proc.cmdline contains "iptables -F")
+  output: >
+    Security tool disabled 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: WARNING
+  tags: [mitre_defense_evasion, T1562]
+
+# ---------------------------------------------
+# Discovery
+# ---------------------------------------------
+
+- rule: System information discovery
+  desc: Detect system information gathering commands
+  condition: >
+    spawned_process and
+    (proc.name in (uname, hostname, cat) and
+     (proc.cmdline contains "/etc/os-release" or
+      proc.cmdline contains "/etc/passwd" or
+      proc.cmdline contains "/proc/version"))
+  output: >
+    System information discovery 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id container_name=%container.name)
+  priority: INFO
+  tags: [mitre_discovery, T1082]
+
+- rule: Network discovery
+  desc: Detect network discovery commands
+  condition: >
+    spawned_process and
+    proc.name in (ifconfig, ip, netstat, ss, arp, route, nmap)
+  output: >
+    Network discovery command 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id container_name=%container.name)
+  priority: INFO
+  tags: [mitre_discovery, T1016]

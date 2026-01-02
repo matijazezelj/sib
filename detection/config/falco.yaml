@@ -1,0 +1,177 @@
+# ==============================================
+# Falco Configuration for SIB (SIEM in a Box)
+# ==============================================
+# Documentation: https://falco.org/docs/reference/daemon/config-options/
+# ==============================================
+
+# ---------------------------------------------
+# Engine Configuration
+# ---------------------------------------------
+
+# Use modern_ebpf driver (no kernel headers required)
+engine:
+  kind: modern_ebpf
+  modern_ebpf:
+    cpus_for_each_buffer: 2
+    buf_size_preset: 4
+
+# ---------------------------------------------
+# Output Configuration
+# ---------------------------------------------
+
+# Enable JSON output (required for Falcosidekick)
+json_output: true
+
+# Include output property in JSON
+json_include_output_property: true
+
+# Include tags in output
+json_include_tags_property: true
+
+# Time format: iso8601 or rfc2822
+time_format_iso_8601: true
+
+# ---------------------------------------------
+# HTTP Output (to Falcosidekick)
+# ---------------------------------------------
+
+http_output:
+  enabled: true
+  url: "http://sib-sidekick:2801/"
+  user_agent: "falcosidekick"
+
+# ---------------------------------------------
+# Priority & Filtering
+# ---------------------------------------------
+
+# Minimum priority to output
+# Values: debug, info, informational, notice, warning, error, critical, alert, emergency
+priority: notice
+
+# ---------------------------------------------
+# Rules Configuration
+# ---------------------------------------------
+
+# Rules files to load
+rules_files:
+  - /etc/falco/rules/falco_rules.yaml
+  - /etc/falco/rules/falco-incubating_rules.yaml
+  - /etc/falco/rules/falco-sandbox_rules.yaml
+  - /etc/falco/rules/custom_rules.yaml
+
+# Watch rules files for changes
+watch_config_files: true
+
+# ---------------------------------------------
+# Performance Tuning
+# ---------------------------------------------
+
+# Buffer outputs for better performance
+buffered_outputs: true
+
+# Output timeout in ms
+output_timeout: 2000
+
+# ---------------------------------------------
+# gRPC Configuration
+# ---------------------------------------------
+
+# gRPC server for streaming events
+grpc:
+  enabled: false
+  bind_address: "unix:///run/falco/falco.sock"
+  threadiness: 0
+
+grpc_output:
+  enabled: false
+
+# ---------------------------------------------
+# Webserver (for health checks)
+# ---------------------------------------------
+
+webserver:
+  enabled: true
+  listen_port: 8765
+  k8s_healthz_endpoint: /healthz
+  ssl_enabled: false
+  ssl_certificate: /etc/falco/certs/server.pem
+
+# ---------------------------------------------
+# Metrics
+# ---------------------------------------------
+
+metrics:
+  enabled: true
+  interval: 1h
+  output_rule: true
+  rules_counters_enabled: true
+  resource_utilization_enabled: true
+  state_counters_enabled: true
+  kernel_event_counters_enabled: true
+  libbpf_stats_enabled: true
+  convert_memory_to_mb: true
+  include_empty_values: false
+
+# ---------------------------------------------
+# Syscall Event Source
+# ---------------------------------------------
+
+syscall_event_drops:
+  threshold: 0.1
+  actions:
+    - log
+    - alert
+  rate: 0.03333
+  max_burst: 1
+
+# ---------------------------------------------
+# Container Runtime
+# ---------------------------------------------
+
+# Container runtime socket
+container_engines:
+  docker:
+    enabled: true
+  cri:
+    enabled: false
+  podman:
+    enabled: false
+  lxc:
+    enabled: false
+  libvirt_lxc:
+    enabled: false
+  bpm:
+    enabled: false
+
+# ---------------------------------------------
+# Plugins (optional, for extended sources)
+# ---------------------------------------------
+
+# Uncomment to enable plugins
+# load_plugins: []
+
+# plugins:
+#   - name: cloudtrail
+#     library_path: libcloudtrail.so
+#     init_config: ""
+#     open_params: ""
+#   - name: k8saudit
+#     library_path: libk8saudit.so
+#     init_config: ""
+#     open_params: ""
+
+# ---------------------------------------------
+# Logging
+# ---------------------------------------------
+
+log_stderr: true
+log_syslog: false
+log_level: info
+
+# ---------------------------------------------
+# Base Syscalls (for drivers)
+# ---------------------------------------------
+
+base_syscalls:
+  custom_set: []
+  repair: false

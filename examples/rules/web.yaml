@@ -1,0 +1,218 @@
+# ==============================================
+# Example Web Application Falco Rules
+# ==============================================
+# These rules detect web application attacks
+# Enable by copying to detection/config/rules/
+# ==============================================
+
+# ---------------------------------------------
+# Web Shell Detection
+# ---------------------------------------------
+
+- rule: Web Server Spawns Shell
+  desc: Detects web server spawning a shell process
+  condition: >
+    spawned_process and
+    proc.name in (sh, bash, ash, dash, zsh, csh, ksh) and
+    proc.pname in (httpd, apache, apache2, nginx, php, php-fpm, 
+                   php-cgi, node, nodejs, python, python3, ruby, 
+                   java, tomcat, gunicorn, uwsgi, puma)
+  output: >
+    Web server spawned shell 
+    (user=%user.name parent=%proc.pname shell=%proc.name 
+     command=%proc.cmdline container_id=%container.id 
+     container_name=%container.name)
+  priority: WARNING
+  tags: [web, shell, webshell, mitre_execution, T1059]
+
+- rule: Web Server Executes Suspicious Binary
+  desc: Detects web server executing suspicious binaries
+  condition: >
+    spawned_process and
+    proc.pname in (httpd, apache, apache2, nginx, php, php-fpm, 
+                   node, nodejs, python, python3, ruby, java) and
+    proc.name in (wget, curl, nc, ncat, netcat, nmap, telnet, 
+                  ssh, scp, base64, perl, python, python3)
+  output: >
+    Web server executed suspicious binary 
+    (user=%user.name parent=%proc.pname binary=%proc.name 
+     command=%proc.cmdline container_id=%container.id)
+  priority: WARNING
+  tags: [web, suspicious, mitre_execution]
+
+# ---------------------------------------------
+# File Upload Attacks
+# ---------------------------------------------
+
+- rule: PHP File Written by Web Server
+  desc: Detects PHP file written by web server
+  condition: >
+    open_write and
+    fd.name endswith ".php" and
+    (proc.name in (httpd, apache, apache2, nginx, php, php-fpm) or
+     proc.pname in (httpd, apache, apache2, nginx, php, php-fpm))
+  output: >
+    PHP file written by web server 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [web, upload, php, mitre_persistence, T1505.003]
+
+- rule: Executable Written to Web Directory
+  desc: Detects executable file in web directory
+  condition: >
+    open_write and
+    (fd.name contains "/var/www/" or
+     fd.name contains "/html/" or
+     fd.name contains "/public/" or
+     fd.name contains "/htdocs/") and
+    (fd.name endswith ".php" or
+     fd.name endswith ".jsp" or
+     fd.name endswith ".aspx" or
+     fd.name endswith ".sh" or
+     fd.name endswith ".py" or
+     fd.name endswith ".pl")
+  output: >
+    Executable written to web directory 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [web, upload, executable, mitre_persistence]
+
+# ---------------------------------------------
+# Database Attacks
+# ---------------------------------------------
+
+- rule: Database Command Execution
+  desc: Detects database process spawning shell commands
+  condition: >
+    spawned_process and
+    proc.pname in (mysqld, postgres, postgresql, mongod, redis-server) and
+    proc.name in (sh, bash, python, perl, nc, wget, curl)
+  output: >
+    Database spawned command 
+    (user=%user.name database=%proc.pname command=%proc.cmdline 
+     container_id=%container.id)
+  priority: CRITICAL
+  tags: [database, execution, mitre_execution]
+
+- rule: Database Dump Detected
+  desc: Detects database dump operations
+  condition: >
+    spawned_process and
+    (proc.name in (mysqldump, pg_dump, mongodump) or
+     (proc.cmdline contains "SELECT" and proc.cmdline contains "INTO OUTFILE"))
+  output: >
+    Database dump detected 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: WARNING
+  tags: [database, dump, exfiltration, mitre_collection, T1005]
+
+# ---------------------------------------------
+# Path Traversal
+# ---------------------------------------------
+
+- rule: Path Traversal Access
+  desc: Detects path traversal file access
+  condition: >
+    open_read and
+    (fd.name contains "../" or
+     fd.name contains "..\\") and
+    (proc.pname in (httpd, apache, apache2, nginx, php, node) or
+     container)
+  output: >
+    Path traversal file access 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [web, path_traversal, mitre_initial_access]
+
+# ---------------------------------------------
+# Reverse Shells
+# ---------------------------------------------
+
+- rule: Reverse Shell via Netcat
+  desc: Detects reverse shell using netcat
+  condition: >
+    spawned_process and
+    proc.name in (nc, ncat, netcat) and
+    (proc.cmdline contains "-e" or
+     proc.cmdline contains "-c" or
+     proc.cmdline contains "/bin/sh" or
+     proc.cmdline contains "/bin/bash")
+  output: >
+    Reverse shell via netcat 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id)
+  priority: CRITICAL
+  tags: [web, reverse_shell, mitre_execution, T1059]
+
+- rule: Reverse Shell via Bash
+  desc: Detects bash reverse shell
+  condition: >
+    spawned_process and
+    proc.name = bash and
+    (proc.cmdline contains "/dev/tcp/" or
+     proc.cmdline contains "&1>&0" or
+     proc.cmdline contains "0>&1")
+  output: >
+    Bash reverse shell 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id)
+  priority: CRITICAL
+  tags: [web, reverse_shell, bash, mitre_execution, T1059.004]
+
+- rule: Reverse Shell via Python
+  desc: Detects Python reverse shell
+  condition: >
+    spawned_process and
+    proc.name in (python, python3, python2) and
+    (proc.cmdline contains "socket" and
+     (proc.cmdline contains "connect" or
+      proc.cmdline contains "subprocess" or
+      proc.cmdline contains "os.dup2"))
+  output: >
+    Python reverse shell 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id)
+  priority: CRITICAL
+  tags: [web, reverse_shell, python, mitre_execution, T1059.006]
+
+# ---------------------------------------------
+# Suspicious Network Activity
+# ---------------------------------------------
+
+- rule: Web Server Outbound Connection
+  desc: Detects web server making outbound connections
+  condition: >
+    outbound and
+    proc.name in (httpd, apache, apache2, nginx, php, php-fpm, 
+                  node, nodejs) and
+    not fd.sip in (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8)
+  output: >
+    Web server outbound connection 
+    (user=%user.name process=%proc.name connection=%fd.name 
+     container_id=%container.id)
+  priority: NOTICE
+  tags: [web, network, outbound, mitre_command_and_control]
+
+# ---------------------------------------------
+# Log Tampering
+# ---------------------------------------------
+
+- rule: Web Server Log Cleared
+  desc: Detects web server log file clearing
+  condition: >
+    open_write and
+    (fd.name contains "/var/log/apache" or
+     fd.name contains "/var/log/nginx" or
+     fd.name contains "/var/log/httpd" or
+     fd.name = "/var/log/access.log" or
+     fd.name = "/var/log/error.log") and
+    (proc.name in (truncate, shred, rm) or
+     evt.arg.flags contains O_TRUNC)
+  output: >
+    Web server log cleared 
+    (user=%user.name command=%proc.cmdline file=%fd.name)
+  priority: WARNING
+  tags: [web, log_tampering, mitre_defense_evasion, T1070]

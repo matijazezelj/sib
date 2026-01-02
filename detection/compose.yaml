@@ -1,0 +1,33 @@
+# Detection Stack - Falco Runtime Security
+
+services:
+  falco:
+    image: falcosecurity/falco:0.39.2
+    container_name: sib-falco
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      # Falco configuration
+      - ./config/falco.yaml:/etc/falco/falco.yaml:ro
+      - ./config/rules:/etc/falco/rules:ro
+      # Required for syscall monitoring
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /dev:/host/dev:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+    environment:
+      - HOST_ROOT=/host
+      # Use modern eBPF driver - no kernel headers needed
+      - FALCOCTL_DRIVER_TYPE=modern_ebpf
+    networks:
+      - sib-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  sib-network:
+    external: true

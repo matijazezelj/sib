@@ -1,0 +1,52 @@
+# ==============================================
+# Prometheus Configuration for SIB
+# ==============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files (optional)
+# rule_files:
+#   - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'sib-prometheus'
+
+  # Falcosidekick metrics
+  - job_name: 'falcosidekick'
+    static_configs:
+      - targets: ['sib-sidekick:2801']
+        labels:
+          instance: 'sib-sidekick'
+    metrics_path: '/metrics'
+
+  # Loki metrics (optional)
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['sib-loki:3100']
+        labels:
+          instance: 'sib-loki'
+    metrics_path: '/metrics'
+
+  # Grafana metrics (optional)
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['sib-grafana:3000']
+        labels:
+          instance: 'sib-grafana'
+    metrics_path: '/metrics'

@@ -1,0 +1,142 @@
+# ==============================================
+# Example AWS-Specific Falco Rules
+# ==============================================
+# These rules detect AWS-related security issues
+# Enable by copying to detection/config/rules/
+# ==============================================
+
+# ---------------------------------------------
+# AWS Credential Access
+# ---------------------------------------------
+
+- rule: AWS Credentials File Accessed
+  desc: Detects access to AWS credentials file
+  condition: >
+    open_read and
+    (fd.name = "/root/.aws/credentials" or
+     fd.name contains "/.aws/credentials" or
+     fd.name = "/root/.aws/config" or
+     fd.name contains "/.aws/config")
+  output: >
+    AWS credentials file accessed 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [aws, credential_access, mitre_credential_access, T1552]
+
+- rule: AWS Environment Variables Logged
+  desc: Detects potential AWS credential leakage in logs
+  condition: >
+    open_write and
+    (fd.name startswith "/var/log" or fd.name contains ".log") and
+    (evt.buffer contains "AWS_ACCESS_KEY" or
+     evt.buffer contains "AWS_SECRET_ACCESS" or
+     evt.buffer contains "AKIA")
+  output: >
+    Potential AWS credential in log file 
+    (user=%user.name command=%proc.cmdline file=%fd.name)
+  priority: WARNING
+  tags: [aws, credential_access, data_leak]
+
+- rule: AWS CLI Credential Commands
+  desc: Detects AWS CLI commands that expose credentials
+  condition: >
+    spawned_process and
+    proc.name = aws and
+    (proc.cmdline contains "get-session-token" or
+     proc.cmdline contains "get-caller-identity" or
+     proc.cmdline contains "sts assume-role")
+  output: >
+    AWS credential command executed 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: NOTICE
+  tags: [aws, credential_access]
+
+# ---------------------------------------------
+# AWS Metadata Service (IMDS)
+# ---------------------------------------------
+
+- rule: Access to AWS Metadata Service
+  desc: Detects access to AWS EC2 metadata service
+  condition: >
+    outbound and
+    fd.sip = "169.254.169.254"
+  output: >
+    AWS metadata service accessed 
+    (user=%user.name command=%proc.cmdline 
+     container_id=%container.id container_name=%container.name)
+  priority: NOTICE
+  tags: [aws, imds, cloud, mitre_credential_access, T1552.005]
+
+- rule: AWS Metadata Token Request
+  desc: Detects IMDSv2 token requests
+  condition: >
+    outbound and
+    fd.sip = "169.254.169.254" and
+    (evt.buffer contains "latest/api/token" or
+     evt.buffer contains "X-aws-ec2-metadata-token")
+  output: >
+    AWS IMDS token requested 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: NOTICE
+  tags: [aws, imds, cloud]
+
+# ---------------------------------------------
+# AWS Resource Enumeration
+# ---------------------------------------------
+
+- rule: AWS S3 Bucket Listing
+  desc: Detects AWS S3 bucket enumeration
+  condition: >
+    spawned_process and
+    proc.name = aws and
+    (proc.cmdline contains "s3 ls" or
+     proc.cmdline contains "s3api list-buckets")
+  output: >
+    AWS S3 bucket listing 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: NOTICE
+  tags: [aws, s3, discovery, mitre_discovery]
+
+- rule: AWS IAM Enumeration
+  desc: Detects AWS IAM policy/role enumeration
+  condition: >
+    spawned_process and
+    proc.name = aws and
+    proc.cmdline contains "iam" and
+    (proc.cmdline contains "list-" or
+     proc.cmdline contains "get-")
+  output: >
+    AWS IAM enumeration 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: NOTICE
+  tags: [aws, iam, discovery, mitre_discovery]
+
+- rule: AWS EC2 Instance Enumeration
+  desc: Detects AWS EC2 instance enumeration
+  condition: >
+    spawned_process and
+    proc.name = aws and
+    proc.cmdline contains "ec2 describe-instances"
+  output: >
+    AWS EC2 enumeration 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: INFO
+  tags: [aws, ec2, discovery]
+
+# ---------------------------------------------
+# AWS Exfiltration
+# ---------------------------------------------
+
+- rule: AWS S3 Large Upload
+  desc: Detects large file uploads to S3
+  condition: >
+    spawned_process and
+    proc.name = aws and
+    (proc.cmdline contains "s3 cp" or proc.cmdline contains "s3 sync") and
+    (proc.cmdline contains "--recursive" or proc.cmdline contains "/")
+  output: >
+    AWS S3 data upload 
+    (user=%user.name command=%proc.cmdline container_id=%container.id)
+  priority: NOTICE
+  tags: [aws, s3, exfiltration, mitre_exfiltration, T1537]

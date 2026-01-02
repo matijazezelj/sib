@@ -1,0 +1,17 @@
+# ==============================================
+# Grafana Dashboard Provisioning for SIB
+# ==============================================
+
+apiVersion: 1
+
+providers:
+  - name: 'SIB Dashboards'
+    orgId: 1
+    folder: 'SIEM in a Box'
+    folderUid: 'sib'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

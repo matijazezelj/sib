@@ -1,0 +1,224 @@
+# ==============================================
+# SIB Custom Falco Rules
+# ==============================================
+# Add your custom security rules here.
+# These rules are loaded after the default rules.
+# ==============================================
+
+# ---------------------------------------------
+# Critical Test Rule (for verification)
+# ---------------------------------------------
+
+- rule: Critical Test - Shadow File Read
+  desc: Triggers Critical alert when /etc/shadow is read
+  condition: >
+    open_read and 
+    fd.name = "/etc/shadow"
+  output: >
+    CRITICAL: Shadow file accessed 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     parent=%proc.pname container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [test, critical, shadow]
+
+# ---------------------------------------------
+# Cryptocurrency Mining Detection
+# ---------------------------------------------
+
+- rule: Detect Cryptocurrency Mining Process
+  desc: Detects known cryptocurrency mining processes
+  condition: >
+    spawned_process and 
+    (proc.name in (xmrig, minerd, cpuminer, ethminer, cgminer, bfgminer, 
+                   nbminer, t-rex, phoenixminer, lolminer, gminer) or
+     proc.cmdline contains "stratum+tcp" or
+     proc.cmdline contains "pool.minexmr" or
+     proc.cmdline contains "nanopool" or
+     proc.cmdline contains "nicehash")
+  output: >
+    Cryptocurrency miner detected 
+    (user=%user.name user_uid=%user.uid command=%proc.cmdline 
+     parent=%proc.pname container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [cryptomining, mitre_impact, T1496]
+
+- rule: Detect Cryptocurrency Mining Network Connection
+  desc: Detects network connections to known mining pool ports
+  condition: >
+    outbound and 
+    fd.sport in (3333, 4444, 8888, 14444, 45700)
+  output: >
+    Possible mining pool connection 
+    (user=%user.name command=%proc.cmdline connection=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [cryptomining, network, mitre_impact]
+
+# ---------------------------------------------
+# Container Security
+# ---------------------------------------------
+
+- rule: Container Escape via Mount
+  desc: Detects potential container escape via mount manipulation
+  condition: >
+    spawned_process and 
+    container and
+    proc.name = mount and
+    (proc.cmdline contains "/host" or 
+     proc.cmdline contains "nsenter" or
+     proc.cmdline contains "/proc/1")
+  output: >
+    Potential container escape via mount 
+    (user=%user.name command=%proc.cmdline container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [container, escape, mitre_privilege_escalation, T1611]
+
+- rule: Container Running as Root
+  desc: Detects containers running processes as root
+  condition: >
+    spawned_process and 
+    container and 
+    user.uid = 0 and
+    not proc.name in (init, systemd, containerd, dockerd, runc)
+  output: >
+    Container process running as root 
+    (user=%user.name command=%proc.cmdline container_id=%container.id 
+     container_name=%container.name image=%container.image.repository)
+  priority: NOTICE
+  tags: [container, root, mitre_privilege_escalation]
+
+# ---------------------------------------------
+# Suspicious Network Activity
+# ---------------------------------------------
+
+- rule: Outbound Connection to Suspicious Port
+  desc: Detects outbound connections to commonly abused ports
+  condition: >
+    outbound and 
+    (fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337) or
+     fd.sport > 60000)
+  output: >
+    Suspicious outbound connection 
+    (user=%user.name command=%proc.cmdline connection=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [network, suspicious, mitre_command_and_control]
+
+# Note: DNS query detection for suspicious domains requires network monitoring 
+# tools or Falco plugins. Port-based detection is limited.
+
+# ---------------------------------------------
+# Credential Access
+# ---------------------------------------------
+
+- rule: Read AWS Credentials File
+  desc: Detects reading of AWS credentials file
+  condition: >
+    open_read and 
+    (fd.name = "/root/.aws/credentials" or
+     fd.name contains "/.aws/credentials")
+  output: >
+    AWS credentials file accessed 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: WARNING
+  tags: [credential_access, aws, mitre_credential_access, T1552]
+
+- rule: Read Kubernetes Secrets
+  desc: Detects access to Kubernetes secrets directory
+  condition: >
+    open_read and 
+    fd.name startswith "/var/run/secrets/kubernetes.io"
+  output: >
+    Kubernetes secrets accessed 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id container_name=%container.name)
+  priority: NOTICE
+  tags: [credential_access, kubernetes, mitre_credential_access]
+
+- rule: Read SSH Private Key
+  desc: Detects reading of SSH private keys
+  condition: >
+    open_read and 
+    (fd.name contains "id_rsa" or
+     fd.name contains "id_ed25519" or
+     fd.name contains "id_ecdsa" or
+     fd.name contains "id_dsa") and
+    not fd.name contains ".pub"
+  output: >
+    SSH private key accessed 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [credential_access, ssh, mitre_credential_access, T1552.004]
+
+# ---------------------------------------------
+# Persistence
+# ---------------------------------------------
+
+- rule: Crontab Modified
+  desc: Detects modifications to crontab files
+  condition: >
+    (open_write or evt.type = rename) and
+    (fd.name startswith "/etc/cron" or
+     fd.name startswith "/var/spool/cron")
+  output: >
+    Crontab modified 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [persistence, cron, mitre_persistence, T1053.003]
+
+- rule: Systemd Service Created
+  desc: Detects creation of new systemd services
+  condition: >
+    open_write and
+    (fd.name startswith "/etc/systemd/system" or
+     fd.name startswith "/lib/systemd/system") and
+    fd.name endswith ".service"
+  output: >
+    Systemd service created 
+    (user=%user.name command=%proc.cmdline file=%fd.name 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [persistence, systemd, mitre_persistence, T1543.002]
+
+# ---------------------------------------------
+# Suspicious Commands
+# ---------------------------------------------
+
+- rule: Base64 Decode Execution
+  desc: Detects base64 decode being piped to shell (common attack pattern)
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "base64 -d" or
+     proc.cmdline contains "base64 --decode") and
+    (proc.cmdline contains "| sh" or
+     proc.cmdline contains "| bash" or
+     proc.cmdline contains "|sh" or
+     proc.cmdline contains "|bash")
+  output: >
+    Base64 decode piped to shell 
+    (user=%user.name command=%proc.cmdline parent=%proc.pname 
+     container_id=%container.id)
+  priority: WARNING
+  tags: [execution, base64, mitre_execution, T1059]
+
+- rule: Wget or Curl to Suspicious Location
+  desc: Detects downloading files to tmp or suspicious locations
+  condition: >
+    spawned_process and
+    proc.name in (wget, curl) and
+    (proc.cmdline contains "/tmp/" or
+     proc.cmdline contains "/dev/shm/" or
+     proc.cmdline contains "/var/tmp/")
+  output: >
+    Download to suspicious location 
+    (user=%user.name command=%proc.cmdline container_id=%container.id 
+     container_name=%container.name)
+  priority: WARNING
+  tags: [execution, download, mitre_execution]
+

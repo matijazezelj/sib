@@ -1,0 +1,210 @@
+# ==============================================
+# Example Kubernetes-Specific Falco Rules
+# ==============================================
+# These rules require the k8saudit plugin enabled
+# Enable by copying to detection/config/rules/
+# ==============================================
+
+# Note: These rules work with the k8saudit plugin
+# Enable in detection/config/falco.yaml:
+# plugins:
+#   - name: k8saudit
+#     library_path: libk8saudit.so
+
+# ---------------------------------------------
+# Pod Security
+# ---------------------------------------------
+
+- rule: Create Privileged Pod
+  desc: Detect creation of privileged pod
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = pods and
+    ka.req.pod.containers.privileged = true
+  output: >
+    Privileged pod created 
+    (user=%ka.user.name pod=%ka.target.name 
+     namespace=%ka.target.namespace 
+     image=%ka.req.pod.containers.image)
+  priority: WARNING
+  tags: [k8s, pod, privileged, mitre_privilege_escalation]
+  source: k8s_audit
+
+- rule: Create HostNetwork Pod
+  desc: Detect pod with host network access
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = pods and
+    ka.req.pod.host_network = true
+  output: >
+    Pod with host network created 
+    (user=%ka.user.name pod=%ka.target.name 
+     namespace=%ka.target.namespace)
+  priority: WARNING
+  tags: [k8s, pod, network, mitre_privilege_escalation]
+  source: k8s_audit
+
+- rule: Create HostPID Pod
+  desc: Detect pod with host PID namespace
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = pods and
+    ka.req.pod.host_pid = true
+  output: >
+    Pod with host PID created 
+    (user=%ka.user.name pod=%ka.target.name 
+     namespace=%ka.target.namespace)
+  priority: WARNING
+  tags: [k8s, pod, hostpid, mitre_privilege_escalation]
+  source: k8s_audit
+
+# ---------------------------------------------
+# RBAC Changes
+# ---------------------------------------------
+
+- rule: ClusterRole Created
+  desc: Detect creation of cluster-wide role
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = clusterroles
+  output: >
+    ClusterRole created 
+    (user=%ka.user.name role=%ka.target.name)
+  priority: NOTICE
+  tags: [k8s, rbac, clusterrole]
+  source: k8s_audit
+
+- rule: ClusterRoleBinding Created
+  desc: Detect cluster role binding creation
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = clusterrolebindings
+  output: >
+    ClusterRoleBinding created 
+    (user=%ka.user.name binding=%ka.target.name)
+  priority: NOTICE
+  tags: [k8s, rbac, clusterrolebinding]
+  source: k8s_audit
+
+- rule: Service Account Token Created
+  desc: Detect service account token creation
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = secrets and
+    ka.req.secret.type = kubernetes.io/service-account-token
+  output: >
+    Service account token created 
+    (user=%ka.user.name secret=%ka.target.name 
+     namespace=%ka.target.namespace)
+  priority: NOTICE
+  tags: [k8s, secret, serviceaccount]
+  source: k8s_audit
+
+# ---------------------------------------------
+# Secrets Access
+# ---------------------------------------------
+
+- rule: Secret Listed or Read
+  desc: Detect listing or reading of secrets
+  condition: >
+    kevt and
+    (kget or klist) and
+    ka.target.resource = secrets
+  output: >
+    Secret accessed 
+    (user=%ka.user.name secret=%ka.target.name 
+     namespace=%ka.target.namespace verb=%ka.verb)
+  priority: NOTICE
+  tags: [k8s, secret, credential_access, mitre_credential_access]
+  source: k8s_audit
+
+# ---------------------------------------------
+# Exec into Containers
+# ---------------------------------------------
+
+- rule: Exec into Pod
+  desc: Detect exec into running container
+  condition: >
+    kevt and
+    ka.verb = create and
+    ka.target.resource = pods/exec
+  output: >
+    Exec into pod 
+    (user=%ka.user.name pod=%ka.target.name 
+     namespace=%ka.target.namespace)
+  priority: WARNING
+  tags: [k8s, exec, container, mitre_execution]
+  source: k8s_audit
+
+# ---------------------------------------------
+# Resource Deletion
+# ---------------------------------------------
+
+- rule: Namespace Deleted
+  desc: Detect namespace deletion
+  condition: >
+    kevt and 
+    kdelete and
+    ka.target.resource = namespaces
+  output: >
+    Namespace deleted 
+    (user=%ka.user.name namespace=%ka.target.name)
+  priority: WARNING
+  tags: [k8s, namespace, deletion]
+  source: k8s_audit
+
+- rule: Deployment Deleted
+  desc: Detect deployment deletion
+  condition: >
+    kevt and 
+    kdelete and
+    ka.target.resource = deployments
+  output: >
+    Deployment deleted 
+    (user=%ka.user.name deployment=%ka.target.name 
+     namespace=%ka.target.namespace)
+  priority: NOTICE
+  tags: [k8s, deployment, deletion]
+  source: k8s_audit
+
+# ---------------------------------------------
+# Suspicious Images
+# ---------------------------------------------
+
+- rule: Pod with Latest Tag
+  desc: Detect pod using :latest image tag
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = pods and
+    ka.req.pod.containers.image contains ":latest"
+  output: >
+    Pod using :latest tag 
+    (user=%ka.user.name pod=%ka.target.name 
+     image=%ka.req.pod.containers.image)
+  priority: NOTICE
+  tags: [k8s, pod, image, best_practice]
+  source: k8s_audit
+
+- rule: Pod from Untrusted Registry
+  desc: Detect pod from non-approved registry
+  condition: >
+    kevt and 
+    kcreate and
+    ka.target.resource = pods and
+    not ka.req.pod.containers.image startswith "gcr.io/" and
+    not ka.req.pod.containers.image startswith "docker.io/library/" and
+    not ka.req.pod.containers.image startswith "registry.k8s.io/"
+  output: >
+    Pod from untrusted registry 
+    (user=%ka.user.name pod=%ka.target.name 
+     image=%ka.req.pod.containers.image)
+  priority: NOTICE
+  tags: [k8s, pod, image, supply_chain]
+  source: k8s_audit

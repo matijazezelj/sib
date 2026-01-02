@@ -1,0 +1,5 @@
+# Falcosidekick Configuration
+debug: false
+
+loki:
+  hostport: "http://sib-loki:3100"
