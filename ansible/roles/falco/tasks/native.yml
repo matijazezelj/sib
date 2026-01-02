@@ -1,0 +1,66 @@
+# Falco native installation
+---
+
+- name: Add Falco GPG key (Debian/Ubuntu)
+  ansible.builtin.apt_key:
+    url: https://falco.org/repo/falcosecurity-packages.asc
+    state: present
+  when: ansible_os_family == 'Debian'
+  tags: falco
+
+- name: Add Falco repository (Debian/Ubuntu)
+  ansible.builtin.apt_repository:
+    repo: "deb https://download.falco.org/packages/deb stable main"
+    state: present
+    filename: falcosecurity
+  when: ansible_os_family == 'Debian'
+  tags: falco
+
+- name: Add Falco repository (RHEL/CentOS)
+  ansible.builtin.yum_repository:
+    name: falcosecurity
+    description: Falco Security Repository
+    baseurl: https://download.falco.org/packages/rpm/
+    gpgcheck: true
+    gpgkey: https://falco.org/repo/falcosecurity-packages.asc
+    enabled: true
+  when: ansible_os_family == 'RedHat'
+  tags: falco
+
+- name: Install kernel headers (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "linux-headers-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == 'Debian'
+  ignore_errors: true
+  tags: falco
+
+- name: Install kernel headers (RHEL/CentOS)
+  ansible.builtin.yum:
+    name: "kernel-devel-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+  tags: falco
+
+- name: Install Falco (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: falco
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+  tags: falco
+
+- name: Install Falco (RHEL/CentOS)
+  ansible.builtin.yum:
+    name: falco
+    state: present
+  when: ansible_os_family == 'RedHat'
+  tags: falco
+
+- name: Enable and start Falco service
+  ansible.builtin.service:
+    name: falco
+    state: started
+    enabled: true
+  tags: falco

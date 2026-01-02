@@ -1,0 +1,8 @@
+---
+# Alloy role handlers
+
+- name: Restart Alloy
+  community.docker.docker_container:
+    name: sib-alloy
+    state: started
+    restart: true

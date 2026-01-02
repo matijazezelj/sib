@@ -1,0 +1,62 @@
+# SIB Fleet Inventory
+# Copy this to hosts.yml and customize for your environment
+
+all:
+  vars:
+    # Central SIB server configuration
+    sib_server: "192.168.1.163"
+    sib_loki_port: 3100
+    sib_prometheus_port: 9090
+    
+    # Default SSH settings
+    ansible_user: root
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    
+  children:
+    # Central SIB server (where Grafana/Loki/Prometheus run)
+    sib_server:
+      hosts:
+        central:
+          ansible_host: "{{ sib_server }}"
+    
+    # Fleet hosts to monitor
+    fleet:
+      hosts:
+        # Example hosts - customize for your environment
+        webserver:
+          ansible_host: 192.168.1.10
+          host_labels:
+            role: web
+            environment: production
+        
+        database:
+          ansible_host: 192.168.1.11
+          host_labels:
+            role: database
+            environment: production
+        
+        # Add more hosts as needed
+        # appserver:
+        #   ansible_host: 192.168.1.12
+        #   host_labels:
+        #     role: app
+        #     environment: staging
+
+      vars:
+        # Fleet-specific variables
+        falco_priority: notice
+        
+    # Docker hosts (have Docker installed, run Falco in container)
+    docker_hosts:
+      hosts:
+        webserver:
+        # database:
+      vars:
+        falco_deployment: docker
+    
+    # Bare metal hosts (install Falco natively)
+    bare_metal_hosts:
+      hosts:
+        database:
+      vars:
+        falco_deployment: native

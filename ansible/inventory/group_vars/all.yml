@@ -1,0 +1,63 @@
+# Global variables for all hosts
+---
+
+# =============================================================================
+# SIB Central Server Configuration
+# =============================================================================
+
+sib_server: "192.168.1.163"
+sib_loki_url: "http://{{ sib_server }}:3100"
+sib_prometheus_url: "http://{{ sib_server }}:9090"
+
+# =============================================================================
+# Falco Configuration
+# =============================================================================
+
+falco_version: "0.39.2"
+falco_priority: "notice"  # debug, info, notice, warning, error, critical
+
+# Falco deployment method: docker or native
+falco_deployment: docker
+
+# Custom rules to deploy (from detection/config/rules/)
+falco_custom_rules:
+  - custom_rules.yaml
+
+# Falco outputs - send to central Falcosidekick
+falco_outputs:
+  http_enabled: true
+  http_url: "http://{{ sib_server }}:2801"
+
+# =============================================================================
+# Alloy Configuration (Log & Metrics Shipper)
+# =============================================================================
+
+alloy_version: "v1.5.1"
+
+# What to collect
+alloy_collect_logs: true
+alloy_collect_metrics: true
+alloy_collect_docker_logs: true
+alloy_collect_journal: true
+
+# Metric scrape targets (local to each host)
+alloy_scrape_targets:
+  - job: node
+    port: 9100
+    metrics_path: /metrics
+
+# =============================================================================
+# Common Settings
+# =============================================================================
+
+# Timezone for all hosts
+timezone: "UTC"
+
+# Package manager (auto-detected, but can override)
+# package_manager: apt  # or yum, dnf
+
+# Docker settings
+docker_network: "sib-fleet"
+
+# Logging
+log_level: info

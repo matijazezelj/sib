@@ -1,0 +1,73 @@
+# Falco configuration template
+# Managed by Ansible - do not edit directly
+
+# Priority filter
+priority: {{ falco_priority }}
+
+# JSON output for structured logging
+json_output: true
+json_include_output_property: true
+json_include_tags_property: true
+
+# Log to stderr (captured by Docker/systemd)
+log_stderr: true
+log_syslog: false
+log_level: info
+
+# Output destinations
+stdout_output:
+  enabled: true
+
+http_output:
+  enabled: {{ falco_outputs.http_enabled | default(true) | lower }}
+  url: "{{ falco_outputs.http_url }}"
+  user_agent: "falco/{{ falco_version }}"
+
+# File output (optional, for local backup)
+file_output:
+  enabled: false
+  keep_alive: false
+  filename: /var/log/falco/events.log
+
+# Program output (optional)
+program_output:
+  enabled: false
+  keep_alive: false
+  program: "jq '{text: .output}' | curl -d @- -X POST https://hooks.slack.com/xxx"
+
+# gRPC server (for integrations)
+grpc:
+  enabled: false
+  bind_address: "unix:///var/run/falco/falco.sock"
+  threadiness: 0
+
+grpc_output:
+  enabled: false
+
+# WebSocket output
+webserver:
+  enabled: true
+  listen_port: 8765
+  k8s_healthz_endpoint: /healthz
+
+# Buffered outputs
+buffered_outputs: false
+
+# Rule matching
+outputs_queue:
+  capacity: 0
+
+# Syscall event drops
+syscall_event_drops:
+  threshold: 0.1
+  actions:
+    - log
+    - alert
+  rate: 0.03333
+  max_burst: 1
+
+# Metadata
+metadata_download:
+  max_mb: 100
+  chunk_wait_us: 1000
+  watch_freq_sec: 1

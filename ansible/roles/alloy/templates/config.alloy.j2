@@ -1,0 +1,114 @@
+// Alloy configuration for SIB Fleet Agent
+// Managed by Ansible - do not edit directly
+// Host: {{ inventory_hostname }}
+
+// ============================================================================
+// LOGGING - Ship logs to central Loki
+// ============================================================================
+
+{% if alloy_collect_logs %}
+// Journal logs (systemd)
+{% if alloy_collect_journal %}
+loki.source.journal "system" {
+  forward_to = [loki.write.sib.receiver]
+  labels = {
+    job       = "journal",
+    host      = "{{ inventory_hostname }}",
+    instance  = "{{ ansible_host }}",
+{% if host_labels is defined %}
+{% for key, value in host_labels.items() %}
+    {{ key }} = "{{ value }}",
+{% endfor %}
+{% endif %}
+  }
+}
+{% endif %}
+
+// Docker container logs
+{% if alloy_collect_docker_logs %}
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.process.docker.receiver]
+}
+
+loki.process "docker" {
+  forward_to = [loki.write.sib.receiver]
+
+  stage.docker {}
+  
+  stage.labels {
+    values = {
+      container_name = "",
+    }
+  }
+  
+  stage.static_labels {
+    values = {
+      job      = "docker",
+      host     = "{{ inventory_hostname }}",
+      instance = "{{ ansible_host }}",
+{% if host_labels is defined %}
+{% for key, value in host_labels.items() %}
+      {{ key }} = "{{ value }}",
+{% endfor %}
+{% endif %}
+    }
+  }
+}
+{% endif %}
+
+// Loki writer - send to central SIB
+loki.write "sib" {
+  endpoint {
+    url = "{{ sib_loki_url }}/loki/api/v1/push"
+  }
+  external_labels = {
+    cluster = "sib-fleet",
+    host    = "{{ inventory_hostname }}",
+  }
+}
+{% endif %}
+
+// ============================================================================
+// METRICS - Ship metrics to central Prometheus
+// ============================================================================
+
+{% if alloy_collect_metrics %}
+// Node Exporter metrics (built-in)
+prometheus.exporter.unix "node" {
+  set_collectors     = ["cpu", "diskstats", "filesystem", "loadavg", "meminfo", "netdev", "uname"]
+  procfs_path        = "/host/proc"
+  sysfs_path         = "/host/sys"
+  rootfs_path        = "/host"
+}
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.remote_write.sib.receiver]
+  
+  scrape_interval = "15s"
+  job_name        = "node"
+}
+
+// Prometheus remote write - send to central SIB
+prometheus.remote_write "sib" {
+  endpoint {
+    url = "{{ sib_prometheus_url }}/api/v1/write"
+  }
+  external_labels = {
+    cluster = "sib-fleet",
+    host    = "{{ inventory_hostname }}",
+    instance = "{{ ansible_host }}",
+{% if host_labels is defined %}
+{% for key, value in host_labels.items() %}
+    {{ key }} = "{{ value }}",
+{% endfor %}
+{% endif %}
+  }
+}
+{% endif %}

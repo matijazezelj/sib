@@ -1,0 +1,45 @@
+# Falco role - installs and configures Falco
+---
+
+- name: Include Docker deployment tasks
+  ansible.builtin.include_tasks: docker.yml
+  when: falco_deployment == 'docker'
+  tags: falco
+
+- name: Include native deployment tasks
+  ansible.builtin.include_tasks: native.yml
+  when: falco_deployment == 'native'
+  tags: falco
+
+- name: Create Falco rules directory
+  ansible.builtin.file:
+    path: /etc/falco/rules.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: falco
+
+- name: Deploy custom rules
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../detection/config/rules/{{ item }}"
+    dest: "/etc/falco/rules.d/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ falco_custom_rules }}"
+  notify: Restart Falco
+  ignore_errors: true  # Don't fail if custom rules don't exist yet
+  tags: 
+    - falco
+    - rules
+
+- name: Deploy Falco configuration
+  ansible.builtin.template:
+    src: falco.yaml.j2
+    dest: /etc/falco/falco.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Falco
+  tags: falco

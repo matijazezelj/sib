@@ -1,0 +1,70 @@
+# Alloy role - installs and configures Grafana Alloy for log/metric shipping
+---
+
+- name: Create Alloy config directory
+  ansible.builtin.file:
+    path: /etc/alloy
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: alloy
+
+- name: Deploy Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Alloy
+  tags: alloy
+
+- name: Pull Alloy image
+  community.docker.docker_image:
+    name: "grafana/alloy:{{ alloy_version }}"
+    source: pull
+  tags: alloy
+
+- name: Run Alloy container
+  community.docker.docker_container:
+    name: sib-alloy
+    image: "grafana/alloy:{{ alloy_version }}"
+    state: started
+    restart_policy: unless-stopped
+    network_mode: host
+    pid_mode: host
+    volumes:
+      - /etc/alloy:/etc/alloy:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro
+      - /sys:/host/sys:ro
+      - /proc:/host/proc:ro
+    env:
+      HOST_ROOT: /host
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/tmp/alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+  tags: alloy
+
+- name: Wait for Alloy to start
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 12345
+    timeout: 30
+  tags: alloy
+
+- name: Verify Alloy is running
+  ansible.builtin.uri:
+    url: http://localhost:12345/-/ready
+    method: GET
+    status_code: 200
+  register: alloy_health
+  retries: 3
+  delay: 5
+  tags: alloy

@@ -1,0 +1,98 @@
+# Common role - prerequisites and base setup
+---
+
+- name: Update package cache (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+  tags: packages
+
+- name: Update package cache (RHEL/CentOS)
+  ansible.builtin.yum:
+    update_cache: true
+  when: ansible_os_family == 'RedHat'
+  tags: packages
+
+- name: Install common packages (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+    state: present
+  when: ansible_os_family == 'Debian'
+  tags: packages
+
+- name: Install common packages (RHEL/CentOS)
+  ansible.builtin.yum:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+    state: present
+  when: ansible_os_family == 'RedHat'
+  tags: packages
+
+- name: Check if Docker is installed
+  ansible.builtin.command: docker --version
+  register: docker_check
+  changed_when: false
+  failed_when: false
+  tags: docker
+
+- name: Install Docker (if not present and needed)
+  when: 
+    - docker_check.rc != 0
+    - falco_deployment == 'docker'
+  block:
+    - name: Download Docker install script
+      ansible.builtin.get_url:
+        url: https://get.docker.com
+        dest: /tmp/get-docker.sh
+        mode: '0755'
+
+    - name: Run Docker install script
+      ansible.builtin.command: /tmp/get-docker.sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Start and enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Clean up install script
+      ansible.builtin.file:
+        path: /tmp/get-docker.sh
+        state: absent
+  tags: docker
+
+- name: Create SIB directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/sib
+    - /var/log/sib
+  tags: setup
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+  when: timezone is defined
+  tags: setup
+
+- name: Create SIB Docker network
+  community.docker.docker_network:
+    name: "{{ docker_network }}"
+    state: present
+  when: falco_deployment == 'docker'
+  tags: docker

@@ -1,0 +1,21 @@
+services:
+  ansible:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sib-ansible:latest
+    volumes:
+      # Mount ansible directory
+      - .:/ansible:ro
+      # Mount detection rules for pushing to fleet
+      - ../detection/config/rules:/ansible/detection/config/rules:ro
+      # Mount SSH keys from host
+      - ~/.ssh:/root/.ssh:ro
+      # Mount SSH agent socket (for macOS/Linux)
+      - ${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent
+    environment:
+      - SSH_AUTH_SOCK=/ssh-agent
+      - ANSIBLE_HOST_KEY_CHECKING=false
+      - ANSIBLE_FORCE_COLOR=true
+    working_dir: /ansible
+    network_mode: host

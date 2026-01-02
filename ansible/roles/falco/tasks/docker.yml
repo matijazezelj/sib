@@ -1,0 +1,62 @@
+# Falco Docker deployment
+---
+
+- name: Pull Falco image
+  community.docker.docker_image:
+    name: "falcosecurity/falco-no-driver:{{ falco_version }}"
+    source: pull
+  tags: falco
+
+- name: Check if Falco container exists
+  community.docker.docker_container_info:
+    name: falco
+  register: falco_container
+  tags: falco
+
+- name: Stop existing Falco container
+  community.docker.docker_container:
+    name: falco
+    state: absent
+  when: falco_container.exists
+  tags: falco
+
+- name: Run Falco container
+  community.docker.docker_container:
+    name: falco
+    image: "falcosecurity/falco-no-driver:{{ falco_version }}"
+    state: started
+    restart_policy: unless-stopped
+    privileged: true
+    network_mode: host
+    pid_mode: host
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - /etc/falco:/etc/falco:ro
+    env:
+      HOST_ROOT: /host
+      FALCO_BPF_PROBE: ""
+    command: >
+      /usr/bin/falco
+      --modern-bpf
+      -pk
+      -o json_output=true
+      -o json_include_output_property=true
+      -o json_include_tags_property=true
+      -o http_output.enabled=true
+      -o http_output.url={{ falco_outputs.http_url }}
+      -o priority={{ falco_priority }}
+  tags: falco
+
+- name: Wait for Falco to start
+  ansible.builtin.wait_for:
+    timeout: 10
+  tags: falco
+
+- name: Verify Falco is running
+  ansible.builtin.command: docker ps --filter name=falco --format "{{ '{{.Status}}' }}"
+  register: falco_status
+  changed_when: false
+  failed_when: "'Up' not in falco_status.stdout"
+  tags: falco

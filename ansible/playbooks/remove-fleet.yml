@@ -1,0 +1,99 @@
+# Remove SIB Fleet Agents
+# Uninstalls Falco and Alloy from fleet hosts
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/remove-fleet.yml
+#   ansible-playbook -i inventory/hosts.yml playbooks/remove-fleet.yml --limit webserver
+---
+
+- name: Remove SIB Fleet Agents
+  hosts: fleet
+  become: true
+  
+  vars:
+    confirm_removal: false  # Set to true or use -e confirm_removal=true
+  
+  pre_tasks:
+    - name: Confirm removal
+      ansible.builtin.fail:
+        msg: |
+          ⚠️  This will remove all SIB agents from {{ inventory_hostname }}
+          
+          To confirm, run with: -e confirm_removal=true
+      when: not confirm_removal
+      tags: always
+
+  tasks:
+    # Remove Docker-based deployments
+    - name: Stop and remove Falco container
+      community.docker.docker_container:
+        name: falco
+        state: absent
+      when: falco_deployment == 'docker'
+      ignore_errors: true
+      tags: falco
+
+    - name: Stop and remove Alloy container
+      community.docker.docker_container:
+        name: sib-alloy
+        state: absent
+      ignore_errors: true
+      tags: alloy
+
+    # Remove native Falco installation
+    - name: Stop Falco service
+      ansible.builtin.service:
+        name: falco
+        state: stopped
+        enabled: false
+      when: falco_deployment == 'native'
+      ignore_errors: true
+      tags: falco
+
+    - name: Remove Falco package (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: falco
+        state: absent
+        purge: true
+      when: 
+        - falco_deployment == 'native'
+        - ansible_os_family == 'Debian'
+      tags: falco
+
+    - name: Remove Falco package (RHEL/CentOS)
+      ansible.builtin.yum:
+        name: falco
+        state: absent
+      when: 
+        - falco_deployment == 'native'
+        - ansible_os_family == 'RedHat'
+      tags: falco
+
+    # Cleanup configuration
+    - name: Remove Falco configuration directory
+      ansible.builtin.file:
+        path: /etc/falco
+        state: absent
+      tags: cleanup
+
+    - name: Remove Alloy configuration directory
+      ansible.builtin.file:
+        path: /etc/alloy
+        state: absent
+      tags: cleanup
+
+    - name: Remove SIB Docker network
+      community.docker.docker_network:
+        name: "{{ docker_network }}"
+        state: absent
+      ignore_errors: true
+      tags: cleanup
+
+  post_tasks:
+    - name: Removal complete
+      ansible.builtin.debug:
+        msg: |
+          ✅ SIB agents removed from {{ inventory_hostname }}
+          
+          Note: Docker itself was NOT removed.
+          Run 'docker system prune' on the host to clean up images.

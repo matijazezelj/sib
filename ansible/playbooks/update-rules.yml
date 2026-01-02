@@ -1,0 +1,65 @@
+# Update Falco Rules on Fleet
+# Pushes custom rules from central to all fleet hosts
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/update-rules.yml
+#   ansible-playbook -i inventory/hosts.yml playbooks/update-rules.yml --limit webserver
+---
+
+- name: Update Falco Rules on Fleet
+  hosts: fleet
+  become: true
+  
+  vars:
+    rules_source: "{{ playbook_dir }}/../../detection/config/rules"
+  
+  tasks:
+    - name: Check if custom rules exist locally
+      ansible.builtin.stat:
+        path: "{{ rules_source }}/{{ item }}"
+      delegate_to: localhost
+      become: false
+      register: rules_check
+      loop: "{{ falco_custom_rules }}"
+      tags: validate
+
+    - name: Copy custom rules to host
+      ansible.builtin.copy:
+        src: "{{ rules_source }}/{{ item }}"
+        dest: "/etc/falco/rules.d/{{ item }}"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      loop: "{{ falco_custom_rules }}"
+      notify: Restart Falco
+      tags: deploy
+
+    - name: Validate Falco rules syntax
+      ansible.builtin.command: >
+        {% if falco_deployment == 'docker' %}
+        docker exec falco falco --validate /etc/falco/rules.d/
+        {% else %}
+        falco --validate /etc/falco/rules.d/
+        {% endif %}
+      register: validation
+      changed_when: false
+      failed_when: validation.rc != 0
+      tags: validate
+
+    - name: Display validation result
+      ansible.builtin.debug:
+        msg: "✅ Rules validated successfully on {{ inventory_hostname }}"
+      tags: validate
+
+  handlers:
+    - name: Restart Falco
+      ansible.builtin.service:
+        name: "{{ 'docker' if falco_deployment == 'docker' else 'falco' }}"
+        state: restarted
+      when: falco_deployment == 'native'
+      
+    - name: Restart Falco Docker
+      ansible.builtin.command: docker restart falco
+      when: falco_deployment == 'docker'
+      listen: Restart Falco

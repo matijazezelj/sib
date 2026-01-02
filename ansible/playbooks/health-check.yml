@@ -1,0 +1,113 @@
+# Health Check for SIB Fleet
+# Verifies all agents are running and communicating with central
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/health-check.yml
+---
+
+- name: SIB Fleet Health Check
+  hosts: fleet
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Check Falco status (Docker)
+      ansible.builtin.command: docker ps --filter name=falco --format "{{ '{{.Status}}' }}"
+      register: falco_docker_status
+      changed_when: false
+      failed_when: false
+      when: falco_deployment == 'docker'
+      tags: falco
+
+    - name: Check Falco status (Native)
+      ansible.builtin.command: systemctl is-active falco
+      register: falco_native_status
+      changed_when: false
+      failed_when: false
+      when: falco_deployment == 'native'
+      tags: falco
+
+    - name: Check Alloy status
+      ansible.builtin.command: docker ps --filter name=sib-alloy --format "{{ '{{.Status}}' }}"
+      register: alloy_status
+      changed_when: false
+      failed_when: false
+      tags: alloy
+
+    - name: Test connectivity to SIB Loki
+      ansible.builtin.uri:
+        url: "{{ sib_loki_url }}/ready"
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: loki_health
+      failed_when: false
+      tags: connectivity
+
+    - name: Test connectivity to SIB Falcosidekick
+      ansible.builtin.uri:
+        url: "http://{{ sib_server }}:2801/healthz"
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: sidekick_health
+      failed_when: false
+      tags: connectivity
+
+    - name: Set health status facts
+      ansible.builtin.set_fact:
+        falco_healthy: "{{ (falco_docker_status.stdout | default('')) is search('Up') or (falco_native_status.stdout | default('')) == 'active' }}"
+        alloy_healthy: "{{ (alloy_status.stdout | default('')) is search('Up') }}"
+        loki_reachable: "{{ loki_health.status | default(0) == 200 }}"
+        sidekick_reachable: "{{ sidekick_health.status | default(0) == 200 }}"
+      tags: always
+
+    - name: Display health status
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          🏥 Health Check: {{ inventory_hostname }}
+          ═══════════════════════════════════════════════════
+          
+          Local Services:
+            Falco:     {{ '✅ Running' if falco_healthy else '❌ NOT RUNNING' }}
+            Alloy:     {{ '✅ Running' if alloy_healthy else '❌ NOT RUNNING' }}
+          
+          Central Connectivity:
+            Loki:      {{ '✅ Reachable' if loki_reachable else '❌ UNREACHABLE' }}
+            Sidekick:  {{ '✅ Reachable' if sidekick_reachable else '❌ UNREACHABLE' }}
+          
+          Host Info:
+            OS:        {{ ansible_distribution }} {{ ansible_distribution_version }}
+            Kernel:    {{ ansible_kernel }}
+            Uptime:    {{ ansible_uptime_seconds | int // 86400 }} days
+          ═══════════════════════════════════════════════════
+      tags: always
+
+    - name: Fail if critical services are down
+      ansible.builtin.fail:
+        msg: "Critical services not healthy on {{ inventory_hostname }}"
+      when: not (falco_healthy and alloy_healthy)
+      tags: verify
+
+
+- name: Fleet Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Generate fleet summary
+      ansible.builtin.debug:
+        msg: |
+          
+          ══════════════════════════════════════════════════════════
+          📊 SIB Fleet Health Summary
+          ══════════════════════════════════════════════════════════
+          
+          Total Hosts Checked: {{ groups['fleet'] | length }}
+          
+          View detailed status in Grafana:
+          http://{{ hostvars[groups['fleet'][0]]['sib_server'] }}:3000
+          
+          Dashboard: Fleet Overview
+          ══════════════════════════════════════════════════════════

@@ -1,0 +1,70 @@
+# Deploy SIB Fleet Agents
+# Installs Falco and Alloy on all fleet hosts
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml
+#   ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --limit webserver
+#   ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --tags falco
+---
+
+- name: Deploy SIB Fleet Agents
+  hosts: fleet
+  become: true
+  
+  vars:
+    deployment_timestamp: "{{ ansible_date_time.iso8601 }}"
+  
+  pre_tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          Deploying SIB agents to {{ inventory_hostname }}
+          SIB Server: {{ sib_server }}
+          Falco Version: {{ falco_version }}
+          Deployment Method: {{ falco_deployment }}
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.setup:
+        gather_subset:
+          - hardware
+          - network
+          - distribution
+      tags: always
+
+  roles:
+    - role: common
+      tags: [common, setup]
+    
+    - role: falco
+      tags: [falco, detection]
+    
+    - role: alloy
+      tags: [alloy, shipping]
+
+  post_tasks:
+    - name: Verify Falco is running
+      ansible.builtin.command: "{{ 'docker ps --filter name=falco --format \"{{.Status}}\"' if falco_deployment == 'docker' else 'systemctl is-active falco' }}"
+      register: falco_status
+      changed_when: false
+      failed_when: false
+      tags: verify
+
+    - name: Verify Alloy is running
+      ansible.builtin.command: docker ps --filter name=sib-alloy --format "{{ '{{.Status}}' }}"
+      register: alloy_status
+      changed_when: false
+      failed_when: false
+      tags: verify
+
+    - name: Deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ Deployment complete for {{ inventory_hostname }}
+          
+          Falco: {{ falco_status.stdout | default('not running') }}
+          Alloy: {{ alloy_status.stdout | default('not running') }}
+          
+          Logs shipping to: {{ sib_loki_url }}
+          Events shipping to: http://{{ sib_server }}:2801
+      tags: verify

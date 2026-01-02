@@ -1,0 +1,16 @@
+---
+# Falco role handlers
+
+- name: Restart Falco
+  ansible.builtin.service:
+    name: falco
+    state: restarted
+  when: falco_deployment == 'native'
+
+- name: Restart Falco Docker
+  community.docker.docker_container:
+    name: falco
+    state: started
+    restart: true
+  when: falco_deployment == 'docker'
+  listen: Restart Falco

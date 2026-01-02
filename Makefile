@@ -47,6 +47,9 @@ help: ## Show this help message
 	@echo "$(CYAN)Remote Collectors:$(RESET)"
 	@grep -E '^(enable-remote|deploy-collector):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Fleet Management (Ansible):$(RESET)"
+	@grep -E '^(fleet-build|deploy-fleet|update-rules|fleet-health|remove-fleet|fleet-ping|fleet-shell):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Stack-specific commands:$(RESET)"
 	@echo "  Commands follow the pattern: $(GREEN)<action>-<stack>$(RESET)"
 	@echo "  Example: make install-detection, make stop-alerting, make logs-storage"
@@ -492,3 +495,47 @@ deploy-collector: ## Deploy Alloy collector to remote host (HOST=user@host)
 	fi; \
 	chmod +x collectors/scripts/deploy.sh && \
 	./collectors/scripts/deploy.sh $(HOST) $$SIB_IP
+
+# ==================== Fleet Management (Ansible) ====================
+
+# Ansible runs in Docker - no local installation needed
+ANSIBLE_IMAGE := sib-ansible:latest
+ANSIBLE_RUN := docker compose -f ansible/compose.yaml run --rm ansible
+LIMIT := $(if $(LIMIT),--limit $(LIMIT),)
+
+fleet-build: ## Build Ansible Docker image for fleet management
+	@echo "$(CYAN)🔨 Building Ansible container...$(RESET)"
+	@docker compose -f ansible/compose.yaml build
+	@echo "$(GREEN)✓ Ansible container ready$(RESET)"
+
+deploy-fleet: ## Deploy Falco + Alloy to fleet hosts (LIMIT=host to target specific)
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		echo "$(RED)✗ No inventory found at ansible/inventory/hosts.yml$(RESET)"; \
+		echo "$(YELLOW)  Copy the example: cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml$(RESET)"; \
+		echo "$(YELLOW)  Then edit it with your hosts.$(RESET)"; \
+		exit 1; \
+	fi
+	@docker compose -f ansible/compose.yaml build -q 2>/dev/null || true
+	@echo "$(CYAN)🚀 Deploying SIB agents to fleet...$(RESET)"
+	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/deploy-fleet.yml $(LIMIT)
+	@echo ""
+	@echo "$(GREEN)✓ Fleet deployment complete$(RESET)"
+
+update-rules: ## Push updated Falco rules to fleet hosts
+	@echo "$(CYAN)📤 Pushing rules to fleet...$(RESET)"
+	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/update-rules.yml $(LIMIT)
+
+fleet-health: ## Check health of all fleet agents
+	@echo "$(CYAN)🏥 Checking fleet health...$(RESET)"
+	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/health-check.yml $(LIMIT)
+
+remove-fleet: ## Remove SIB agents from fleet (requires confirmation)
+	@echo "$(YELLOW)⚠️  This will remove SIB agents from fleet hosts$(RESET)"
+	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/remove-fleet.yml $(LIMIT) -e confirm_removal=true
+
+fleet-shell: ## Open shell in Ansible container for manual commands
+	@docker compose -f ansible/compose.yaml run --rm --entrypoint /bin/bash ansible
+
+fleet-ping: ## Test SSH connectivity to all fleet hosts
+	@docker compose -f ansible/compose.yaml run --rm --entrypoint ansible ansible \
+		-i inventory/hosts.yml fleet -m ping
