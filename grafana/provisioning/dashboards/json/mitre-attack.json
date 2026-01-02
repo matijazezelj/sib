@@ -16,8 +16,8 @@
         "uid": "loki"
       },
       "gridPos": {
-        "h": 3,
-        "w": 24,
+        "h": 5,
+        "w": 20,
         "x": 0,
         "y": 0
       },
@@ -28,13 +28,151 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "# 🎯 MITRE ATT&CK Detection Coverage\n\nThis dashboard maps detected security events to the **MITRE ATT&CK framework**. Each tactic shows the number of events detected in the selected time range.\n\n**Green** = Events detected | **Technique IDs** link to MITRE documentation",
+        "content": "# \ud83c\udfaf MITRE ATT&CK Detection Coverage\n\nThis dashboard maps detected security events to the **MITRE ATT&CK framework**. Each tactic shows the number of events detected in the selected time range.\n\n**Green** = Events detected | **Red** = No events (potential gap)\n\n[MITRE ATT&CK Reference](https://attack.mitre.org/)",
         "mode": "markdown"
       },
       "pluginVersion": "11.4.0",
       "title": "",
       "transparent": true,
       "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 101,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count_over_time({source=\"syscall\", priority=\"Critical\"} [$__range])",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "\ud83d\udea8 Critical",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 4,
+        "x": 20,
+        "y": 3
+      },
+      "id": 102,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count_over_time({source=\"syscall\", priority=\"Error\"} [$__range])",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "\u26a0\ufe0f Error",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -67,7 +205,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 3
+        "y": 5
       },
       "id": 1,
       "options": {
@@ -76,7 +214,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -91,12 +231,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_initial_access\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_initial_access.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🚪 Initial Access",
+      "title": "\ud83d\udeaa Initial Access",
       "description": "TA0001 - Adversaries trying to get into your network",
       "type": "stat"
     },
@@ -131,7 +271,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 3
+        "y": 5
       },
       "id": 2,
       "options": {
@@ -140,7 +280,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -155,12 +297,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_execution|shell.*spawn|exec\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_execution.*|.*T1059.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "⚡ Execution",
+      "title": "\u26a1 Execution",
       "description": "TA0002 - Adversaries trying to run malicious code",
       "type": "stat"
     },
@@ -195,7 +337,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 3
+        "y": 5
       },
       "id": 3,
       "options": {
@@ -204,7 +346,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -219,12 +363,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_persistence|cron|systemd|authorized_keys\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_persistence.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🔄 Persistence",
+      "title": "\ud83d\udd04 Persistence",
       "description": "TA0003 - Adversaries trying to maintain their foothold",
       "type": "stat"
     },
@@ -259,7 +403,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 3
+        "y": 5
       },
       "id": 4,
       "options": {
@@ -268,7 +412,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -283,12 +429,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_privilege_escalation|privileged|setuid|sudo\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_privilege_escalation.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "⬆️ Privilege Escalation",
+      "title": "\u2b06\ufe0f Privilege Escalation",
       "description": "TA0004 - Adversaries trying to gain higher-level permissions",
       "type": "stat"
     },
@@ -323,7 +469,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 3
+        "y": 5
       },
       "id": 5,
       "options": {
@@ -332,7 +478,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -347,12 +495,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_defense_evasion|log.*clear|history\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_defense_evasion.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🥷 Defense Evasion",
+      "title": "\ud83e\udd77 Defense Evasion",
       "description": "TA0005 - Adversaries trying to avoid being detected",
       "type": "stat"
     },
@@ -387,7 +535,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 3
+        "y": 5
       },
       "id": 6,
       "options": {
@@ -396,7 +544,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -411,12 +561,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_credential_access|shadow|passwd|credential\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_credential_access.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🔑 Credential Access",
+      "title": "\ud83d\udd11 Credential Access",
       "description": "TA0006 - Adversaries trying to steal account names and passwords",
       "type": "stat"
     },
@@ -451,7 +601,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 7
+        "y": 9
       },
       "id": 7,
       "options": {
@@ -460,7 +610,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -475,12 +627,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_discovery|system.*info|enumerate\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_discovery.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🔍 Discovery",
+      "title": "\ud83d\udd0d Discovery",
       "description": "TA0007 - Adversaries trying to figure out your environment",
       "type": "stat"
     },
@@ -515,7 +667,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 7
+        "y": 9
       },
       "id": 8,
       "options": {
@@ -524,7 +676,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -539,12 +693,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_lateral_movement|ssh.*from.*container\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_lateral_movement.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🔀 Lateral Movement",
+      "title": "\ud83d\udd00 Lateral Movement",
       "description": "TA0008 - Adversaries trying to move through your environment",
       "type": "stat"
     },
@@ -579,7 +733,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 7
+        "y": 9
       },
       "id": 9,
       "options": {
@@ -588,7 +742,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -603,12 +759,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_collection|sensitive.*file|data.*collect\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_collection.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "📦 Collection",
+      "title": "\ud83d\udce6 Collection",
       "description": "TA0009 - Adversaries trying to gather data of interest",
       "type": "stat"
     },
@@ -643,7 +799,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 7
+        "y": 9
       },
       "id": 10,
       "options": {
@@ -652,7 +808,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -667,12 +825,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_command_and_control|c2|reverse.*shell|callback\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_command_and_control.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "📡 Command & Control",
+      "title": "\ud83d\udce1 Command & Control",
       "description": "TA0011 - Adversaries trying to communicate with compromised systems",
       "type": "stat"
     },
@@ -707,7 +865,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 7
+        "y": 9
       },
       "id": 11,
       "options": {
@@ -716,7 +874,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -731,12 +891,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_exfiltration|data.*transfer|upload\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_exfiltration.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "📤 Exfiltration",
+      "title": "\ud83d\udce4 Exfiltration",
       "description": "TA0010 - Adversaries trying to steal data",
       "type": "stat"
     },
@@ -771,7 +931,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 7
+        "y": 9
       },
       "id": 12,
       "options": {
@@ -780,7 +940,9 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "fields": "",
           "values": false
         },
@@ -795,12 +957,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "count_over_time({source=\"syscall\"} |~ \"mitre_impact|crypto.*miner|resource.*hijack|data.*destruct\" [$__range])",
+          "expr": "count_over_time({source=\"syscall\", tags=~\".*mitre_impact.*\"} [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "💥 Impact",
+      "title": "\ud83d\udca5 Impact",
       "description": "TA0012 - Adversaries trying to manipulate, interrupt, or destroy systems and data",
       "type": "stat"
     },
@@ -910,12 +1072,14 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 13
       },
       "id": 20,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -972,7 +1136,7 @@
           "refId": "E"
         }
       ],
-      "title": "📊 Events by MITRE Tactic Over Time",
+      "title": "\ud83d\udcca Events by MITRE Tactic Over Time",
       "type": "timeseries"
     },
     {
@@ -1055,7 +1219,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 21
       },
       "id": 30,
       "options": {
@@ -1063,7 +1227,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -1081,22 +1247,23 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "topk(20, sum by (rule) (count_over_time({source=\"syscall\"} | json | rule != \"\" [$__range])))",
+          "expr": "topk(20, sum by (rule) (count_over_time({source=\"syscall\"} [$__range])))",
           "legendFormat": "{{rule}}",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "🎯 Top Detected Techniques",
+      "title": "\ud83c\udfaf Top Detected Techniques",
       "transformations": [
         {
-          "id": "reduce",
+          "id": "labelsToFields",
           "options": {
-            "includeTimeField": false,
-            "labelsToFields": true,
-            "mode": "reduceFields",
-            "reducers": ["sum"]
+            "mode": "columns"
           }
+        },
+        {
+          "id": "merge",
+          "options": {}
         },
         {
           "id": "organize",
@@ -1104,10 +1271,23 @@
             "excludeByName": {
               "Time": true
             },
+            "indexByName": {},
             "renameByName": {
-              "Total": "Count",
+              "Value": "Count",
               "rule": "Technique"
             }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Count"
+              }
+            ]
           }
         }
       ],
@@ -1138,20 +1318,27 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 21
       },
       "id": 31,
       "options": {
-        "displayLabels": ["name", "percent"],
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value"]
+          "values": [
+            "value"
+          ]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["sum"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1166,14 +1353,50 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (priority) (count_over_time({source=\"syscall\"} | json | priority != \"\" [$__range]))",
+          "expr": "sum by (priority) (count_over_time({source=\"syscall\"} [$__range]))",
           "legendFormat": "{{priority}}",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "📈 Events by Priority",
+      "title": "\ud83d\udcc8 Events by Priority",
+      "transformations": [],
       "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 103,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{source=\"syscall\", priority=~\"Critical|Error\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "🚨 Critical & Error Events",
+      "type": "logs"
     },
     {
       "datasource": {
@@ -1184,7 +1407,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 37
       },
       "id": 40,
       "options": {
@@ -1203,17 +1426,21 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{source=\"syscall\"} |~ \"mitre_\" | json",
+          "expr": "{source=\"syscall\"} |= \"\"",
           "refId": "A"
         }
       ],
-      "title": "🔍 MITRE-Tagged Events (Raw Logs)",
+      "title": "\ud83d\udd0d MITRE-Tagged Events (Raw Logs)",
       "type": "logs"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["security", "mitre", "attack"],
+  "tags": [
+    "security",
+    "mitre",
+    "attack"
+  ],
   "templating": {
     "list": []
   },

