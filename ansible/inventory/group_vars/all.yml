@@ -10,14 +10,29 @@ sib_loki_url: "http://{{ sib_server }}:3100"
 sib_prometheus_url: "http://{{ sib_server }}:9090"
 
 # =============================================================================
+# Docker Configuration (Static Binary Installation)
+# =============================================================================
+
+docker_static_version: "24.0.7"
+
+# Install Docker if not present? (using static binaries)
+# If false and Docker is missing, will fall back to native packages
+install_docker_if_missing: true
+
+# =============================================================================
+# Deployment Strategy
+# =============================================================================
+# auto   - Detect Docker, use containers if available, native if not
+# docker - Force Docker containers (will install Docker if missing)
+# native - Force native packages (no Docker required)
+deployment_strategy: auto
+
+# =============================================================================
 # Falco Configuration
 # =============================================================================
 
 falco_version: "0.39.2"
 falco_priority: "notice"  # debug, info, notice, warning, error, critical
-
-# Falco deployment method: docker or native
-falco_deployment: docker
 
 # Custom rules to deploy (from detection/config/rules/)
 falco_custom_rules:
@@ -33,6 +48,9 @@ falco_outputs:
 # =============================================================================
 
 alloy_version: "v1.5.1"
+
+# Alloy deployment method: auto (uses deployment_strategy), docker, or native
+alloy_deployment: auto
 
 # What to collect
 alloy_collect_logs: true

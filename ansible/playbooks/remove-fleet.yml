@@ -23,13 +23,27 @@
       when: not confirm_removal
       tags: always
 
+    - name: Check if Docker is available
+      ansible.builtin.command: docker info
+      register: docker_check
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Set Docker availability
+      ansible.builtin.set_fact:
+        docker_available: "{{ docker_check.rc == 0 }}"
+      tags: always
+
   tasks:
+    # =========================================================================
     # Remove Docker-based deployments
+    # =========================================================================
     - name: Stop and remove Falco container
       community.docker.docker_container:
         name: falco
         state: absent
-      when: falco_deployment == 'docker'
+      when: docker_available | bool
       ignore_errors: true
       tags: falco
 
@@ -37,16 +51,18 @@
       community.docker.docker_container:
         name: sib-alloy
         state: absent
+      when: docker_available | bool
       ignore_errors: true
       tags: alloy
 
+    # =========================================================================
     # Remove native Falco installation
+    # =========================================================================
     - name: Stop Falco service
       ansible.builtin.service:
         name: falco
         state: stopped
         enabled: false
-      when: falco_deployment == 'native'
       ignore_errors: true
       tags: falco
 
@@ -55,21 +71,49 @@
         name: falco
         state: absent
         purge: true
-      when: 
-        - falco_deployment == 'native'
-        - ansible_os_family == 'Debian'
+      when: ansible_os_family == 'Debian'
+      ignore_errors: true
       tags: falco
 
     - name: Remove Falco package (RHEL/CentOS)
       ansible.builtin.yum:
         name: falco
         state: absent
-      when: 
-        - falco_deployment == 'native'
-        - ansible_os_family == 'RedHat'
+      when: ansible_os_family == 'RedHat'
+      ignore_errors: true
       tags: falco
 
+    # =========================================================================
+    # Remove native Alloy installation
+    # =========================================================================
+    - name: Stop Alloy service
+      ansible.builtin.service:
+        name: alloy
+        state: stopped
+        enabled: false
+      ignore_errors: true
+      tags: alloy
+
+    - name: Remove Alloy systemd service file
+      ansible.builtin.file:
+        path: /etc/systemd/system/alloy.service
+        state: absent
+      notify: Reload systemd
+      tags: alloy
+
+    - name: Remove Alloy binary and directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /opt/alloy
+        - /var/lib/alloy
+        - /usr/local/bin/alloy
+      tags: alloy
+
+    # =========================================================================
     # Cleanup configuration
+    # =========================================================================
     - name: Remove Falco configuration directory
       ansible.builtin.file:
         path: /etc/falco
@@ -82,12 +126,27 @@
         state: absent
       tags: cleanup
 
+    - name: Remove SIB directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/sib
+        - /var/log/sib
+      tags: cleanup
+
     - name: Remove SIB Docker network
       community.docker.docker_network:
         name: "{{ docker_network }}"
         state: absent
+      when: docker_available | bool
       ignore_errors: true
       tags: cleanup
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
 
   post_tasks:
     - name: Removal complete

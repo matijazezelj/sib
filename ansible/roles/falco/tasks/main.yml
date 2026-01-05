@@ -1,14 +1,19 @@
 # Falco role - installs and configures Falco
 ---
 
+- name: Display Falco deployment method
+  ansible.builtin.debug:
+    msg: "Deploying Falco using: {{ effective_deployment | trim }} method"
+  tags: falco
+
 - name: Include Docker deployment tasks
   ansible.builtin.include_tasks: docker.yml
-  when: falco_deployment == 'docker'
+  when: effective_deployment | trim == 'docker'
   tags: falco
 
 - name: Include native deployment tasks
   ansible.builtin.include_tasks: native.yml
-  when: falco_deployment == 'native'
+  when: effective_deployment | trim == 'native'
   tags: falco
 
 - name: Create Falco rules directory

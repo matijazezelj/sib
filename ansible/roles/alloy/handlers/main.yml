@@ -1,8 +1,21 @@
 ---
 # Alloy role handlers
 
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
 - name: Restart Alloy
-  community.docker.docker_container:
-    name: sib-alloy
-    state: started
-    restart: true
+  block:
+    - name: Restart Alloy container
+      community.docker.docker_container:
+        name: sib-alloy
+        state: started
+        restart: true
+      when: effective_deployment | trim == 'docker'
+
+    - name: Restart Alloy service
+      ansible.builtin.systemd:
+        name: alloy
+        state: restarted
+      when: effective_deployment | trim == 'native'

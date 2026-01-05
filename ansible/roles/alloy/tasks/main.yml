@@ -1,6 +1,11 @@
 # Alloy role - installs and configures Grafana Alloy for log/metric shipping
 ---
 
+- name: Display Alloy deployment method
+  ansible.builtin.debug:
+    msg: "Deploying Alloy using: {{ effective_deployment | trim }} method"
+  tags: alloy
+
 - name: Create Alloy config directory
   ansible.builtin.file:
     path: /etc/alloy
@@ -20,37 +25,150 @@
   notify: Restart Alloy
   tags: alloy
 
-- name: Pull Alloy image
-  community.docker.docker_image:
-    name: "grafana/alloy:{{ alloy_version }}"
-    source: pull
-  tags: alloy
+# ============================================================================
+# Docker Deployment
+# ============================================================================
 
-- name: Run Alloy container
-  community.docker.docker_container:
-    name: sib-alloy
-    image: "grafana/alloy:{{ alloy_version }}"
-    state: started
-    restart_policy: unless-stopped
-    network_mode: host
-    pid_mode: host
-    volumes:
-      - /etc/alloy:/etc/alloy:ro
-      - /var/log:/var/log:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /:/host:ro
-      - /sys:/host/sys:ro
-      - /proc:/host/proc:ro
-    env:
-      HOST_ROOT: /host
-      HOST_PROC: /host/proc
-      HOST_SYS: /host/sys
-    command:
-      - run
-      - /etc/alloy/config.alloy
-      - --storage.path=/tmp/alloy
-      - --server.http.listen-addr=0.0.0.0:12345
-  tags: alloy
+- name: Deploy Alloy via Docker
+  when: effective_deployment | trim == 'docker'
+  block:
+    - name: Pull Alloy image
+      community.docker.docker_image:
+        name: "grafana/alloy:{{ alloy_version }}"
+        source: pull
+      tags: alloy
+
+    - name: Run Alloy container
+      community.docker.docker_container:
+        name: sib-alloy
+        image: "grafana/alloy:{{ alloy_version }}"
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        pid_mode: host
+        volumes:
+          - /etc/alloy:/etc/alloy:ro
+          - /var/log:/var/log:ro
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - /:/host:ro
+          - /sys:/host/sys:ro
+          - /proc:/host/proc:ro
+        env:
+          HOST_ROOT: /host
+          HOST_PROC: /host/proc
+          HOST_SYS: /host/sys
+        command:
+          - run
+          - /etc/alloy/config.alloy
+          - --storage.path=/tmp/alloy
+          - --server.http.listen-addr=0.0.0.0:12345
+      tags: alloy
+
+# ============================================================================
+# Native Deployment (static binary)
+# ============================================================================
+
+- name: Deploy Alloy natively
+  when: effective_deployment | trim == 'native'
+  block:
+    - name: Set Alloy architecture
+      ansible.builtin.set_fact:
+        alloy_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' if ansible_architecture == 'aarch64' else ansible_architecture }}"
+      tags: alloy
+
+    - name: Create Alloy directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /opt/alloy
+        - /var/lib/alloy
+      tags: alloy
+
+    - name: Download Alloy binary
+      ansible.builtin.get_url:
+        url: "https://github.com/grafana/alloy/releases/download/{{ alloy_version }}/alloy-linux-{{ alloy_arch }}.zip"
+        dest: /tmp/alloy-{{ alloy_version }}.zip
+        mode: '0644'
+      tags: alloy
+
+    - name: Install unzip if needed
+      ansible.builtin.package:
+        name: unzip
+        state: present
+      tags: alloy
+
+    - name: Extract Alloy binary
+      ansible.builtin.unarchive:
+        src: /tmp/alloy-{{ alloy_version }}.zip
+        dest: /opt/alloy
+        remote_src: true
+      tags: alloy
+
+    - name: Make Alloy executable
+      ansible.builtin.file:
+        path: /opt/alloy/alloy-linux-{{ alloy_arch }}
+        mode: '0755'
+      tags: alloy
+
+    - name: Create symlink to Alloy binary
+      ansible.builtin.file:
+        src: /opt/alloy/alloy-linux-{{ alloy_arch }}
+        dest: /usr/local/bin/alloy
+        state: link
+      tags: alloy
+
+    - name: Create Alloy systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/alloy.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Grafana Alloy
+          Documentation=https://grafana.com/docs/alloy/
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/alloy run /etc/alloy/config.alloy \
+            --storage.path=/var/lib/alloy \
+            --server.http.listen-addr=0.0.0.0:12345
+          Restart=always
+          RestartSec=5
+          Environment="HOST_ROOT=/"
+          Environment="HOST_PROC=/proc"
+          Environment="HOST_SYS=/sys"
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - Reload systemd
+        - Restart Alloy
+      tags: alloy
+
+    - name: Enable and start Alloy service
+      ansible.builtin.systemd:
+        name: alloy
+        state: started
+        enabled: true
+        daemon_reload: true
+      tags: alloy
+
+    - name: Clean up Alloy archive
+      ansible.builtin.file:
+        path: /tmp/alloy-{{ alloy_version }}.zip
+        state: absent
+      tags: alloy
+
+# ============================================================================
+# Verify Installation
+# ============================================================================
 
 - name: Wait for Alloy to start
   ansible.builtin.wait_for:

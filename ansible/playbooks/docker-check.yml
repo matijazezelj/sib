@@ -1,0 +1,251 @@
+# Playbook to check and install Docker on fleet nodes
+# Usage: make fleet-docker-check
+---
+- name: Check and Install Docker on Fleet
+  hosts: fleet
+  become: true
+  gather_facts: true
+
+  vars:
+    docker_static_version: "{{ docker_version | default('24.0.7') }}"
+    install_if_missing: "{{ auto_install | default(true) }}"
+
+  tasks:
+    - name: Check if Docker is installed
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check if Docker daemon is running
+      ansible.builtin.command: docker info
+      register: docker_info
+      changed_when: false
+      failed_when: false
+      when: docker_check.rc == 0
+
+    - name: Report Docker status
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Docker Installed: {{ 'Yes' if docker_check.rc == 0 else 'No' }}
+          Docker Version: {{ docker_check.stdout | default('N/A') }}
+          Docker Running: {{ 'Yes' if docker_info.rc | default(1) == 0 else 'No' }}
+
+    - name: Install Docker from static binaries (if missing and auto_install=true)
+      when:
+        - docker_check.rc != 0
+        - install_if_missing | bool
+      block:
+        - name: Set architecture
+          ansible.builtin.set_fact:
+            docker_arch: "{{ 'x86_64' if ansible_architecture == 'x86_64' else 'aarch64' if ansible_architecture == 'aarch64' else ansible_architecture }}"
+
+        - name: Create Docker directories
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          loop:
+            - /opt/docker
+            - /etc/docker
+            - /var/lib/docker
+            - /var/run/docker
+
+        - name: Download Docker static binaries
+          ansible.builtin.get_url:
+            url: "https://download.docker.com/linux/static/stable/{{ docker_arch }}/docker-{{ docker_static_version }}.tgz"
+            dest: /tmp/docker-{{ docker_static_version }}.tgz
+            mode: '0644'
+
+        - name: Extract Docker binaries
+          ansible.builtin.unarchive:
+            src: /tmp/docker-{{ docker_static_version }}.tgz
+            dest: /opt/docker
+            remote_src: true
+            extra_opts:
+              - --strip-components=1
+
+        - name: Create symlinks to Docker binaries
+          ansible.builtin.file:
+            src: "/opt/docker/{{ item }}"
+            dest: "/usr/local/bin/{{ item }}"
+            state: link
+          loop:
+            - docker
+            - dockerd
+            - docker-proxy
+            - containerd
+            - containerd-shim-runc-v2
+            - ctr
+            - runc
+
+        - name: Create docker group
+          ansible.builtin.group:
+            name: docker
+            state: present
+
+        - name: Create containerd systemd service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/containerd.service
+            owner: root
+            group: root
+            mode: '0644'
+            content: |
+              [Unit]
+              Description=containerd container runtime
+              Documentation=https://containerd.io
+              After=network.target local-fs.target
+
+              [Service]
+              ExecStart=/usr/local/bin/containerd
+              Type=notify
+              Delegate=yes
+              KillMode=process
+              Restart=always
+              RestartSec=5
+              LimitNPROC=infinity
+              LimitCORE=infinity
+              LimitNOFILE=1048576
+              TasksMax=infinity
+              OOMScoreAdjust=-999
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Create Docker systemd service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/docker.service
+            owner: root
+            group: root
+            mode: '0644'
+            content: |
+              [Unit]
+              Description=Docker Application Container Engine
+              Documentation=https://docs.docker.com
+              After=network-online.target containerd.service
+              Wants=network-online.target
+              Requires=containerd.service
+
+              [Service]
+              Type=notify
+              ExecStart=/usr/local/bin/dockerd --containerd=/run/containerd/containerd.sock
+              ExecReload=/bin/kill -s HUP $MAINPID
+              TimeoutSec=0
+              RestartSec=2
+              Restart=always
+              StartLimitBurst=3
+              StartLimitInterval=60s
+              LimitNOFILE=infinity
+              LimitNPROC=infinity
+              LimitCORE=infinity
+              TasksMax=infinity
+              Delegate=yes
+              KillMode=process
+              OOMScoreAdjust=-500
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Create Docker socket systemd unit
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/docker.socket
+            owner: root
+            group: root
+            mode: '0644'
+            content: |
+              [Unit]
+              Description=Docker Socket for the API
+
+              [Socket]
+              ListenStream=/var/run/docker.sock
+              SocketMode=0660
+              SocketUser=root
+              SocketGroup=docker
+
+              [Install]
+              WantedBy=sockets.target
+
+        - name: Create Docker daemon configuration
+          ansible.builtin.copy:
+            dest: /etc/docker/daemon.json
+            owner: root
+            group: root
+            mode: '0644'
+            content: |
+              {
+                "storage-driver": "overlay2",
+                "log-driver": "json-file",
+                "log-opts": {
+                  "max-size": "10m",
+                  "max-file": "3"
+                }
+              }
+
+        - name: Reload systemd daemon
+          ansible.builtin.systemd:
+            daemon_reload: true
+
+        - name: Enable and start containerd
+          ansible.builtin.systemd:
+            name: containerd
+            state: started
+            enabled: true
+
+        - name: Enable and start Docker
+          ansible.builtin.systemd:
+            name: docker
+            state: started
+            enabled: true
+
+        - name: Clean up downloaded archive
+          ansible.builtin.file:
+            path: /tmp/docker-{{ docker_static_version }}.tgz
+            state: absent
+
+        - name: Verify Docker installation
+          ansible.builtin.command: docker --version
+          register: docker_verify
+          changed_when: false
+
+        - name: Docker installation complete
+          ansible.builtin.debug:
+            msg: "Docker installed successfully: {{ docker_verify.stdout }}"
+
+    - name: Start Docker if installed but not running
+      when:
+        - docker_check.rc == 0
+        - docker_info.rc | default(1) != 0
+      block:
+        - name: Start containerd service
+          ansible.builtin.systemd:
+            name: containerd
+            state: started
+            enabled: true
+          failed_when: false
+
+        - name: Start Docker service
+          ansible.builtin.systemd:
+            name: docker
+            state: started
+            enabled: true
+
+- name: Docker Fleet Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          Docker Fleet Check Complete
+          ==========================================
+          
+          Run with auto_install=false to only check:
+            make fleet-docker-check ARGS="-e auto_install=false"
+          
+          Specify Docker version:
+            make fleet-docker-check ARGS="-e docker_version=24.0.7"
+          ==========================================

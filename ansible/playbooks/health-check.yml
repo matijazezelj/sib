@@ -10,30 +10,59 @@
   become: true
   gather_facts: true
   
+  pre_tasks:
+    - name: Check if Docker is available
+      ansible.builtin.command: docker info
+      register: docker_check
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Set Docker availability
+      ansible.builtin.set_fact:
+        docker_available: "{{ docker_check.rc == 0 }}"
+      tags: always
+
   tasks:
-    - name: Check Falco status (Docker)
+    # =========================================================================
+    # Docker-based checks
+    # =========================================================================
+    - name: Check Falco container status
       ansible.builtin.command: docker ps --filter name=falco --format "{{ '{{.Status}}' }}"
       register: falco_docker_status
       changed_when: false
       failed_when: false
-      when: falco_deployment == 'docker'
+      when: docker_available | bool
       tags: falco
 
-    - name: Check Falco status (Native)
+    - name: Check Alloy container status
+      ansible.builtin.command: docker ps --filter name=sib-alloy --format "{{ '{{.Status}}' }}"
+      register: alloy_docker_status
+      changed_when: false
+      failed_when: false
+      when: docker_available | bool
+      tags: alloy
+
+    # =========================================================================
+    # Native service checks
+    # =========================================================================
+    - name: Check Falco native service status
       ansible.builtin.command: systemctl is-active falco
       register: falco_native_status
       changed_when: false
       failed_when: false
-      when: falco_deployment == 'native'
       tags: falco
 
-    - name: Check Alloy status
-      ansible.builtin.command: docker ps --filter name=sib-alloy --format "{{ '{{.Status}}' }}"
-      register: alloy_status
+    - name: Check Alloy native service status
+      ansible.builtin.command: systemctl is-active alloy
+      register: alloy_native_status
       changed_when: false
       failed_when: false
       tags: alloy
 
+    # =========================================================================
+    # Connectivity checks
+    # =========================================================================
     - name: Test connectivity to SIB Loki
       ansible.builtin.uri:
         url: "{{ sib_loki_url }}/ready"
@@ -54,12 +83,25 @@
       failed_when: false
       tags: connectivity
 
+    # =========================================================================
+    # Aggregate health status
+    # =========================================================================
     - name: Set health status facts
       ansible.builtin.set_fact:
-        falco_healthy: "{{ (falco_docker_status.stdout | default('')) is search('Up') or (falco_native_status.stdout | default('')) == 'active' }}"
-        alloy_healthy: "{{ (alloy_status.stdout | default('')) is search('Up') }}"
+        falco_healthy: >-
+          {{ (falco_docker_status.stdout | default('')) is search('Up') or
+             (falco_native_status.stdout | default('')) == 'active' }}
+        alloy_healthy: >-
+          {{ (alloy_docker_status.stdout | default('')) is search('Up') or
+             (alloy_native_status.stdout | default('')) == 'active' }}
         loki_reachable: "{{ loki_health.status | default(0) == 200 }}"
         sidekick_reachable: "{{ sidekick_health.status | default(0) == 200 }}"
+        falco_deployment_type: >-
+          {{ 'docker' if (falco_docker_status.stdout | default('')) is search('Up') else
+             'native' if (falco_native_status.stdout | default('')) == 'active' else 'none' }}
+        alloy_deployment_type: >-
+          {{ 'docker' if (alloy_docker_status.stdout | default('')) is search('Up') else
+             'native' if (alloy_native_status.stdout | default('')) == 'active' else 'none' }}
       tags: always
 
     - name: Display health status
@@ -70,8 +112,9 @@
           ═══════════════════════════════════════════════════
           
           Local Services:
-            Falco:     {{ '✅ Running' if falco_healthy else '❌ NOT RUNNING' }}
-            Alloy:     {{ '✅ Running' if alloy_healthy else '❌ NOT RUNNING' }}
+            Falco:     {{ '✅ Running' if falco_healthy else '❌ NOT RUNNING' }} ({{ falco_deployment_type | trim }})
+            Alloy:     {{ '✅ Running' if alloy_healthy else '❌ NOT RUNNING' }} ({{ alloy_deployment_type | trim }})
+            Docker:    {{ '✅ Available' if docker_available else '⚠️  Not installed' }}
           
           Central Connectivity:
             Loki:      {{ '✅ Reachable' if loki_reachable else '❌ UNREACHABLE' }}
