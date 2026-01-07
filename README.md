@@ -85,8 +85,8 @@ make install
 | Service | URL | Binding |
 |---------|-----|---------|
 | **Grafana** | http://localhost:3000 | External (0.0.0.0) |
-| **Sidekick UI** | http://localhost:2802 | External (0.0.0.0) |
 | **Sidekick API** | http://localhost:2801 | External (0.0.0.0) |
+| Sidekick UI | http://localhost:2802 | Localhost only |
 | Loki | http://localhost:3100 | Localhost only |
 | Prometheus | http://localhost:9090 | Localhost only |
 

@@ -26,7 +26,7 @@ services:
     container_name: sib-sidekick-ui
     restart: unless-stopped
     ports:
-      - "0.0.0.0:${SIDEKICK_UI_PORT:-2802}:2802"
+      - "127.0.0.1:${SIDEKICK_UI_PORT:-2802}:2802"
     environment:
       - FALCOSIDEKICK_UI_REDIS_URL=redis:6379
       - FALCOSIDEKICK_UI_LOGLEVEL=info
