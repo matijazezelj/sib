@@ -176,6 +176,7 @@ uninstall: ## Remove all stacks and volumes (with confirmation)
 	@$(MAKE) --no-print-directory uninstall-alerting
 	@$(MAKE) --no-print-directory uninstall-grafana
 	@$(MAKE) --no-print-directory uninstall-storage
+	@$(MAKE) --no-print-directory uninstall-collectors
 	@docker network rm sib-network 2>/dev/null || true
 	@echo "$(GREEN)✓ All stacks removed$(RESET)"
 
@@ -198,6 +199,11 @@ uninstall-grafana: ## Remove Grafana and volumes
 	@echo "$(YELLOW)Removing Grafana...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ Grafana removed$(RESET)"
+
+uninstall-collectors: ## Remove Alloy collectors and volumes
+	@echo "$(YELLOW)Removing collectors...$(RESET)"
+	@cd collectors && $(DOCKER_COMPOSE) down -v 2>/dev/null || true
+	@echo "$(GREEN)✓ Collectors removed$(RESET)"
 
 # ==================== Status ====================
 
@@ -452,7 +458,7 @@ update: ## Pull latest images and restart all stacks
         start start-detection start-alerting start-storage start-grafana \
         stop stop-detection stop-alerting stop-storage stop-grafana \
         restart restart-detection restart-alerting restart-storage restart-grafana \
-        uninstall uninstall-detection uninstall-alerting uninstall-storage uninstall-grafana \
+        uninstall uninstall-detection uninstall-alerting uninstall-storage uninstall-grafana uninstall-collectors \
         status health doctor logs logs-falco logs-sidekick logs-storage logs-grafana \
         test-alert demo test-rules open open-ui info ps check-ports validate clean update \
         enable-remote deploy-collector
