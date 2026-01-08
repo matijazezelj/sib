@@ -39,7 +39,7 @@ help: ## Show this help message
 	@grep -E '^(test-alert|demo|demo-quick|test-rules):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Analysis (AI-Powered):$(RESET)"
-	@grep -E '^(analyze|analyze-dry-run):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(analyze|analyze-dry-run|analyze-store):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Threat Intel & Sigma:$(RESET)"
 	@grep -E '^(update-threatintel|convert-sigma):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -380,6 +380,10 @@ analyze: ## Analyze recent alerts with AI (requires LLM)
 analyze-dry-run: ## Preview obfuscated alert data (no LLM call)
 	@echo "$(CYAN)Preview: Obfuscated alert data...$(RESET)"
 	@./scripts/sib-analyze.sh --dry-run --last 1h --limit 3 --verbose
+
+analyze-store: ## Analyze alerts and store enriched results in Loki
+	@echo "$(CYAN)Analyzing and storing enriched alerts in Loki...$(RESET)"
+	@./scripts/sib-analyze.sh --priority Critical --last 1h --limit 5 --store
 
 analyze-all: ## Analyze all priority levels
 	@./scripts/sib-analyze.sh --last 1h --limit 10

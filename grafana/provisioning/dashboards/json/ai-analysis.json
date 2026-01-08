@@ -1,0 +1,330 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {"color": {"fixedColor": "purple", "mode": "fixed"}}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Analyzed Alerts",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {"color": {"fixedColor": "red", "mode": "fixed"}}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"analysis\", type=\"enriched\", severity=\"critical\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Critical Severity",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {"color": {"fixedColor": "orange", "mode": "fixed"}}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"analysis\", type=\"enriched\", severity=\"high\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "High Severity",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {"color": {"fixedColor": "green", "mode": "fixed"}}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"analysis\", type=\"enriched\", false_positive=\"true\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Likely False Positives",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 5,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right"},
+        "tooltip": {"mode": "multi"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "fillOpacity": 80, "stacking": {"mode": "normal"}}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (mitre_tactic) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__interval]))",
+          "legendFormat": "{{mitre_tactic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "MITRE ATT&CK Tactics Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 6,
+      "options": {
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "pieType": "donut",
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (mitre_technique) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "legendFormat": "{{mitre_technique}}",
+          "refId": "A"
+        }
+      ],
+      "title": "MITRE Techniques Distribution",
+      "type": "piechart"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "id": 7,
+      "options": {
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "pieType": "pie",
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (severity) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "title": "AI Severity Assessment",
+      "type": "piechart"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "id": 8,
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false, "reducer": ["sum"]},
+        "sortBy": [{"displayName": "Count", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "mitre_technique"},
+            "properties": [{"id": "custom.width", "value": 200}]
+          }
+        ]
+      },
+      "transformations": [
+        {"id": "extractFields", "options": {"source": "labels"}},
+        {"id": "groupBy", "options": {"fields": {"mitre_tactic": {"aggregations": [], "operation": "groupby"}, "mitre_technique": {"aggregations": [], "operation": "groupby"}, "Value": {"aggregations": ["sum"], "operation": "aggregate"}}}}
+      ],
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (mitre_tactic, mitre_technique) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "MITRE ATT&CK Coverage",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 20},
+      "id": 9,
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{source=\"analysis\", type=\"enriched\", severity=~\"$severity\", mitre_tactic=~\"$mitre_tactic\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "AI-Analyzed Alerts",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+      "id": 10,
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "original_rule"},
+            "properties": [{"id": "custom.width", "value": 300}]
+          }
+        ]
+      },
+      "transformations": [
+        {"id": "extractFields", "options": {"source": "labels"}},
+        {"id": "groupBy", "options": {"fields": {"original_rule": {"aggregations": [], "operation": "groupby"}, "severity": {"aggregations": [], "operation": "groupby"}, "mitre_tactic": {"aggregations": [], "operation": "groupby"}, "Value": {"aggregations": ["sum"], "operation": "aggregate"}}}}
+      ],
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (original_rule, severity, mitre_tactic) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Rules with AI Assessment",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+      "id": 11,
+      "options": {
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "pieType": "pie",
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (hostname) (count_over_time({source=\"analysis\", type=\"enriched\"} [$__range]))",
+          "legendFormat": "{{hostname}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Analyzed Alerts by Host",
+      "type": "piechart"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["sib", "security", "ai", "analysis", "mitre"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "loki", "uid": "loki"},
+        "definition": "label_values({source=\"analysis\", type=\"enriched\"}, severity)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "severity",
+        "options": [],
+        "query": "label_values({source=\"analysis\", type=\"enriched\"}, severity)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "loki", "uid": "loki"},
+        "definition": "label_values({source=\"analysis\", type=\"enriched\"}, mitre_tactic)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "mitre_tactic",
+        "options": [],
+        "query": "label_values({source=\"analysis\", type=\"enriched\"}, mitre_tactic)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "AI Analysis",
+  "uid": "sib-ai-analysis",
+  "version": 1
+}

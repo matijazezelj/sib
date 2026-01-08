@@ -55,6 +55,35 @@ class LokiClient:
                 alerts.append(alert)
         
         return alerts
+    
+    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+        """Push a log entry to Loki."""
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        # Loki push API expects nanosecond timestamps as strings
+        ts_ns = str(int(timestamp.timestamp() * 1e9))
+        
+        payload = {
+            "streams": [
+                {
+                    "stream": labels,
+                    "values": [[ts_ns, log_line]]
+                }
+            ]
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.url}/loki/api/v1/push",
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Failed to push to Loki: {e}", file=sys.stderr)
+            return False
 
 
 class LLMProvider:
@@ -264,13 +293,66 @@ class AlertAnalyzer:
             'analysis': analysis
         }
     
-    def analyze_batch(self, alerts: List[dict], dry_run: bool = False) -> List[dict]:
+    def store_analysis(self, result: dict) -> bool:
+        """Store analysis result in Loki."""
+        analysis = result.get('analysis', {})
+        original = result.get('original_alert', {})
+        labels = original.get('_labels', {})
+        
+        # Build labels for the enriched alert
+        mitre = analysis.get('mitre_attack', {})
+        risk = analysis.get('risk', {})
+        fp = analysis.get('false_positive', {})
+        
+        enriched_labels = {
+            'source': 'analysis',
+            'type': 'enriched',
+            'original_rule': labels.get('rule', 'unknown'),
+            'original_priority': labels.get('priority', 'unknown'),
+            'hostname': labels.get('hostname', 'unknown'),
+            'severity': risk.get('severity', 'unknown').lower(),
+            'mitre_tactic': mitre.get('tactic', 'unknown').replace(' ', '_'),
+            'mitre_technique': mitre.get('technique_id', 'unknown'),
+            'false_positive': str(fp.get('likely', False)).lower(),
+        }
+        
+        # Build the enriched log entry
+        enriched_entry = {
+            'timestamp': original.get('_timestamp', datetime.now()).isoformat() if isinstance(original.get('_timestamp'), datetime) else str(original.get('_timestamp', '')),
+            'original_output': original.get('output', ''),
+            'rule': labels.get('rule', ''),
+            'priority': labels.get('priority', ''),
+            'hostname': labels.get('hostname', ''),
+            'attack_vector': analysis.get('attack_vector', ''),
+            'mitre_attack': mitre,
+            'risk': risk,
+            'mitigations': analysis.get('mitigations', {}),
+            'false_positive': analysis.get('false_positive', {}),
+            'summary': analysis.get('summary', ''),
+            'investigate': analysis.get('investigate', []),
+        }
+        
+        return self.loki.push(
+            enriched_labels,
+            json.dumps(enriched_entry),
+            original.get('_timestamp')
+        )
+    
+    def analyze_batch(self, alerts: List[dict], dry_run: bool = False, store: bool = False) -> List[dict]:
         """Analyze multiple alerts."""
         results = []
         for i, alert in enumerate(alerts):
             print(f"Analyzing alert {i+1}/{len(alerts)}...", file=sys.stderr)
             result = self.analyze_alert(alert, dry_run)
             results.append(result)
+            
+            # Store in Loki if requested
+            if store and not dry_run and 'error' not in result.get('analysis', {}):
+                if self.store_analysis(result):
+                    print(f"  ✓ Stored analysis in Loki", file=sys.stderr)
+                else:
+                    print(f"  ✗ Failed to store analysis", file=sys.stderr)
+        
         return results
 
 
@@ -392,6 +474,8 @@ def main():
                         help='Maximum number of alerts to analyze')
     parser.add_argument('--dry-run', '-d', action='store_true',
                         help='Show obfuscated data without calling LLM')
+    parser.add_argument('--store', '-s', action='store_true',
+                        help='Store analysis results in Loki for Grafana dashboards')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Show detailed output including obfuscation mapping')
     parser.add_argument('--json', '-j', action='store_true',
@@ -426,7 +510,7 @@ def main():
     print(f"Found {len(alerts)} alerts. Analyzing...", file=sys.stderr)
     
     # Analyze
-    results = analyzer.analyze_batch(alerts, dry_run=args.dry_run)
+    results = analyzer.analyze_batch(alerts, dry_run=args.dry_run, store=args.store)
     
     # Output
     if args.json:
