@@ -21,6 +21,7 @@ SIB provides a complete, self-hosted security monitoring stack for detecting thr
 - **Remote Collectors**: Ship logs from multiple hosts with Grafana Alloy
 - **Fleet Management**: Dockerized Ansible for deploying agents across infrastructure (no local Ansible needed)
 - **Smart Deployment**: Auto-detects Docker, installs from static binaries if needed — works on any Linux
+- **AI-Powered Analysis** *(Beta)*: LLM-based alert analysis with attack vectors, MITRE ATT&CK mapping, and mitigation strategies
 - **One Command Setup**: Get started with `make install`
 
 ## 🏗️ Architecture
@@ -177,6 +178,10 @@ make test-alert           # Generate a test security alert
 make update-threatintel   # Download threat intel feeds
 make convert-sigma        # Convert Sigma rules to Falco
 
+# AI Analysis (Beta)
+make analyze              # Analyze critical alerts with AI
+make analyze-dry-run      # Preview obfuscated data (no LLM call)
+
 # Utilities
 make open                 # Open Grafana in browser
 make info                 # Show all endpoints
@@ -283,6 +288,45 @@ SIDEKICK_UI_PORT=2802
 - Only Grafana and Sidekick UI are externally accessible
 - Falco requires privileged access for syscall monitoring
 - Change default Grafana password in production
+
+## 🤖 AI-Powered Alert Analysis (Beta)
+
+SIB includes an optional AI-powered analysis feature that uses LLMs to analyze security alerts and provide:
+
+- **Attack Vector Identification** - What technique is being used
+- **MITRE ATT&CK Mapping** - Tactic and technique IDs
+- **Risk Assessment** - Severity, confidence, and potential impact
+- **Mitigation Strategies** - Immediate, short-term, and long-term actions
+- **False Positive Assessment** - Likelihood and common legitimate causes
+
+### Privacy-First Design
+
+Sensitive data is **obfuscated before sending to the LLM**:
+- IPs → `[INTERNAL-IP-1]`, `[EXTERNAL-IP-1]`
+- Usernames → `[USER-1]`
+- Hostnames → `[HOST-1]`
+- Container IDs → `[CONTAINER-1]`
+- Secrets/credentials → `[REDACTED]`
+
+### Quick Start
+
+```bash
+# Preview obfuscated data (no LLM call)
+make analyze-dry-run
+
+# Analyze critical alerts (requires LLM)
+make analyze
+```
+
+### LLM Providers
+
+| Provider | Privacy | Setup |
+|----------|---------|-------|
+| **Ollama** (local) | ✅ Data stays on-premises | `ollama pull llama3.1:8b` |
+| OpenAI | ⚠️ Data sent to API (obfuscated) | Set `OPENAI_API_KEY` |
+| Anthropic | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY` |
+
+Configure in `analysis/config.yaml`. See [analysis/README.md](analysis/README.md) for full documentation.
 
 ## 📡 Remote Collectors (Alloy)
 

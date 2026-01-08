@@ -1,0 +1,43 @@
+# SIB Alert Analysis Configuration
+# Copy to config.yaml and customize
+
+analysis:
+  # Enable/disable AI-powered alert analysis
+  enabled: false
+  
+  # Obfuscation level before sending to LLM
+  # - minimal: Only secrets/credentials obfuscated
+  # - standard: IPs, hostnames, users, paths obfuscated (recommended)
+  # - paranoid: Everything except alert type and priority
+  obfuscation_level: standard
+  
+  # Automatically analyze and enrich incoming alerts
+  auto_enrich: false
+  auto_enrich_priority:
+    - Critical
+    - Error
+  
+  # LLM Provider: ollama, openai, anthropic
+  provider: ollama
+  
+  # Ollama (local) - recommended for privacy
+  ollama:
+    url: http://localhost:11434
+    model: llama3.1:8b
+    # Alternative models: mistral, mixtral, codellama
+  
+  # OpenAI (cloud) - requires API key
+  openai:
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    # Alternative: gpt-4o for better quality
+  
+  # Anthropic (cloud) - requires API key  
+  anthropic:
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-3-haiku-20240307
+    # Alternative: claude-3-5-sonnet-20241022 for better quality
+
+# Loki connection for fetching alerts
+loki:
+  url: http://localhost:3100

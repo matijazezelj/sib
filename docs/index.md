@@ -221,6 +221,88 @@ All events from all hosts appear in your central Grafana dashboards.
 
 ---
 
+## 🤖 AI-Powered Alert Analysis (Beta)
+
+Got an alert but not sure what it means? SIB can analyze your security events using LLMs.
+
+```bash
+make analyze
+```
+
+You get:
+- **Attack vector explanation** — What the attacker is trying to do
+- **MITRE ATT&CK mapping** — Tactic and technique IDs
+- **Risk assessment** — Severity, confidence, impact
+- **Mitigation steps** — Immediate, short-term, long-term actions
+- **False positive assessment** — Is this real or noise?
+
+### Privacy First
+
+Your sensitive data never leaves your network (unless you want it to). Before sending anything to the LLM:
+
+| Data Type | What Happens |
+|-----------|--------------|
+| IP addresses | → `[INTERNAL-IP-1]`, `[EXTERNAL-IP-1]` |
+| Usernames | → `[USER-1]` |
+| Hostnames | → `[HOST-1]` |
+| Container IDs | → `[CONTAINER-1]` |
+| Secrets | → `[REDACTED]` |
+
+### LLM Options
+
+| Provider | Where data goes | Best for |
+|----------|----------------|----------|
+| **Ollama** (default) | Your machine | Privacy-conscious users |
+| OpenAI | OpenAI API | Better quality |
+| Anthropic | Anthropic API | Claude fans |
+
+Preview what gets sent before any LLM call:
+```bash
+make analyze-dry-run
+```
+
+### Example Output
+
+```
+======================================================================
+🔍 SECURITY ALERT ANALYSIS
+======================================================================
+
+🎯 Attack Vector:
+   An attacker is attempting to modify system configuration files, 
+   specifically the dynamic linker cache, likely to inject malicious 
+   code or redirect program execution to a compromised library.
+
+📊 MITRE ATT&CK:
+   Tactic: Persistence
+   Technique: T1547.001 - Boot or Logon Autostart Execution
+
+⚠️  Risk Assessment:
+   Severity: 🔴 Critical
+   Confidence: High
+   Impact: Complete system compromise, ability to execute arbitrary 
+   code with root privileges.
+
+🛡️  Mitigations:
+   Immediate:
+     • Isolate the affected system from the network
+     • Quarantine /etc/ld.so.cache~ and restore from backup
+   Short-term:
+     • Rebuild the affected system from a clean image
+   Long-term:
+     • Implement file integrity monitoring (FIM)
+     • Implement Mandatory Access Control (SELinux or AppArmor)
+
+🤔 False Positive Assessment:
+   Likelihood: Low
+
+======================================================================
+```
+
+See [analysis/README.md](https://github.com/matijazezelj/sib/blob/main/analysis/README.md) for configuration.
+
+---
+
 ## Try It In 60 Seconds
 
 Don't take my word for it. See it working:
@@ -255,6 +337,10 @@ make demo-quick           # Quick demo (fewer events)
 # Threat Intelligence
 make update-threatintel   # Update IOC feeds
 make convert-sigma        # Convert Sigma rules to Falco
+
+# AI Analysis (Beta)
+make analyze              # Analyze alerts with AI
+make analyze-dry-run      # Preview obfuscated data
 
 # Fleet Management (no local Ansible needed)
 make deploy-fleet         # Deploy agents to all fleet hosts

@@ -4,40 +4,19 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": ["sib"],
-      "targetBlank": false,
-      "title": "SIB Dashboards",
-      "type": "dashboards"
-    }
-  ],
+  "links": [],
   "panels": [
     {
-      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
-      "id": 100,
-      "options": {
-        "code": {"language": "plaintext", "showLineNumbers": false, "showMiniMap": false},
-        "content": "# 🎯 Host Risk Assessment\nReal-time risk scores based on security events detected by Falco. Higher scores indicate more security events requiring attention.",
-        "mode": "markdown"
-      },
-      "type": "text"
-    },
-    {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 2},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
         "defaults": {
@@ -46,38 +25,47 @@
             "mode": "absolute",
             "steps": [
               {"color": "green", "value": null},
-              {"color": "yellow", "value": 50},
-              {"color": "orange", "value": 100},
-              {"color": "red", "value": 200}
+              {"color": "#EAB839", "value": 10000},
+              {"color": "orange", "value": 50000},
+              {"color": "red", "value": 100000}
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0",
+          "displayName": "Risk Score"
         }
       },
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum(\n  (sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Critical\"} [$__range])) * 25) or vector(0)\n) + sum(\n  (sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Error\"} [$__range])) * 10) or vector(0)\n) + sum(\n  (sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Warning\"} [$__range])) * 3) or vector(0)\n) + sum(\n  (sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Notice\"} [$__range])) * 1) or vector(0)\n)",
+          "expr": "(sum(count_over_time({source=\"syscall\", priority=\"Critical\"} [$__range])) * 25 or vector(0))\n+ (sum(count_over_time({source=\"syscall\", priority=\"Error\"} [$__range])) * 10 or vector(0))\n+ (sum(count_over_time({source=\"syscall\", priority=\"Warning\"} [$__range])) * 3 or vector(0))\n+ (sum(count_over_time({source=\"syscall\", priority=\"Notice\"} [$__range])) * 1 or vector(0))",
           "refId": "A"
         }
       ],
-      "title": "Total Risk Score",
+      "title": "Security Posture",
+      "description": "Total weighted risk score. Green = Healthy, Yellow = Elevated, Orange = High, Red = Critical",
       "type": "stat"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 2},
+      "gridPos": {"h": 4, "w": 3, "x": 6, "y": 0},
       "id": 2,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
-        "defaults": {"color": {"fixedColor": "dark-red", "mode": "fixed"}, "unit": "short"}
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "dark-red", "value": null}]},
+          "color": {"mode": "thresholds"},
+          "noValue": "0",
+          "displayName": "Critical"
+        }
       },
       "targets": [
         {
@@ -86,23 +74,29 @@
           "refId": "A"
         }
       ],
-      "title": "Critical Events",
+      "title": "",
       "type": "stat"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 2},
+      "gridPos": {"h": 4, "w": 3, "x": 9, "y": 0},
       "id": 3,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
-        "defaults": {"color": {"fixedColor": "red", "mode": "fixed"}, "unit": "short"}
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]},
+          "color": {"mode": "thresholds"},
+          "noValue": "0",
+          "displayName": "Error"
+        }
       },
       "targets": [
         {
@@ -111,23 +105,29 @@
           "refId": "A"
         }
       ],
-      "title": "Error Events",
+      "title": "",
       "type": "stat"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 2},
+      "gridPos": {"h": 4, "w": 3, "x": 6, "y": 4},
       "id": 4,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
-        "defaults": {"color": {"fixedColor": "orange", "mode": "fixed"}, "unit": "short"}
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]},
+          "color": {"mode": "thresholds"},
+          "noValue": "0",
+          "displayName": "Warning"
+        }
       },
       "targets": [
         {
@@ -136,95 +136,132 @@
           "refId": "A"
         }
       ],
-      "title": "Warning Events",
+      "title": "",
       "type": "stat"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 2},
+      "gridPos": {"h": 4, "w": 3, "x": 9, "y": 4},
       "id": 5,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {"color": {"fixedColor": "blue", "mode": "fixed"}, "unit": "short"}
-      },
-      "targets": [
-        {
-          "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "count(sum by (hostname) (count_over_time({source=\"syscall\"} [$__range])))",
-          "refId": "A"
-        }
-      ],
-      "title": "Monitored Hosts",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 2},
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
+        "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
         "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
           "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "red", "value": 1}
-            ]
-          },
-          "unit": "short"
+          "noValue": "0",
+          "displayName": "Notice"
         }
       },
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "count(sum by (hostname) (count_over_time({source=\"syscall\", priority=~\"Critical|Error\"} [$__range])) > 0)",
+          "expr": "sum(count_over_time({source=\"syscall\", priority=\"Notice\"} [$__range]))",
           "refId": "A"
         }
       ],
-      "title": "Hosts at Risk",
+      "title": "",
       "type": "stat"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
       "id": 10,
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {"show": false, "reducer": ["sum"], "fields": ""},
-        "sortBy": [{"desc": true, "displayName": "Risk Score"}]
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false, "filterable": true}
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {"mode": "none"}
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Critical"}, "properties": [{"id": "color", "value": {"fixedColor": "dark-red", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "Error"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "Warning"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "Notice"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"syscall\", priority=\"Critical\"} [$__interval]))",
+          "legendFormat": "Critical",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"syscall\", priority=\"Error\"} [$__interval]))",
+          "legendFormat": "Error",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"syscall\", priority=\"Warning\"} [$__interval]))",
+          "legendFormat": "Warning",
+          "refId": "C"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(count_over_time({source=\"syscall\", priority=\"Notice\"} [$__interval]))",
+          "legendFormat": "Notice",
+          "refId": "D"
+        }
+      ],
+      "title": "Event Trend",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 10, "w": 14, "x": 0, "y": 8},
+      "id": 20,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md",
+        "footer": {"show": false, "reducer": ["sum"], "fields": ""},
+        "sortBy": [{"desc": true, "displayName": "Risk"}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "left", "cellOptions": {"type": "auto"}, "inspect": false, "filterable": false}
         },
         "overrides": [
           {
             "matcher": {"id": "byName", "options": "Host"},
-            "properties": [{"id": "custom.width", "value": 200}]
+            "properties": [
+              {"id": "custom.width", "value": 160},
+              {"id": "links", "value": [{"title": "View in Events Explorer", "url": "/d/sib-events-explorer?var-hostname=${__value.text}"}]}
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "Risk Score"},
+            "matcher": {"id": "byName", "options": "Risk"},
             "properties": [
-              {"id": "custom.width", "value": 120},
-              {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "gradient"}},
+              {"id": "custom.width", "value": 100},
+              {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient", "valueDisplayMode": "text"}},
               {"id": "color", "value": {"mode": "thresholds"}},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}, {"color": "orange", "value": 50}, {"color": "red", "value": 100}]}}
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10000}, {"color": "orange", "value": 50000}, {"color": "red", "value": 100000}]}},
+              {"id": "min", "value": 0},
+              {"id": "max", "value": 200000}
             ]
           },
           {
@@ -232,194 +269,114 @@
             "properties": [
               {"id": "custom.width", "value": 100},
               {"id": "mappings", "value": [
-                {"type": "range", "options": {"from": 0, "to": 19, "result": {"text": "🟢 Low", "color": "green"}}},
-                {"type": "range", "options": {"from": 20, "to": 49, "result": {"text": "🟡 Medium", "color": "yellow"}}},
-                {"type": "range", "options": {"from": 50, "to": 99, "result": {"text": "🟠 High", "color": "orange"}}},
-                {"type": "range", "options": {"from": 100, "to": 999999, "result": {"text": "🔴 Critical", "color": "red"}}}
+                {"type": "range", "options": {"from": 0, "to": 9999, "result": {"text": "🟢 Low", "color": "green"}}},
+                {"type": "range", "options": {"from": 10000, "to": 49999, "result": {"text": "🟡 Medium", "color": "yellow"}}},
+                {"type": "range", "options": {"from": 50000, "to": 99999, "result": {"text": "🟠 High", "color": "orange"}}},
+                {"type": "range", "options": {"from": 100000, "to": 9999999999, "result": {"text": "🔴 Critical", "color": "red"}}}
               ]}
             ]
           },
           {
             "matcher": {"id": "byName", "options": "Critical"},
-            "properties": [
-              {"id": "custom.width", "value": 80},
-              {"id": "color", "value": {"fixedColor": "dark-red", "mode": "fixed"}}
-            ]
+            "properties": [{"id": "custom.width", "value": 70}]
           },
           {
             "matcher": {"id": "byName", "options": "Error"},
-            "properties": [
-              {"id": "custom.width", "value": 80},
-              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}
-            ]
+            "properties": [{"id": "custom.width", "value": 60}]
           },
           {
             "matcher": {"id": "byName", "options": "Warning"},
-            "properties": [
-              {"id": "custom.width", "value": 80},
-              {"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}
-            ]
+            "properties": [{"id": "custom.width", "value": 70}]
           },
           {
             "matcher": {"id": "byName", "options": "Notice"},
-            "properties": [
-              {"id": "custom.width", "value": 80},
-              {"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}
-            ]
+            "properties": [{"id": "custom.width", "value": 60}]
           }
         ]
       },
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum by (hostname) (\n  (count_over_time({source=\"syscall\", priority=\"Critical\"} [$__range]) * 25)\n  or (count_over_time({source=\"syscall\", priority=\"Error\"} [$__range]) * 10)\n  or (count_over_time({source=\"syscall\", priority=\"Warning\"} [$__range]) * 3)\n  or (count_over_time({source=\"syscall\", priority=\"Notice\"} [$__range]) * 1)\n)",
-          "legendFormat": "{{hostname}}",
-          "refId": "RiskScore"
-        },
-        {
-          "datasource": {"type": "loki", "uid": "loki"},
           "expr": "sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Critical\"} [$__range]))",
-          "legendFormat": "{{hostname}}",
+          "legendFormat": "Critical",
           "refId": "Critical",
-          "hide": true
+          "instant": true
         },
         {
           "datasource": {"type": "loki", "uid": "loki"},
           "expr": "sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Error\"} [$__range]))",
-          "legendFormat": "{{hostname}}",
+          "legendFormat": "Error",
           "refId": "Error",
-          "hide": true
+          "instant": true
         },
         {
           "datasource": {"type": "loki", "uid": "loki"},
           "expr": "sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Warning\"} [$__range]))",
-          "legendFormat": "{{hostname}}",
+          "legendFormat": "Warning",
           "refId": "Warning",
-          "hide": true
+          "instant": true
         },
         {
           "datasource": {"type": "loki", "uid": "loki"},
           "expr": "sum by (hostname) (count_over_time({source=\"syscall\", priority=\"Notice\"} [$__range]))",
-          "legendFormat": "{{hostname}}",
+          "legendFormat": "Notice",
           "refId": "Notice",
-          "hide": true
+          "instant": true
         }
       ],
-      "title": "🎯 Host Risk Scores",
-      "description": "Risk score = (Critical × 25) + (Error × 10) + (Warning × 3) + (Notice × 1)",
+      "title": "Host Risk Assessment",
+      "description": "Click a host to investigate in Events Explorer",
       "transformations": [
-        {
-          "id": "joinByField",
-          "options": {"byField": "hostname", "mode": "outer"}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true},
-            "renameByName": {
-              "hostname": "Host",
-              "Value #RiskScore": "Risk Score",
-              "Value #Critical": "Critical",
-              "Value #Error": "Error", 
-              "Value #Warning": "Warning",
-              "Value #Notice": "Notice"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Status",
-            "mode": "reduceRow",
-            "reduce": {"include": ["Risk Score"], "reducer": "sum"}
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {"fields": {}, "sort": [{"field": "Risk Score", "desc": true}]}
-        }
+        {"id": "merge", "options": {}},
+        {"id": "organize", "options": {
+          "excludeByName": {"Time": true},
+          "renameByName": {"hostname": "Host", "Value #Critical": "Critical", "Value #Error": "Error", "Value #Warning": "Warning", "Value #Notice": "Notice"}
+        }},
+        {"id": "calculateField", "options": {"alias": "CritW", "mode": "binary", "binary": {"left": "Critical", "operator": "*", "right": "25"}}},
+        {"id": "calculateField", "options": {"alias": "ErrW", "mode": "binary", "binary": {"left": "Error", "operator": "*", "right": "10"}}},
+        {"id": "calculateField", "options": {"alias": "WarnW", "mode": "binary", "binary": {"left": "Warning", "operator": "*", "right": "3"}}},
+        {"id": "calculateField", "options": {"alias": "NotW", "mode": "binary", "binary": {"left": "Notice", "operator": "*", "right": "1"}}},
+        {"id": "calculateField", "options": {"alias": "Sum1", "mode": "binary", "binary": {"left": "CritW", "operator": "+", "right": "ErrW"}}},
+        {"id": "calculateField", "options": {"alias": "Sum2", "mode": "binary", "binary": {"left": "WarnW", "operator": "+", "right": "NotW"}}},
+        {"id": "calculateField", "options": {"alias": "Risk", "mode": "binary", "binary": {"left": "Sum1", "operator": "+", "right": "Sum2"}}},
+        {"id": "organize", "options": {
+          "excludeByName": {"CritW": true, "ErrW": true, "WarnW": true, "NotW": true, "Sum1": true, "Sum2": true},
+          "indexByName": {"Host": 0, "Risk": 1, "Critical": 2, "Error": 3, "Warning": 4, "Notice": 5}
+        }},
+        {"id": "sortBy", "options": {"fields": {}, "sort": [{"field": "Risk", "desc": true}]}}
       ],
       "type": "table"
     },
     {
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-      "id": 20,
-      "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "right"},
-        "tooltip": {"mode": "multi", "sort": "desc"}
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"axisCenteredZero": false, "axisLabel": "", "drawStyle": "bars", "fillOpacity": 80, "gradientMode": "none", "lineWidth": 1, "stacking": {"mode": "normal"}}
-        }
-      },
-      "targets": [
-        {
-          "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum by (hostname) (count_over_time({source=\"syscall\", priority=~\"Critical|Error\"} [$__interval]))",
-          "legendFormat": "{{hostname}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Critical/Error Events by Host",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "gridPos": {"h": 10, "w": 10, "x": 14, "y": 8},
       "id": 21,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "right"},
+        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "right", "sortBy": "Total", "sortDesc": true},
         "pieType": "donut",
         "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false},
         "tooltip": {"mode": "single"}
       },
       "fieldConfig": {
-        "defaults": {"color": {"mode": "palette-classic"}}
+        "defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}
       },
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum by (rule) (count_over_time({source=\"syscall\", priority=~\"Critical|Error\"} [$__range]))",
+          "expr": "topk(8, sum by (rule) (count_over_time({source=\"syscall\"} [$__range])))",
           "legendFormat": "{{rule}}",
           "refId": "A"
         }
       ],
-      "title": "Top Triggered Rules (Critical/Error)",
+      "title": "Top Detection Rules",
       "type": "piechart"
     },
     {
-      "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
-      "id": 30,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": true,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      },
-      "targets": [
-        {
-          "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "{source=\"syscall\", priority=~\"Critical|Error\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "🚨 Recent Critical & Error Events",
-      "type": "logs"
-    },
-    {
-      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 32},
-      "id": 101,
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 18},
+      "id": 100,
       "options": {
         "code": {"language": "plaintext", "showLineNumbers": false, "showMiniMap": false},
-        "content": "### Risk Score Calculation\n| Priority | Weight | Example |\n|----------|--------|----------|\n| Critical | ×25 | Reverse shell, container escape |\n| Error | ×10 | Privilege escalation attempt |\n| Warning | ×3 | Suspicious file access |\n| Notice | ×1 | Informational events |",
+        "content": "**Risk Score** = (Critical × 25) + (Error × 10) + (Warning × 3) + (Notice × 1) — **Status**: 🟢 Low (<10k) • 🟡 Medium (10k-50k) • 🟠 High (50k-100k) • 🔴 Critical (100k+)",
         "mode": "markdown"
       },
       "type": "text"
@@ -427,7 +384,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["security", "falco", "sib", "risk"],
+  "tags": ["security", "falco", "sib", "risk", "executive"],
   "templating": {"list": []},
   "time": {"from": "now-24h", "to": "now"},
   "timepicker": {},

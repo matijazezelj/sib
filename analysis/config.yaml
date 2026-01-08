@@ -1,0 +1,12 @@
+# SIB Alert Analysis Configuration
+analysis:
+  enabled: true
+  obfuscation_level: standard
+  provider: ollama
+  
+  ollama:
+    url: http://192.168.101.226:11434
+    model: gemma3:12b
+
+loki:
+  url: http://localhost:3100

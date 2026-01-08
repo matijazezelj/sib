@@ -38,6 +38,9 @@ help: ## Show this help message
 	@echo "$(CYAN)Testing & Demo:$(RESET)"
 	@grep -E '^(test-alert|demo|demo-quick|test-rules):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Analysis (AI-Powered):$(RESET)"
+	@grep -E '^(analyze|analyze-dry-run):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Threat Intel & Sigma:$(RESET)"
 	@grep -E '^(update-threatintel|convert-sigma):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
@@ -367,6 +370,19 @@ convert-sigma: ## Convert Sigma rules to Falco format
 	@echo "$(GREEN)✓ Converted rules saved to sigma/rules/converted_falco_rules.yaml$(RESET)"
 	@echo "$(CYAN)Copy to Falco with:$(RESET)"
 	@echo "  $(YELLOW)cp sigma/rules/converted_falco_rules.yaml detection/config/rules/$(RESET)"
+
+# ==================== AI-Powered Analysis ====================
+
+analyze: ## Analyze recent alerts with AI (requires LLM)
+	@echo "$(CYAN)Analyzing security alerts...$(RESET)"
+	@./scripts/sib-analyze.sh --priority Critical --last 1h --limit 5
+
+analyze-dry-run: ## Preview obfuscated alert data (no LLM call)
+	@echo "$(CYAN)Preview: Obfuscated alert data...$(RESET)"
+	@./scripts/sib-analyze.sh --dry-run --last 1h --limit 3 --verbose
+
+analyze-all: ## Analyze all priority levels
+	@./scripts/sib-analyze.sh --last 1h --limit 10
 
 # ==================== Utilities ====================
 
