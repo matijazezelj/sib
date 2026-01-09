@@ -1468,7 +1468,7 @@
           "links": [
             {
               "title": "\ud83e\udd16 Analyze with AI",
-              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "url": "http://192.168.1.163:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
               "targetBlank": true
             }
           ]
@@ -1514,7 +1514,7 @@
           "links": [
             {
               "title": "\ud83e\udd16 Analyze with AI",
-              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "url": "http://192.168.1.163:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
               "targetBlank": true
             }
           ]

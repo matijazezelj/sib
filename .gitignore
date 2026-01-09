@@ -45,3 +45,4 @@ secrets/
 coverage/
 .coverage
 .ansible/
+analysis/__pycache__/

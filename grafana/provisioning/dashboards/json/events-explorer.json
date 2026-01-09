@@ -77,14 +77,32 @@
       },
       "fieldConfig": {
         "defaults": {
+          "custom": {},
           "links": [
             {
               "title": "🤖 Analyze with AI",
-              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "url": "http://192.168.1.163:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
               "targetBlank": true
             }
           ]
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Line"},
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "🤖 Analyze with AI",
+                    "url": "http://192.168.1.163:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
@@ -95,6 +113,86 @@
       ],
       "title": "Security Events",
       "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 31},
+      "id": 4,
+      "title": "🤖 Select Event to Analyze",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Time"},
+            "properties": [{"id": "custom.width", "value": 160}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "priority"},
+            "properties": [
+              {"id": "custom.width", "value": 80},
+              {"id": "mappings", "value": [
+                {"options": {"Critical": {"color": "dark-red", "index": 0}}, "type": "value"},
+                {"options": {"Error": {"color": "red", "index": 1}}, "type": "value"},
+                {"options": {"Warning": {"color": "orange", "index": 2}}, "type": "value"},
+                {"options": {"Notice": {"color": "yellow", "index": 3}}, "type": "value"}
+              ]},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "detected_level"},
+            "properties": [{"id": "custom.width", "value": 100}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "rule"},
+            "properties": [{"id": "custom.width", "value": 200}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "hostname"},
+            "properties": [{"id": "custom.width", "value": 120}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Line"},
+            "properties": [
+              {"id": "custom.width", "value": 500},
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "🤖 Analyze with AI",
+                    "url": "http://192.168.1.163:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {"show": false}
+      },
+      "transformations": [
+        {"id": "extractFields", "options": {"source": "labels"}},
+        {"id": "organize", "options": {"excludeByName": {"id": true, "tsNs": true, "labels": true, "service_name": true, "source": true, "tags": true}, "indexByName": {"Time": 0, "priority": 1, "detected_level": 2, "rule": 3, "hostname": 4, "Line": 5}}}
+      ],
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{source=\"syscall\", hostname=~\"$hostname\", priority=~\"$priority\", rule=~\"$rule\"}",
+          "refId": "A",
+          "maxLines": 500
+        }
+      ]
     }
   ],
   "refresh": "5s",

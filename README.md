@@ -311,12 +311,32 @@ Sensitive data is **obfuscated before sending to the LLM**:
 ### Quick Start
 
 ```bash
+# Install the Analysis API service
+make install-analysis
+
 # Preview obfuscated data (no LLM call)
 make analyze-dry-run
 
 # Analyze critical alerts (requires LLM)
 make analyze
 ```
+
+### Grafana Integration
+
+Once installed, the **Events Explorer** dashboard includes a table where you can click any event to analyze it with AI:
+
+1. Open **Events Explorer** dashboard in Grafana
+2. Scroll to the **"🤖 Select Event to Analyze"** table
+3. Click on any log line to see the **"🤖 Analyze with AI"** link
+4. View the analysis with attack vectors, MITRE mapping, and mitigations
+
+The analysis page shows:
+- **Original Alert** - The raw event
+- **What Was Sent to AI** - The obfuscated version (your sensitive data stays private)
+- **Attack Vector & MITRE ATT&CK** mapping
+- **Risk Assessment** with severity and confidence
+- **Mitigations** (immediate, short-term, long-term)
+- **False Positive Assessment**
 
 ### LLM Providers
 

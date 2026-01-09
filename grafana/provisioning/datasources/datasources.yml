@@ -16,6 +16,12 @@ datasources:
     jsonData:
       maxLines: 1000
       timeout: 60
+      derivedFields:
+        - name: "AI Analysis"
+          matcherRegex: ".*"
+          url: "http://192.168.1.163:5000/analyze?output=${__value.raw}"
+          urlDisplayLabel: "🤖 Analyze with AI"
+          datasourceUid: ""
 
   # Prometheus - Metrics
   - name: Prometheus

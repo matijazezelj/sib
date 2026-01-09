@@ -203,6 +203,26 @@ ANALYSIS_TEMPLATE = """
             <div class="original-alert">{{ original_output }}</div>
         </div>
         
+        {% if obfuscated_output and obfuscated_output != original_output %}
+        <div class="section">
+            <div class="label">🔒 What Was Sent to AI (Obfuscated)</div>
+            <div class="original-alert" style="border-left: 3px solid #73bf69;">{{ obfuscated_output }}</div>
+        </div>
+        {% endif %}
+        
+        {% if obfuscation_mapping and show_mapping %}
+        <div class="section">
+            <div class="label">Obfuscation Mapping</div>
+            <div class="obfuscation-map">
+                {% for category, mappings in obfuscation_mapping.items() %}
+                {% if mappings and category != 'secrets_count' %}
+                <div><strong>{{ category }}:</strong> {{ mappings }}</div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
         <div class="card {{ severity_class }}">
             <div class="section">
                 <div class="label">Attack Vector</div>
@@ -466,6 +486,7 @@ def analyze_page():
                 error="No alert output provided. Use ?output=... parameter.",
                 analysis={},
                 original_output='',
+                obfuscated_output='',
                 severity_class='',
                 obfuscation_mapping={},
                 show_mapping=False,
@@ -500,10 +521,15 @@ def analyze_page():
         severity = (risk.get('severity') or 'medium').lower()
         severity_class = severity if severity in ['critical', 'high', 'medium', 'low'] else 'medium'
         
+        # Get obfuscated output
+        obfuscated_alert = result.get('obfuscated_alert', {})
+        obfuscated_output = obfuscated_alert.get('output', '') if isinstance(obfuscated_alert, dict) else str(obfuscated_alert)
+        
         return render_template_string(ANALYSIS_TEMPLATE,
             error=None,
             analysis=analysis,
             original_output=output,
+            obfuscated_output=obfuscated_output,
             severity_class=severity_class,
             obfuscation_mapping=result.get('obfuscation_mapping', {}),
             show_mapping=show_mapping,
@@ -516,6 +542,7 @@ def analyze_page():
             error=str(e),
             analysis={},
             original_output=request.args.get('output', ''),
+            obfuscated_output='',
             severity_class='',
             obfuscation_mapping={},
             show_mapping=False,
