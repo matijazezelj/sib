@@ -109,7 +109,7 @@ make install
 |---------|-----|---------|
 | **Grafana** | http://localhost:3000 | External (0.0.0.0) |
 | **Sidekick API** | http://localhost:2801 | External (0.0.0.0) |
-| Sidekick UI | http://localhost:2802 | Localhost only |
+
 | Loki | http://localhost:3100 | Localhost only |
 | Prometheus | http://localhost:9090 | Localhost only |
 
@@ -289,13 +289,12 @@ GRAFANA_PORT=3000
 LOKI_PORT=3100
 PROMETHEUS_PORT=9090
 SIDEKICK_PORT=2801
-SIDEKICK_UI_PORT=2802
 ```
 
 ## 🔒 Security Notes
 
-- Internal services (Loki, Prometheus, Sidekick API) bind to localhost only
-- Only Grafana and Sidekick UI are externally accessible
+- Internal services (Loki, Prometheus) bind to localhost only
+- Grafana and Sidekick API are externally accessible (for fleet support)
 - Falco requires privileged access for syscall monitoring
 - Change default Grafana password in production
 
@@ -703,14 +702,6 @@ docker logs sib-sidekick --tail 20
 
 # Query Loki directly
 curl -s "http://localhost:3100/loki/api/v1/query?query={source=\"syscall\"}" | jq .
-```
-
-### Sidekick UI not working
-
-The UI requires Redis Stack with RediSearch. If you see `FT.CREATE` errors:
-```bash
-# Verify Redis Stack is running (not plain Redis)
-docker logs sib-redis
 ```
 
 ## 📜 License

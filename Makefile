@@ -87,7 +87,6 @@ install: network ## Install all security stacks
 	@echo ""
 	@echo "$(CYAN)Access points:$(RESET)"
 	@echo "  $(BOLD)Grafana:$(RESET)           $(YELLOW)http://localhost:3000$(RESET)"
-	@echo "  $(BOLD)Falcosidekick UI:$(RESET)  $(YELLOW)http://localhost:2802$(RESET)"
 	@echo "  $(BOLD)Falcosidekick:$(RESET)     $(YELLOW)http://localhost:2801$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Next steps:$(RESET)"
@@ -251,11 +250,6 @@ status: ## Show status of all stacks with health indicators
 	else \
 		printf "  %-22s $(RED)%-12s$(RESET)\n" "Falcosidekick" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-sidekick-ui; then \
-		printf "  %-22s $(GREEN)%-12s$(RESET)\n" "Falcosidekick UI" "running"; \
-	else \
-		printf "  %-22s $(RED)%-12s$(RESET)\n" "Falcosidekick UI" "stopped"; \
-	fi
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-loki; then \
 		health=$$(curl -sf http://localhost:3100/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "Loki" "running" "$$health"; \
@@ -287,7 +281,6 @@ health: ## Quick health check of all services
 	@echo ""
 	@echo "$(CYAN)Alerting:$(RESET)"
 	@curl -sf http://localhost:2801/healthz >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Falcosidekick is healthy" || echo "  $(RED)✗$(RESET) Falcosidekick is not responding"
-	@docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-sidekick-ui && echo "  $(GREEN)✓$(RESET) Falcosidekick UI is running" || echo "  $(RED)✗$(RESET) Falcosidekick UI is not running"
 	@echo ""
 	@echo "$(CYAN)Storage:$(RESET)"
 	@curl -sf http://localhost:3100/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Loki is healthy" || echo "  $(RED)✗$(RESET) Loki is not responding"
@@ -318,7 +311,7 @@ doctor: ## Diagnose common issues
 	@docker run --rm --privileged alpine echo "ok" >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Privileged containers supported" || echo "  $(RED)✗$(RESET) Privileged containers not supported"
 	@echo ""
 	@echo "$(CYAN)Checking ports...$(RESET)"
-	@for port in 2801 2802 3000 3100 9090; do \
+	@for port in 2801 3000 3100 9090; do \
 		if lsof -Pi :$$port -sTCP:LISTEN -t >/dev/null 2>&1; then \
 			echo "  $(GREEN)✓$(RESET) Port $$port is in use (expected if SIB is running)"; \
 		else \
@@ -361,8 +354,7 @@ test-alert: ## Generate a test security alert
 		echo "$(RED)✗ Failed to send test alert. Is Falcosidekick running?$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Check the alert in:$(RESET)"
-	@echo "  • Falcosidekick UI: $(YELLOW)http://localhost:2802$(RESET)"
-	@echo "  • Grafana:          $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  • Grafana: $(YELLOW)http://localhost:3000$(RESET)"
 	@echo ""
 
 demo: ## Run comprehensive security demo (generates ~30 events)
@@ -397,17 +389,12 @@ open: ## Open Grafana in browser
 	@echo "$(CYAN)Opening Grafana...$(RESET)"
 	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Open http://localhost:3000 in your browser"
 
-open-ui: ## Open Falcosidekick UI in browser
-	@echo "$(CYAN)Opening Falcosidekick UI...$(RESET)"
-	@open http://localhost:2802 2>/dev/null || xdg-open http://localhost:2802 2>/dev/null || echo "Open http://localhost:2802 in your browser"
-
 info: ## Show all endpoints and ports
 	@echo ""
 	@echo "$(BOLD)📡 SIB Endpoints$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Web Interfaces:$(RESET)"
 	@echo "  Grafana:            $(YELLOW)http://localhost:3000$(RESET)"
-	@echo "  Falcosidekick UI:   $(YELLOW)http://localhost:2802$(RESET)"
 	@echo ""
 	@echo "$(CYAN)APIs:$(RESET)"
 	@echo "  Falcosidekick:      $(YELLOW)http://localhost:2801$(RESET)"
@@ -429,7 +416,7 @@ check-ports: ## Check if required ports are available
 	@echo ""
 	@echo "$(BOLD)🔌 Port Check$(RESET)"
 	@echo ""
-	@for port in 2801 2802 3000 3100 9090; do \
+	@for port in 2801 3000 3100 9090; do \
 		if lsof -Pi :$$port -sTCP:LISTEN -t >/dev/null 2>&1; then \
 			proc=$$(lsof -Pi :$$port -sTCP:LISTEN -t 2>/dev/null | head -1); \
 			echo "  $(YELLOW)!$(RESET) Port $$port is in use (PID: $$proc)"; \

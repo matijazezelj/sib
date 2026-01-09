@@ -90,9 +90,8 @@ make demo
 
 After running scenarios:
 
-1. **Falcosidekick UI**: http://localhost:2802
-2. **Grafana**: http://localhost:3000 → Security Overview dashboard
-3. **Logs**: `make logs-falco`
+1. **Grafana**: http://localhost:3000 → Security Overview dashboard
+2. **Logs**: `make logs-falco`
 
 ## Expected Events
 

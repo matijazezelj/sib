@@ -1,4 +1,4 @@
-# Alerting Stack - Falcosidekick + UI
+# Alerting Stack - Falcosidekick
 
 services:
   sidekick:
@@ -21,43 +21,6 @@ services:
       retries: 3
       start_period: 10s
 
-  sidekick-ui:
-    image: falcosecurity/falcosidekick-ui:2.2.0
-    container_name: sib-sidekick-ui
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${SIDEKICK_UI_PORT:-2802}:2802"
-    environment:
-      - FALCOSIDEKICK_UI_REDIS_URL=redis:6379
-      - FALCOSIDEKICK_UI_LOGLEVEL=info
-    depends_on:
-      - redis
-    networks:
-      - sib-network
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2802/api/v1/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  redis:
-    image: redis/redis-stack-server:latest
-    container_name: sib-redis
-    restart: unless-stopped
-    networks:
-      - sib-network
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
 networks:
   sib-network:
     external: true
-
-volumes:
-  redis-data:

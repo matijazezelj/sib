@@ -1,13 +1,12 @@
 # Alerting Stack
 
-This directory contains Falcosidekick and its UI for forwarding Falco alerts to various outputs.
+This directory contains Falcosidekick for forwarding Falco alerts to various outputs.
 
 ## Components
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **Falcosidekick** | 2801 | Alert forwarding daemon |
-| **Falcosidekick UI** | 2802 | Web UI for viewing events |
 
 ## What is Falcosidekick?
 
@@ -63,7 +62,3 @@ Generate a test alert:
 ```bash
 curl -X POST http://localhost:2801/test
 ```
-
-## UI Access
-
-Open http://localhost:2802 to view the Falcosidekick UI.
