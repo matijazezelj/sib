@@ -55,9 +55,11 @@ SIB provides a complete, self-hosted security monitoring stack for detecting thr
 
 ## 📋 Prerequisites
 
-- **Docker** 20.10+ with Docker Compose v2+
+- **Docker CE** 20.10+ from [docker.com](https://docs.docker.com/engine/install/) with Docker Compose v2+, or **Podman** 4.0+ with podman-compose
 - **Linux kernel** 5.8+ (for modern_ebpf driver)
 - **4GB+ RAM** recommended
+
+> ⚠️ **Note**: Docker Desktop is not supported. Install Docker CE (Community Edition) directly from docker.com or use Podman.
 
 ### Hardware Requirements
 
@@ -70,8 +72,15 @@ SIB provides a complete, self-hosted security monitoring stack for detecting thr
 > 💡 **Not a network sniffer!** SIB uses Falco's eBPF-based syscall monitoring — it watches what programs do at the kernel level, not network packets. No mirror ports, TAPs, or bridge interfaces needed. Just install on any Linux host and it sees everything that host does.
 
 ```bash
+# Docker CE
 docker --version          # Should be 20.10+
 docker compose version    # Should be v2+
+
+# Or Podman
+podman --version          # Should be 4.0+
+podman-compose --version  # Alternative to docker compose
+
+# Kernel (both)
 uname -r                  # Should be 5.8+ for eBPF
 ```
 

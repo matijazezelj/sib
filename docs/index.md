@@ -58,7 +58,11 @@ That's it. You now have:
 
 The whole thing runs in Docker. No agents to install on every host (unless you want remote collectors). No cloud dependencies. Your data stays on your infrastructure.
 
-### Hardware Requirements
+### Requirements
+
+**Container Runtime**: [Docker CE](https://docs.docker.com/engine/install/) 20.10+ or [Podman](https://podman.io/) 4.0+
+
+> ⚠️ Docker Desktop is not supported. Install Docker CE (Community Edition) from docker.com or use Podman.
 
 | Deployment | CPU | RAM | Disk |
 |------------|-----|-----|------|
