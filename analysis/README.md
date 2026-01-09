@@ -136,30 +136,31 @@ analysis:
 
 ## Usage
 
-### CLI Analysis
+### Via Grafana (Recommended)
+
+1. Open **Events Explorer** dashboard
+2. Click any event row to select it
+3. Click **🤖 Analyze with AI** in the bottom panel
+4. View the analysis with attack vectors, MITRE mapping, and mitigations
+
+### Via API
 
 ```bash
-# Analyze recent critical alerts
-sib analyze --priority Critical --last 1h
+# Analyze a specific event
+curl "http://localhost:5000/analyze?rule=Read%20sensitive%20file&output=user%3Droot%20file%3D/etc/shadow"
 
-# Analyze specific alert
-sib analyze --alert-id "abc123"
+# Dry run - see obfuscated data without calling LLM
+curl "http://localhost:5000/analyze?rule=Test&output=test&dry_run=true"
 
-# Dry run - show what would be sent (obfuscated)
-sib analyze --dry-run --last 1h
+# JSON API
+curl -X POST http://localhost:5000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"rule": "Read sensitive file", "output": "user=root file=/etc/shadow"}'
 ```
 
-### Automatic Enrichment
+### Caching
 
-When enabled, alerts are automatically analyzed and enriched:
-
-```yaml
-analysis:
-  auto_enrich: true
-  auto_enrich_priority: [Critical, Error]  # Only high-priority
-```
-
-Enriched data appears in Grafana dashboards and can trigger enhanced alerts.
+Analysis results are cached to avoid repeated LLM calls for the same event. Cache is stored in `/app/cache` (persisted via Docker volume).
 
 ## How It Works
 
@@ -209,7 +210,7 @@ process=cat container=[CONTAINER-1] image=nginx:latest
 
 ## Example Analysis Output
 
-Here are real examples from running `make analyze` on actual alerts:
+Here are real examples from analyzing alerts via the API:
 
 ### Critical Alert - Defense Evasion
 

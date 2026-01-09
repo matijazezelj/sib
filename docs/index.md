@@ -232,13 +232,20 @@ All events from all hosts appear in your central Grafana dashboards.
 
 ---
 
-## 🤖 AI-Powered Alert Analysis (Beta)
+## 🤖 AI-Powered Alert Analysis (Optional)
 
-Got an alert but not sure what it means? SIB can analyze your security events using LLMs.
+Got an alert but not sure what it means? SIB can analyze your security events using LLMs — directly from Grafana!
 
 ```bash
-make analyze
+# Install the AI Analysis service
+make install-analysis
 ```
+
+You'll be prompted for your server's IP/hostname (so Grafana can link to the API). Then:
+
+1. Open **Events Explorer** dashboard in Grafana
+2. Click any event row to select it
+3. Click **🤖 Analyze with AI** in the bottom panel
 
 You get:
 - **Attack vector explanation** — What the attacker is trying to do
@@ -267,9 +274,9 @@ Your sensitive data never leaves your network (unless you want it to). Before se
 | OpenAI | OpenAI API | Better quality |
 | Anthropic | Anthropic API | Claude fans |
 
-Preview what gets sent before any LLM call:
+The API also supports dry-run mode to preview obfuscated data:
 ```bash
-make analyze-dry-run
+curl "http://localhost:5000/analyze?rule=SomeRule&output=test&dry_run=true"
 ```
 
 ### Example Output
@@ -310,22 +317,25 @@ make analyze-dry-run
 ======================================================================
 ```
 
-### AI Analysis Dashboard
+### Integrated Dashboard Experience
 
-Analyzed alerts are stored back in Loki and visualized in a dedicated dashboard:
+After installing analysis, the **Events Explorer** dashboard gets an AI analysis panel:
 
-![AI Analysis Dashboard](assets/images/ai-analysis-dashboard.png)
+![Events Explorer with AI](assets/images/events-explorer-ai.png)
 
-The dashboard shows:
-- **MITRE ATT&CK coverage** — Tactics and techniques detected across all analyzed alerts
-- **Severity distribution** — AI-assessed severity (Critical, High, Medium, Low)
-- **False positive tracking** — How many alerts the AI flagged as likely false positives
-- **Enriched alert log** — Full analysis with attack vectors, mitigations, and investigation steps
+**Workflow:**
+1. Browse events in the Events Explorer
+2. Click a row to select an event
+3. The bottom panel shows event details and an "Analyze with AI" link
+4. Click to get instant AI-powered analysis in a new tab
 
-Run analysis with storage enabled:
-```bash
-make analyze-store
-```
+Analysis results include:
+- **Attack explanation** with MITRE ATT&CK mapping
+- **Risk assessment** with severity and confidence
+- **Actionable mitigations** (immediate, short-term, long-term)
+- **False positive likelihood**
+
+Results are cached, so repeated analysis of the same event is instant.
 
 See [analysis/README.md](https://github.com/matijazezelj/sib/blob/main/analysis/README.md) for configuration.
 
@@ -366,10 +376,10 @@ make demo-quick           # Quick demo (fewer events)
 make update-threatintel   # Update IOC feeds
 make convert-sigma        # Convert Sigma rules to Falco
 
-# AI Analysis (Beta)
-make analyze              # Analyze alerts with AI
-make analyze-store        # Analyze and store results in Loki
-make analyze-dry-run      # Preview obfuscated data
+# AI Analysis (Optional)
+make install-analysis     # Install AI analysis API service
+make logs-analysis        # View analysis API logs
+make shell-analysis       # Open shell in analysis container
 
 # Fleet Management (no local Ansible needed)
 make deploy-fleet         # Deploy agents to all fleet hosts

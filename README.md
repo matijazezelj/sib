@@ -188,9 +188,9 @@ make test-alert           # Generate a test security alert
 make update-threatintel   # Download threat intel feeds
 make convert-sigma        # Convert Sigma rules to Falco
 
-# AI Analysis (Beta)
-make analyze              # Analyze critical alerts with AI
-make analyze-dry-run      # Preview obfuscated data (no LLM call)
+# AI Analysis (Optional)
+make install-analysis     # Install AI analysis API (integrated with Grafana)
+make logs-analysis        # View analysis API logs
 
 # Utilities
 make open                 # Open Grafana in browser
@@ -322,13 +322,9 @@ Sensitive data is **obfuscated before sending to the LLM**:
 ```bash
 # Install the Analysis API service
 make install-analysis
-
-# Preview obfuscated data (no LLM call)
-make analyze-dry-run
-
-# Analyze critical alerts (requires LLM)
-make analyze
 ```
+
+You'll be prompted for your server's IP/hostname. Then open Grafana and use the Events Explorer dashboard to analyze any event with AI.
 
 ### Grafana Integration
 
