@@ -27,19 +27,19 @@ help: ## Show this help message
 	@echo "  make $(GREEN)<target>$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Installation:$(RESET)"
-	@grep -E '^(install|install-detection|install-alerting|install-storage|install-grafana):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(install|install-detection|install-alerting|install-storage|install-grafana|install-analysis):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Management:$(RESET)"
 	@grep -E '^(start|stop|restart|status|uninstall):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Health & Logs:$(RESET)"
-	@grep -E '^(health|doctor|logs|logs-falco|logs-sidekick|logs-storage|logs-grafana):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(health|doctor|logs|logs-falco|logs-sidekick|logs-storage|logs-grafana|logs-analysis):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Testing & Demo:$(RESET)"
 	@grep -E '^(test-alert|demo|demo-quick|test-rules):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Analysis (AI-Powered):$(RESET)"
-	@grep -E '^(analyze|analyze-dry-run|analyze-store):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(analyze|analyze-dry-run|analyze-store|install-analysis):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Threat Intel & Sigma:$(RESET)"
 	@grep -E '^(update-threatintel|convert-sigma):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -120,6 +120,11 @@ install-grafana: network ## Install Grafana dashboard
 	@cd grafana && $(DOCKER_COMPOSE) up -d
 	@echo "$(GREEN)✓ Grafana installed$(RESET)"
 
+install-analysis: network ## Install AI Analysis API service
+	@echo "$(CYAN)🤖 Installing AI Analysis API...$(RESET)"
+	@cd analysis && $(DOCKER_COMPOSE) up -d --build
+	@echo "$(GREEN)✓ AI Analysis API installed at http://localhost:5000$(RESET)"
+
 # ==================== Start ====================
 
 start: start-storage start-grafana start-alerting start-detection ## Start all stacks
@@ -136,6 +141,9 @@ start-storage: ## Start storage stack
 
 start-grafana: ## Start Grafana
 	@cd grafana && $(DOCKER_COMPOSE) start
+
+start-analysis: ## Start AI Analysis API
+	@cd analysis && $(DOCKER_COMPOSE) start
 
 # ==================== Stop ====================
 
@@ -154,6 +162,9 @@ stop-storage: ## Stop storage stack
 stop-grafana: ## Stop Grafana
 	@cd grafana && $(DOCKER_COMPOSE) stop
 
+stop-analysis: ## Stop AI Analysis API
+	@cd analysis && $(DOCKER_COMPOSE) stop
+
 # ==================== Restart ====================
 
 restart: restart-storage restart-grafana restart-alerting restart-detection ## Restart all stacks
@@ -170,6 +181,9 @@ restart-storage: ## Restart storage stack
 
 restart-grafana: ## Restart Grafana
 	@cd grafana && $(DOCKER_COMPOSE) restart
+
+restart-analysis: ## Restart AI Analysis API
+	@cd analysis && $(DOCKER_COMPOSE) restart
 
 # ==================== Uninstall ====================
 
@@ -204,6 +218,11 @@ uninstall-grafana: ## Remove Grafana and volumes
 	@echo "$(YELLOW)Removing Grafana...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ Grafana removed$(RESET)"
+
+uninstall-analysis: ## Remove AI Analysis API and volumes
+	@echo "$(YELLOW)Removing AI Analysis API...$(RESET)"
+	@cd analysis && $(DOCKER_COMPOSE) down -v
+	@echo "$(GREEN)✓ AI Analysis API removed$(RESET)"
 
 uninstall-collectors: ## Remove Alloy collectors and volumes
 	@echo "$(YELLOW)Removing collectors...$(RESET)"
@@ -327,6 +346,9 @@ logs-storage: ## Tail storage stack logs (Loki + Prometheus)
 
 logs-grafana: ## Tail Grafana logs
 	@cd grafana && $(DOCKER_COMPOSE) logs -f
+
+logs-analysis: ## Tail AI Analysis API logs
+	@cd analysis && $(DOCKER_COMPOSE) logs -f
 
 # ==================== Testing ====================
 

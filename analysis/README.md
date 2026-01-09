@@ -13,6 +13,50 @@ When enabled, SIB can analyze security alerts using a Large Language Model (LLM)
 - **Mitigation Strategies** - Concrete steps to remediate
 - **Context** - Why this matters and what to look for next
 
+## Web API & Grafana Integration
+
+The Analysis module includes a web API that integrates with Grafana dashboards via data links.
+
+### Installation
+
+```bash
+# Install the API service
+make install-analysis
+
+# Manage the service
+make start-analysis
+make stop-analysis
+make logs-analysis
+```
+
+### Grafana Integration
+
+Once installed, all log panels show a "🤖 Analyze with AI" link when you click on a log entry:
+
+- **Security Overview** - Critical Events, Recent Events panels
+- **Events Explorer** - All log entries
+- **MITRE ATT&CK** - Critical & Error Events, MITRE-Tagged Events
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/analyze` | GET | Web interface with beautiful HTML results |
+| `/api/analyze` | POST | JSON API for programmatic access |
+| `/health` | GET | Health check endpoint |
+
+### Environment Variables
+
+Configure in `analysis/compose.yaml`:
+
+```yaml
+environment:
+  - OLLAMA_HOST=http://192.168.101.226:11434  # Your Ollama server
+  - OLLAMA_MODEL=qwen2.5:14b                    # Model to use
+  - LOKI_URL=http://loki:3100                   # Loki for storing results
+  - OBFUSCATION_LEVEL=standard                  # minimal, standard, paranoid
+```
+
 ## Privacy & Security
 
 ### What Gets Sent to the LLM

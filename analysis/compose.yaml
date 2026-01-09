@@ -1,0 +1,22 @@
+services:
+  sib-analysis:
+    build: .
+    container_name: sib-analysis
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - sib-network
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  sib-network:
+    external: true

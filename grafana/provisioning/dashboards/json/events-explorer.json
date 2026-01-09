@@ -75,6 +75,17 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "🤖 Analyze with AI",
+              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "targetBlank": true
+            }
+          ]
+        }
+      },
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},

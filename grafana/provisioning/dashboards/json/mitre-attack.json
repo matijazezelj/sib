@@ -1463,6 +1463,17 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "\ud83e\udd16 Analyze with AI",
+              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "targetBlank": true
+            }
+          ]
+        }
+      },
       "targets": [
         {
           "datasource": {
@@ -1497,6 +1508,17 @@
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "\ud83e\udd16 Analyze with AI",
+              "url": "http://localhost:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "targetBlank": true
+            }
+          ]
+        }
       },
       "targets": [
         {
