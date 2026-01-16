@@ -13,6 +13,20 @@ title: SIEM in a Box
 
 ---
 
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Installation](installation.md) | Complete installation guide with prerequisites |
+| [Quick Start](quickstart.md) | Get started in 60 seconds with demo mode |
+| [Fleet Management](fleet.md) | Deploy agents across your infrastructure |
+| [AI Analysis](ai-analysis.md) | LLM-powered alert analysis |
+| [Sigma Rules](sigma-rules.md) | Convert community detection rules |
+| [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
+| [Troubleshooting](troubleshooting.md) | Common issues and solutions |
+
+---
+
 I've spent 25 years in infrastructure — sysadmin, DevOps, and now SecOps. I've seen the inside of enterprise SIEMs. I've written detection rules, tuned alerts, and stared at dashboards at 3 AM trying to figure out if we're under attack or if it's just another false positive.
 
 And here's what I've learned: most teams have no idea what's happening on their systems. Not because they don't care, but because the tools to find out are either expensive, complicated, or both.
@@ -321,7 +335,7 @@ curl "http://localhost:5000/analyze?rule=SomeRule&output=test&dry_run=true"
 
 After installing analysis, the **Events Explorer** dashboard gets an AI analysis panel:
 
-![Events Explorer with AI](assets/images/events-explorer-ai.png)
+![Events Explorer with AI](assets/images/ai-analysis-dashboard.png)
 
 **Workflow:**
 1. Browse events in the Events Explorer

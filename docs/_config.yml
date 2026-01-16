@@ -1,5 +1,36 @@
 title: SIEM in a Box
-description: A complete security monitoring stack you can deploy with one command
+description: A complete security monitoring stack you can deploy with one command. Runtime security detection with Falco, log aggregation with Loki, and visualization with Grafana.
 remote_theme: pages-themes/cayman@v0.2.0
 plugins:
   - jekyll-remote-theme
+  - jekyll-seo-tag
+
+# SEO
+url: "https://in-a-box-tools.tech"
+author: Matija Zezelj
+twitter:
+  username: matijaz
+social:
+  name: Matija Zezelj
+  links:
+    - https://github.com/matijazezelj
+    - https://reddit.com/u/matijaz
+
+# Navigation (for themes that support it)
+navigation:
+  - title: Home
+    url: /
+  - title: Installation
+    url: /installation
+  - title: Quick Start
+    url: /quickstart
+  - title: Fleet Management
+    url: /fleet
+  - title: AI Analysis
+    url: /ai-analysis
+  - title: Sigma Rules
+    url: /sigma-rules
+  - title: Threat Intel
+    url: /threat-intel
+  - title: Troubleshooting
+    url: /troubleshooting
