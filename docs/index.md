@@ -166,12 +166,14 @@ Pre-built dashboards organized in one folder with tags for easy filtering.
 If you've written Sigma rules before (or grabbed them from the community), SIB can use them.
 
 I built a converter that transforms Sigma rules into:
-1. **Falco rules** — For runtime detection
-2. **LogQL alerts** — For log-based detection in Loki
+1. **Falco rules** — For runtime detection (works with both stacks)
+2. **LogQL alerts** — For log-based detection (Grafana stack only)
 
 ```bash
 make convert-sigma
 ```
+
+> **Note:** The LogQL alert output is for the Grafana stack (Loki). VictoriaLogs uses a different query language (LogsQL). Falco rule conversion works with both stacks.
 
 This means you're not locked into my detection logic. The entire Sigma rule ecosystem is available to you.
 
