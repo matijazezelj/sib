@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-Sigma to Falco/LogQL Converter for SIB
+Sigma to Falco/LogQL/LogsQL Converter for SIB
 
 Converts Sigma rules to:
 1. Falco rules (for syscall-level detection)
-2. LogQL alerts (for log-based detection in Loki)
+2. LogQL alerts (for log-based detection in Loki - Grafana stack)
+3. LogsQL alerts (for log-based detection in VictoriaLogs - VM stack)
 
 Usage:
     ./sigma2sib.py rules/          # Convert all rules in directory
     ./sigma2sib.py rule.yml        # Convert single rule
     ./sigma2sib.py rule.yml -o falco   # Output Falco format
-    ./sigma2sib.py rule.yml -o logql   # Output LogQL format
+    ./sigma2sib.py rule.yml -o logql   # Output LogQL format (Loki)
+    ./sigma2sib.py rule.yml -o logsql  # Output LogsQL format (VictoriaLogs)
 """
 
 import argparse
@@ -52,12 +54,23 @@ SIGMA_TO_FALCO_FIELDS = {
     'CurrentDirectory': 'proc.cwd',
 }
 
-# Sigma to LogQL label mapping
+# Sigma to LogQL label mapping (Loki)
 SIGMA_TO_LOGQL_LABELS = {
     'CommandLine': 'cmdline',
     'Image': 'exe',
     'User': 'user',
     'ProcessName': 'process',
+}
+
+# Sigma to LogsQL field mapping (VictoriaLogs)
+SIGMA_TO_LOGSQL_FIELDS = {
+    'CommandLine': 'proc.cmdline',
+    'Image': 'proc.exe',
+    'User': 'user.name',
+    'ProcessName': 'proc.name',
+    'TargetFilename': 'fd.name',
+    'SourceIp': 'fd.sip',
+    'DestinationIp': 'fd.dip',
 }
 
 
@@ -263,6 +276,92 @@ def sigma_to_logql_alert(sigma: Dict[str, Any], source_file: str = '') -> Dict[s
     return alert_rule
 
 
+def convert_detection_to_logsql(detection: Dict[str, Any], logsource: Dict[str, Any]) -> str:
+    """Convert Sigma detection block to LogsQL query (VictoriaLogs)."""
+    conditions = []
+    
+    for key, value in detection.items():
+        if key == 'condition':
+            continue
+            
+        if isinstance(value, dict):
+            for field, pattern in value.items():
+                logsql_field = SIGMA_TO_LOGSQL_FIELDS.get(field, field.lower())
+                
+                if isinstance(pattern, list):
+                    # Multiple values - OR them with parentheses
+                    sub_conditions = []
+                    for p in pattern:
+                        clean = str(p).replace('*', '')
+                        if clean:
+                            sub_conditions.append(f'"{clean}"')
+                    if sub_conditions:
+                        conditions.append(f'({" OR ".join(sub_conditions)})')
+                elif isinstance(pattern, str):
+                    # Remove wildcards, LogsQL does substring matching by default
+                    clean = pattern.replace('*', '')
+                    if clean:
+                        conditions.append(f'"{clean}"')
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    for field, pattern in item.items():
+                        clean = str(pattern).replace('*', '')
+                        if clean:
+                            conditions.append(f'"{clean}"')
+    
+    # Determine log source filter
+    category = logsource.get('category', 'process_creation')
+    product = logsource.get('product', 'linux')
+    
+    if product == 'linux' and category == 'process_creation':
+        source_filter = 'source:syscall'
+    elif product == 'windows':
+        source_filter = 'source:windows'
+    else:
+        source_filter = '*'
+    
+    # Build LogsQL query
+    if conditions:
+        return f'{source_filter} AND ({" AND ".join(conditions)})'
+    else:
+        return source_filter
+
+
+def sigma_to_logsql_alert(sigma: Dict[str, Any], source_file: str = '') -> Dict[str, Any]:
+    """Convert a Sigma rule to VictoriaLogs alerting rule format."""
+    title = sigma.get('title', 'Unknown Rule')
+    description = sigma.get('description', title)
+    level = sigma.get('level', 'medium')
+    tags = sigma.get('tags', [])
+    detection = sigma.get('detection', {})
+    logsource = sigma.get('logsource', {})
+    
+    mitre_tags = extract_mitre_tags(tags)
+    logsql_query = convert_detection_to_logsql(detection, logsource)
+    
+    # Build VictoriaLogs alerting rule (vmalert format)
+    alert_rule = {
+        'name': f'sigma_{title.replace(" ", "_").lower()}',
+        'rules': [{
+            'alert': title.replace(' ', '_'),
+            'expr': f'{logsql_query} | stats count() as hits',
+            'for': '0m',
+            'labels': {
+                'severity': level,
+                'source': 'sigma',
+            },
+            'annotations': {
+                'summary': title,
+                'description': description,
+                'mitre': ', '.join(mitre_tags),
+                'query': logsql_query,
+            }
+        }]
+    }
+    return alert_rule
+
+
 def convert_file(input_path: Path, output_format: str = 'both') -> None:
     """Convert a single Sigma rule file."""
     sigma = load_sigma_rule(input_path)
@@ -272,15 +371,20 @@ def convert_file(input_path: Path, output_format: str = 'both') -> None:
     print(f"Title: {sigma.get('title', 'Unknown')}")
     print(f"{'='*60}")
     
-    if output_format in ('falco', 'both'):
+    if output_format in ('falco', 'both', 'all'):
         print("\n--- Falco Rule ---")
         falco_output = sigma_to_falco(sigma, str(input_path))
         print(falco_output)
         
-    if output_format in ('logql', 'both'):
-        print("\n--- LogQL Alert Rule ---")
+    if output_format in ('logql', 'both', 'all'):
+        print("\n--- LogQL Alert Rule (Loki) ---")
         logql_output = sigma_to_logql_alert(sigma, str(input_path))
         print(yaml.dump(logql_output, default_flow_style=False))
+
+    if output_format in ('logsql', 'all'):
+        print("\n--- LogsQL Alert Rule (VictoriaLogs) ---")
+        logsql_output = sigma_to_logsql_alert(sigma, str(input_path))
+        print(yaml.dump(logsql_output, default_flow_style=False))
 
 
 def convert_directory(input_dir: Path, output_format: str = 'both') -> None:
@@ -295,23 +399,28 @@ def convert_directory(input_dir: Path, output_format: str = 'both') -> None:
     
     all_falco_rules = []
     all_logql_rules = {'groups': []}
+    all_logsql_rules = {'groups': []}
     
     for rule_path in rules_found:
         try:
             sigma = load_sigma_rule(rule_path)
             
-            if output_format in ('falco', 'both'):
+            if output_format in ('falco', 'both', 'all'):
                 all_falco_rules.append(sigma_to_falco(sigma, str(rule_path)))
                 
-            if output_format in ('logql', 'both'):
+            if output_format in ('logql', 'both', 'all'):
                 logql_alert = sigma_to_logql_alert(sigma, str(rule_path))
                 all_logql_rules['groups'].append(logql_alert)
+
+            if output_format in ('logsql', 'all'):
+                logsql_alert = sigma_to_logsql_alert(sigma, str(rule_path))
+                all_logsql_rules['groups'].append(logsql_alert)
                 
             print(f"  ✓ {rule_path.name}")
         except Exception as e:
             print(f"  ✗ {rule_path.name}: {e}")
     
-    if output_format in ('falco', 'both') and all_falco_rules:
+    if output_format in ('falco', 'both', 'all') and all_falco_rules:
         output_file = input_dir / 'converted_falco_rules.yaml'
         with open(output_file, 'w') as f:
             f.write(f"# Sigma rules converted to Falco format\n")
@@ -320,19 +429,28 @@ def convert_directory(input_dir: Path, output_format: str = 'both') -> None:
             f.write('\n'.join(all_falco_rules))
         print(f"\n✓ Falco rules saved to: {output_file}")
     
-    if output_format in ('logql', 'both') and all_logql_rules['groups']:
+    if output_format in ('logql', 'both', 'all') and all_logql_rules['groups']:
         output_file = input_dir / 'converted_logql_alerts.yaml'
         with open(output_file, 'w') as f:
-            f.write(f"# Sigma rules converted to LogQL alerts\n")
+            f.write(f"# Sigma rules converted to LogQL alerts (Loki)\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
             f.write(f"# Source: {input_dir}\n\n")
             yaml.dump(all_logql_rules, f, default_flow_style=False)
         print(f"✓ LogQL alerts saved to: {output_file}")
 
+    if output_format in ('logsql', 'all') and all_logsql_rules['groups']:
+        output_file = input_dir / 'converted_logsql_alerts.yaml'
+        with open(output_file, 'w') as f:
+            f.write(f"# Sigma rules converted to LogsQL alerts (VictoriaLogs)\n")
+            f.write(f"# Generated: {datetime.now().isoformat()}\n")
+            f.write(f"# Source: {input_dir}\n\n")
+            yaml.dump(all_logsql_rules, f, default_flow_style=False)
+        print(f"✓ LogsQL alerts saved to: {output_file}")
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Convert Sigma rules to Falco rules or LogQL alerts'
+        description='Convert Sigma rules to Falco rules, LogQL alerts (Loki), or LogsQL alerts (VictoriaLogs)'
     )
     parser.add_argument(
         'input',
@@ -341,9 +459,9 @@ def main():
     )
     parser.add_argument(
         '-o', '--output',
-        choices=['falco', 'logql', 'both'],
+        choices=['falco', 'logql', 'logsql', 'both', 'all'],
         default='both',
-        help='Output format (default: both)'
+        help='Output format: falco, logql (Loki), logsql (VictoriaLogs), both (falco+logql), all (default: both)'
     )
     parser.add_argument(
         '-v', '--verbose',
