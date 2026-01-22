@@ -50,7 +50,7 @@ If you're a small team, a startup, or a homelab enthusiast who wants real securi
 
 Most people pick option 3. I don't blame them.
 
-But here's the thing: the open source security tooling has gotten *really* good. Falco can detect suspicious behavior at the kernel level using eBPF. Grafana's stack (Loki, Prometheus) can store and visualize security events efficiently. The pieces exist — they just need to be wired together.
+But here's the thing: the open source security tooling has gotten *really* good. Falco can detect suspicious behavior at the kernel level using eBPF. VictoriaMetrics (VictoriaLogs + VictoriaMetrics) can store and visualize security events efficiently. The pieces exist — they just need to be wired together.
 
 So I did that.
 
@@ -201,9 +201,9 @@ Got more than one server? SIB includes Ansible-based fleet management to deploy 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    SIB Central Server                    │
-│  ┌─────────┐ ┌──────┐ ┌────────────┐ ┌─────────┐       │
-│  │ Grafana │ │ Loki │ │ Prometheus │ │Sidekick │       │
-│  └─────────┘ └──────┘ └────────────┘ └─────────┘       │
+│  ┌─────────┐ ┌──────────────┐ ┌────────────────┐        │
+│  │ Grafana │ │ VictoriaLogs │ │ VictoriaMetrics│        │
+│  └─────────┘ └──────────────┘ └────────────────┘        │
 └─────────────────────────▲──────────────▲────────────────┘
                           │              │
      ┌────────────────────┼──────────────┼────────────────┐
