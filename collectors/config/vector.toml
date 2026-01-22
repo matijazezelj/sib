@@ -1,0 +1,61 @@
+# ==============================================
+# Vector Configuration for SIB Fleet Collectors
+# ==============================================
+# Collects logs and ships to VictoriaLogs
+# Alternative to Loki-based log collection
+
+# ============================================
+# SOURCES - Log collection
+# ============================================
+
+# System logs
+[sources.syslog]
+type = "file"
+include = ["/var/log/syslog", "/var/log/messages"]
+read_from = "end"
+
+[sources.auth_logs]
+type = "file"
+include = ["/var/log/auth.log", "/var/log/secure"]
+read_from = "end"
+
+[sources.kernel_logs]
+type = "file"
+include = ["/var/log/kern.log"]
+read_from = "end"
+
+# Journald
+[sources.journald]
+type = "journald"
+current_boot_only = true
+
+# Docker container logs
+[sources.docker_logs]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+
+# ============================================
+# TRANSFORMS - Processing
+# ============================================
+
+# Add common labels
+[transforms.add_labels]
+type = "remap"
+inputs = ["syslog", "auth_logs", "kernel_logs", "journald", "docker_logs"]
+source = '''
+.host = get_env_var("HOSTNAME") ?? "unknown"
+.collector = "vector"
+'''
+
+# ============================================
+# SINKS - Ship to VictoriaLogs
+# ============================================
+
+[sinks.victorialogs]
+type = "http"
+inputs = ["add_labels"]
+uri = "http://${SIB_SERVER:-localhost}:9428/insert/jsonline?_stream_fields=host,collector&_msg_field=message&_time_field=timestamp"
+encoding.codec = "json"
+compression = "gzip"
+batch.max_bytes = 1048576
+batch.timeout_secs = 1

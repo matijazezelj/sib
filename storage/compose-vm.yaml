@@ -1,5 +1,6 @@
-# Storage Stack - VictoriaLogs + VictoriaMetrics (Full VM Stack)
-# Lightweight alternative to Loki + Prometheus with better performance
+# Storage Stack - VictoriaMetrics Ecosystem
+# VictoriaLogs + VictoriaMetrics + node_exporter
+# Lightweight, high-performance alternative to Grafana stack
 # Remote mode: Set STORAGE_BIND=0.0.0.0 to accept connections from collectors
 
 services:
@@ -17,7 +18,7 @@ services:
     networks:
       - sib-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9428/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9428/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -33,7 +34,7 @@ services:
       - "-storageDataPath=/vmstorage"
       - "-retentionPeriod=${VICTORIAMETRICS_RETENTION_PERIOD:-15d}"
       - "-httpListenAddr=:8428"
-      # Enable Prometheus remote write
+      # Enable Prometheus-compatible scraping
       - "-promscrape.config=/etc/prometheus/prometheus.yml"
     volumes:
       - victoriametrics-data:/vmstorage
@@ -41,11 +42,28 @@ services:
     networks:
       - sib-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8428/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8428/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: sib-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    networks:
+      - sib-network
+    pid: host
 
 networks:
   sib-network:

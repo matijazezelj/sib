@@ -28,7 +28,7 @@ title: SIEM in a Box
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [FAQ](faq.md) | Common questions and answers |
 | [Kubernetes Deployment](https://github.com/matijazezelj/sib-k8s) | Run SIB on Kubernetes |
-| [VictoriaLogs Backend](victorialogs.md) | Use VictoriaLogs instead of Loki |
+| [VictoriaMetrics Stack](victorialogs.md) | Default storage backend (VictoriaLogs + VictoriaMetrics) |
 
 ---
 
@@ -69,13 +69,16 @@ make install
 That's it. You now have:
 
 - **Falco** — Runtime security detection using eBPF. Watches syscalls in real-time.
-- **Falcosidekick** — Routes alerts to 50+ destinations (Slack, PagerDuty, Loki, etc.)
-- **Loki** — Log aggregation optimized for security events
+- **Falcosidekick** — Routes alerts to 50+ destinations (Slack, PagerDuty, VictoriaLogs, etc.)
+- **VictoriaLogs** — Fast, efficient log storage with LogsQL queries
+- **VictoriaMetrics** — PromQL-compatible metrics storage (10x less memory than Prometheus)
 - **Grafana** — Dashboards that actually tell you what's happening
 - **Threat intel feeds** — Automatic IOC updates from Feodo Tracker, Spamhaus, Emerging Threats, and more
 - **Sigma rule support** — Bring your existing detection rules
 
 The whole thing runs in Docker. No agents to install on every host (unless you want remote collectors). No cloud dependencies. Your data stays on your infrastructure.
+
+> 💡 **Alternative stack:** If you prefer Loki + Prometheus, set `STACK=grafana` in your `.env` file.
 
 ### Prerequisites
 

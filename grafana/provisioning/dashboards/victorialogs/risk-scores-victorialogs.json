@@ -323,53 +323,18 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "source:syscall priority:Critical | stats by (hostname) count() as Critical",
+          "expr": "source:syscall | stats by (hostname) count() as Events",
           "queryType": "stats",
-          "refId": "Critical",
-          "instant": true
-        },
-        {
-          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "source:syscall priority:Error | stats by (hostname) count() as Error",
-          "queryType": "stats",
-          "refId": "Error",
-          "instant": true
-        },
-        {
-          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "source:syscall priority:Warning | stats by (hostname) count() as Warning",
-          "queryType": "stats",
-          "refId": "Warning",
-          "instant": true
-        },
-        {
-          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "source:syscall priority:Notice | stats by (hostname) count() as Notice",
-          "queryType": "stats",
-          "refId": "Notice",
-          "instant": true
+          "refId": "A"
         }
       ],
       "title": "Host Risk Assessment",
-      "description": "Click a host to investigate in Events Explorer",
+      "description": "Event count by host",
       "transformations": [
-        {"id": "merge", "options": {}},
         {"id": "organize", "options": {
-          "excludeByName": {"Time": true},
           "renameByName": {"hostname": "Host"}
         }},
-        {"id": "calculateField", "options": {"alias": "CritW", "mode": "binary", "binary": {"left": "Critical", "operator": "*", "right": "25"}}},
-        {"id": "calculateField", "options": {"alias": "ErrW", "mode": "binary", "binary": {"left": "Error", "operator": "*", "right": "10"}}},
-        {"id": "calculateField", "options": {"alias": "WarnW", "mode": "binary", "binary": {"left": "Warning", "operator": "*", "right": "3"}}},
-        {"id": "calculateField", "options": {"alias": "NotW", "mode": "binary", "binary": {"left": "Notice", "operator": "*", "right": "1"}}},
-        {"id": "calculateField", "options": {"alias": "Sum1", "mode": "binary", "binary": {"left": "CritW", "operator": "+", "right": "ErrW"}}},
-        {"id": "calculateField", "options": {"alias": "Sum2", "mode": "binary", "binary": {"left": "WarnW", "operator": "+", "right": "NotW"}}},
-        {"id": "calculateField", "options": {"alias": "Risk", "mode": "binary", "binary": {"left": "Sum1", "operator": "+", "right": "Sum2"}}},
-        {"id": "organize", "options": {
-          "excludeByName": {"CritW": true, "ErrW": true, "WarnW": true, "NotW": true, "Sum1": true, "Sum2": true},
-          "indexByName": {"Host": 0, "Risk": 1, "Critical": 2, "Error": 3, "Warning": 4, "Notice": 5}
-        }},
-        {"id": "sortBy", "options": {"fields": {}, "sort": [{"field": "Risk", "desc": true}]}}
+        {"id": "sortBy", "options": {"fields": {}, "sort": [{"field": "Events", "desc": true}]}}
       ],
       "type": "table"
     },

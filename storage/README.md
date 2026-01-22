@@ -1,37 +1,42 @@
 # Storage Stack
 
-This directory contains the storage backends for SIB. Multiple configurations are available:
+This directory contains the storage backends for SIB. Two stack configurations are available:
 
-| Configuration | Logs | Metrics | Use Case |
-|--------------|------|---------|----------|
-| Default | Loki | Prometheus | Standard setup, Grafana-native |
-| VictoriaLogs | VictoriaLogs | Prometheus | Better full-text search |
-| Full VictoriaMetrics | VictoriaLogs | VictoriaMetrics | Lowest resource usage |
+| Stack | Components | Compose File | Use Case |
+|-------|------------|--------------|----------|
+| **`grafana`** (default) | Loki + Prometheus | `compose-grafana.yaml` | Grafana-native, familiar tools |
+| **`vm`** | VictoriaLogs + VictoriaMetrics + node_exporter | `compose-vm.yaml` | 10x less RAM, faster queries |
+
+## Stack Selection
+
+Configure your stack in `.env`:
+
+```bash
+# Grafana ecosystem (default)
+STACK=grafana
+
+# VictoriaMetrics ecosystem  
+STACK=vm
+```
+
+Then run `make install` - it automatically deploys the correct stack.
 
 ## Components
+
+### Grafana Stack (`STACK=grafana`)
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **Loki** | 3100 | Log aggregation for security events |
-| **VictoriaLogs** | 9428 | Alternative log storage (fast full‑text search) |
-| **Prometheus** | 9090 | Metrics storage |
-| **VictoriaMetrics** | 8428 | Alternative metrics storage (10x less RAM) |
+| **Prometheus** | 9090 | Metrics storage and scraping |
 
-## Quick Start
+### VM Stack (`STACK=vm`)
 
-Configure your preferred backends in `.env`:
-
-```bash
-# Default: Loki + Prometheus
-LOGS_ENDPOINT=loki
-METRICS_ENDPOINT=prometheus
-
-# Full VictoriaMetrics (lowest resources)
-LOGS_ENDPOINT=victorialogs
-METRICS_ENDPOINT=victoriametrics
-```
-
-Then run `make install` - it will automatically use the right compose file.
+| Service | Port | Description |
+|---------|------|-------------|
+| **VictoriaLogs** | 9428 | Log storage (fast full-text search) |
+| **VictoriaMetrics** | 8428 | Metrics storage (10x less RAM than Prometheus) |
+| **node_exporter** | 9100 | Host metrics (CPU, memory, disk, network) |
 
 ## Loki
 
@@ -40,7 +45,7 @@ Loki stores security events from Falcosidekick in a scalable, cost-efficient way
 ### Features
 - Label-based indexing (like Prometheus for logs)
 - LogQL query language
-- Integration with Grafana
+- Native Grafana integration
 
 ### Configuration
 Edit `config/loki-config.yml`:
@@ -63,9 +68,35 @@ Edit `config/loki-config.yml`:
 sum by (priority) (count_over_time({job="falco"} [1h]))
 ```
 
+## VictoriaLogs
+
+VictoriaLogs is a high-performance log storage optimized for security events.
+
+### Features
+- 10x faster than Loki for full-text search
+- Lower RAM usage
+- VictoriaMetrics-compatible ecosystem
+- Prometheus-like metrics endpoint
+
+### VictoriaLogs Query Examples
+
+```
+# All Falco events
+_stream:{job="falco"}
+
+# Critical priority events  
+_stream:{job="falco"} priority:Critical
+
+# Events with specific rule
+_stream:{job="falco"} AND rule:~".*shell.*"
+
+# Events from specific host
+_stream:{job="falco"} hostname:production-server-01
+```
+
 ## Prometheus
 
-Prometheus collects metrics from Falcosidekick for monitoring.
+Prometheus collects metrics from Falcosidekick and other SIB components.
 
 ### Metrics Available
 
@@ -78,51 +109,55 @@ Prometheus collects metrics from Falcosidekick for monitoring.
 
 ```promql
 # Alert rate by priority
-sum(rate(falcosidekick_alerts_total[5m])) by (priority)
+rate(falcosidekick_alerts_total[5m])
+
+# Total alerts in last hour
+increase(falcosidekick_alerts_total[1h])
 
 # Output success rate
-sum(rate(falcosidekick_outputs_ok[5m])) / sum(rate(falcosidekick_outputs_total[5m]))
+falcosidekick_outputs_ok / falcosidekick_outputs_total
 ```
 
-## Data Retention
+## VictoriaMetrics
 
-| Component | Default | Config Location |
-|-----------|---------|-----------------|
-| Loki | 7 days | `config/loki-config.yml` |
-| VictoriaLogs | 7 days | `compose-victorialogs.yaml` (retentionPeriod) |
-| Prometheus | 15 days | `compose.yaml` |
-| VictoriaMetrics | 15 days | `compose-victoriametrics.yaml` (retentionPeriod) |
+VictoriaMetrics is a high-performance Prometheus-compatible metrics storage.
 
-## Manual Installation
+### Features
+- 10x less RAM than Prometheus
+- Faster queries
+- Built-in metrics scraping (no separate scraper needed)
+- Full PromQL compatibility
+
+### Configuration
+Edit `config/prometheus-vm.yml` for scrape targets.
+
+## Remote Collectors
+
+To accept data from remote hosts:
 
 ```bash
-# Loki + Prometheus (default)
-make install-storage
+# Enable remote connections
+make enable-remote
 
-# VictoriaLogs + Prometheus
-make install-storage-victorialogs
-
-# VictoriaLogs + VictoriaMetrics (full VM stack)
-make install-storage-victoriametrics
+# This sets STORAGE_BIND=0.0.0.0 in .env and restarts storage
 ```
 
-Then update Falcosidekick to point at VictoriaLogs:
+Then deploy collectors to remote hosts:
+- **Grafana stack**: Use Alloy (`collectors/compose-grafana.yaml`)
+- **VM stack**: Use vmagent + Vector (`collectors/compose-vm.yaml`)
 
-```yaml
-loki:
-	hostport: "http://sib-victorialogs:9428"
-```
+## Manual Operations
 
-## Troubleshooting
-
-### Loki Not Accepting Events
 ```bash
-# Check Loki health
-curl http://localhost:3100/ready
+# Start storage manually (based on STACK)
+make start-storage-grafana   # or make start-storage-vm
 
-# Check Loki logs
-docker logs sib-loki
+# Stop storage
+make stop-storage-grafana    # or make stop-storage-vm
+
+# View logs
+make logs-storage
+
+# Restart
+make restart-storage-grafana # or make restart-storage-vm
 ```
-
-### High Memory Usage
-Reduce retention periods or increase container limits.

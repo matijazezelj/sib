@@ -3,9 +3,9 @@ layout: default
 title: VictoriaMetrics Stack - SIEM in a Box
 ---
 
-# VictoriaMetrics Stack
+# VictoriaMetrics Stack (Default)
 
-Use VictoriaLogs and/or VictoriaMetrics as alternative storage backends.
+VictoriaLogs and VictoriaMetrics are the default storage backends for SIB.
 
 [← Back to Home](index.md)
 
@@ -13,152 +13,152 @@ Use VictoriaLogs and/or VictoriaMetrics as alternative storage backends.
 
 ## Why VictoriaMetrics?
 
-**VictoriaLogs** (alternative to Loki):
+**VictoriaLogs** (logs storage):
 - Fast full‑text search over large volumes
 - Better handling of high‑cardinality fields
 - LogsQL support for analytics‑style queries
+- Loki-compatible ingestion API
 
-**VictoriaMetrics** (alternative to Prometheus):
-- 10x lower memory usage
+**VictoriaMetrics** (metrics storage):
+- 10x lower memory usage than Prometheus
 - Better compression (stores more in less disk space)
 - Faster queries on large datasets
 - PromQL-compatible (existing dashboards work)
 
 ---
 
-## Quick Start (Recommended)
+## Quick Start
 
-### Option 1: VictoriaLogs only (with Prometheus)
-
-```bash
-# Edit .env
-LOGS_ENDPOINT=victorialogs
-METRICS_ENDPOINT=prometheus  # default
-
-make install
-```
-
-### Option 2: Full VictoriaMetrics Stack (recommended for low-resource systems)
+The VictoriaMetrics stack is the default. Just run:
 
 ```bash
-# Edit .env
-LOGS_ENDPOINT=victorialogs
-METRICS_ENDPOINT=victoriametrics
-
+cp .env.example .env
 make install
 ```
 
 This automatically:
-- Installs VictoriaLogs + VictoriaMetrics
+- Installs VictoriaLogs + VictoriaMetrics + node_exporter
 - Configures Falcosidekick to send alerts to VictoriaLogs
-- Sets up Grafana with both VictoriaLogs and VictoriaMetrics datasources
+- Sets up Grafana with VictoriaLogs and VictoriaMetrics datasources
 - Provisions VictoriaLogs-compatible dashboards
 
----
+### Using the Grafana Stack Instead
 
-## Manual Setup
-
-### 1) Enable the VictoriaMetrics Storage Stack
+If you prefer Loki + Prometheus:
 
 ```bash
-# VictoriaLogs + Prometheus
-make install-storage-victorialogs
+# Edit .env
+STACK=grafana
 
-# OR: Full VictoriaMetrics stack (VictoriaLogs + VictoriaMetrics)
-make install-storage-victoriametrics
-```
-
-This starts:
-- **VictoriaLogs** (port 9428 by default)
-- **VictoriaMetrics** or **Prometheus** (port 8428 or 9090)
-
----
-
-### 2) Point Falcosidekick to VictoriaLogs
-
-Use the helper target:
-
-```bash
-make use-victorialogs-output
-```
-
-This configures Falcosidekick to use the Loki‑compatible insert endpoint:
-`http://sib-victorialogs:9428/insert`.
-
-To switch back:
-
-```bash
-make use-loki-output
+make install
 ```
 
 ---
 
-### 3) Switch Grafana Datasource
+## Architecture
 
-Use the prebuilt datasource file:
+When using `STACK=vm` (default):
 
-```bash
-make use-victorialogs-datasource
+```
+┌─────────────────────────────────────────────────────────┐
+│                      SIB Server                          │
+│                                                          │
+│  ┌─────────┐     ┌──────────────┐     ┌──────────────┐  │
+│  │  Falco  │────▶│ Falcosidekick│────▶│ VictoriaLogs │  │
+│  └─────────┘     └──────────────┘     │   (:9428)    │  │
+│                                        └──────────────┘  │
+│  ┌──────────────┐                      ┌──────────────┐  │
+│  │node_exporter │─────────────────────▶│VictoriaMetrics│ │
+│  │              │                      │   (:8428)    │  │
+│  └──────────────┘                      └──────────────┘  │
+│                                                          │
+│  ┌──────────────┐                                        │
+│  │   Grafana    │◀───── queries both ─────────────────   │
+│  │   (:3000)    │                                        │
+│  └──────────────┘                                        │
+└─────────────────────────────────────────────────────────┘
 ```
 
-This uses the VictoriaLogs Grafana plugin (installed automatically by the Grafana container).
+---
 
-### VictoriaLogs Dashboards
+## Access Points
 
-VictoriaLogs-specific dashboards are available under **SIEM in a Box / VictoriaLogs**:
-- **Events Explorer (VictoriaLogs)** — with AI analysis links
-- **Security Overview (VictoriaLogs)**
-- **MITRE ATT&CK Coverage (VictoriaLogs)**
-- **Fleet Overview (VictoriaLogs)**
-- **Risk Scores (VictoriaLogs)**
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Grafana** | http://localhost:3000 | Dashboards and visualization |
+| **VictoriaLogs** | http://localhost:9428 | Log storage and querying |
+| **VictoriaMetrics** | http://localhost:8428 | Metrics storage and querying |
+| **Sidekick API** | http://localhost:2801 | Alert routing UI |
 
-The Loki dashboards use LogQL and won't show data when VictoriaLogs is the backend.
+---
 
-### AI Analysis with VictoriaLogs
+## VictoriaLogs Dashboards
 
-When installing the AI Analysis API, it automatically detects `LOGS_ENDPOINT` and provisions the correct dashboard:
+Dashboards are available under **SIEM in a Box**:
+- **Events Explorer** — Security events with AI analysis links
+- **Security Overview** — High-level security posture
+- **MITRE ATT&CK Coverage** — Detection mapping to ATT&CK
+- **Fleet Overview** — Host metrics and log volumes
+- **Risk Scores** — Host risk assessment
+
+---
+
+## LogsQL Query Examples
+
+VictoriaLogs uses LogsQL for queries. Here are some examples:
+
+```logsql
+# All events
+*
+
+# Events by priority
+priority:Critical
+
+# Events from a specific host
+hostname:web-server-01
+
+# Events with a specific rule
+rule:"Read sensitive file trusted after startup"
+
+# Aggregate by rule
+* | stats by (rule) count() as Count
+
+# Time-based filtering
+_time:1h AND priority:Error
+```
+
+---
+
+## AI Analysis
+
+AI Analysis works with VictoriaLogs out of the box:
 
 ```bash
 make install-analysis
 ```
 
-If Grafana shows “Plugin not registered” (offline or restricted networks), install manually:
+The Events Explorer dashboard includes AI analysis links that send events to the analysis API for contextual security insights.
+
+If Grafana shows "Plugin not registered" (offline or restricted networks), install manually:
 
 ```bash
 docker exec sib-grafana grafana cli plugins install victoriametrics-logs-datasource
 docker restart sib-grafana
 ```
 
-To switch back to Loki:
-
-```bash
-make use-loki-datasource
-```
-
 ---
 
-### 4) Remote Collectors (Optional)
+## Switching to Grafana Stack
 
-Expose VictoriaLogs and Prometheus for collectors:
-
-```bash
-make enable-remote-victorialogs
-```
-
----
-
-## Switching Between Backends
-
-To switch from VictoriaLogs back to Loki:
+To switch from VictoriaMetrics to the Grafana stack (Loki + Prometheus):
 
 ```bash
 # Edit .env
-LOGS_ENDPOINT=loki
-METRICS_ENDPOINT=prometheus
+STACK=grafana
 
-# Reinstall or manually switch
-make use-loki-output
-make use-loki-datasource
+# Reinstall
+make uninstall
+make install
 ```
 
 ---
@@ -167,11 +167,8 @@ make use-loki-datasource
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOGS_ENDPOINT` | `loki` | Log storage: `loki` or `victorialogs` |
-| `METRICS_ENDPOINT` | `prometheus` | Metrics storage: `prometheus` or `victoriametrics` |
-| `VICTORIALOGS_PORT` | `9428` | VictoriaLogs HTTP port |
+| `STACK` | `vm` | Storage stack: `vm` (VictoriaMetrics) or `grafana` (Loki + Prometheus) |
 | `VICTORIALOGS_RETENTION_PERIOD` | `168h` | Log retention (7 days) |
-| `VICTORIAMETRICS_PORT` | `8428` | VictoriaMetrics HTTP port |
 | `VICTORIAMETRICS_RETENTION_PERIOD` | `15d` | Metrics retention |
 
 ---

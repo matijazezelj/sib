@@ -1,18 +1,18 @@
 # 🛡️ SIB - SIEM in a Box
 
-**One-command security monitoring** for containers and Linux systems, powered by Falco and the Grafana stack.
+**One-command security monitoring** for containers and Linux systems, powered by Falco and VictoriaMetrics.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 🌐 **Website**: [in-a-box-tools.tech](https://in-a-box-tools.tech)
 
-SIB provides a complete, self-hosted security monitoring stack for detecting threats in real-time. Built on Falco's runtime security engine with Loki for log storage and Grafana for visualization. VictoriaLogs is available as an alternative backend.
+SIB provides a complete, self-hosted security monitoring stack for detecting threats in real-time. Built on Falco's runtime security engine with VictoriaLogs for log storage and Grafana for visualization. Loki/Prometheus available as an alternative backend.
 
 ## 🌟 Features
 
 - **Runtime Security**: Detect suspicious behavior in real-time using Falco's eBPF-based syscall monitoring
 - **Alert Forwarding**: Falcosidekick routes alerts to 50+ destinations (Slack, PagerDuty, Loki, etc.)
-- **Log Aggregation**: Loki (default) or VictoriaLogs stores security events with efficient querying
+- **Log Aggregation**: VictoriaLogs (default) or Loki stores security events with efficient querying
 - **Pre-built Dashboards**: Grafana dashboards for security overview and event exploration
 - **MITRE ATT&CK Coverage**: Dashboard mapping detections to the ATT&CK framework
 - **Demo Mode**: Generate realistic security events to see dashboards in action
@@ -105,42 +105,39 @@ make install
 
 ### Storage Backend
 
-By default, SIB uses **Loki + Prometheus**. For a lightweight alternative, you can switch to the full **VictoriaMetrics stack**:
+SIB supports two monitoring stacks. Choose based on your preferences:
+
+| Stack | Components | Best For |
+|-------|------------|----------|
+| **`vm`** (default) | VictoriaLogs + VictoriaMetrics + node_exporter | 10x less RAM, faster queries, recommended |
+| **`grafana`** | Loki + Prometheus + Alloy | Grafana ecosystem, native integration |
 
 ```bash
-# In .env - choose your storage backends
-LOGS_ENDPOINT=loki          # Default - Loki (Grafana-native)
-LOGS_ENDPOINT=victorialogs  # Alternative - VictoriaLogs (lightweight, fast)
-
-METRICS_ENDPOINT=prometheus      # Default - Prometheus
-METRICS_ENDPOINT=victoriametrics # Alternative - VictoriaMetrics (10x less RAM)
-```
-
-**Full VictoriaMetrics mode** (both logs + metrics):
-```bash
-LOGS_ENDPOINT=victorialogs
-METRICS_ENDPOINT=victoriametrics
+# In .env - choose your stack (one simple setting)
+STACK=vm         # Default - VictoriaMetrics ecosystem (recommended)
+STACK=grafana    # Alternative - Grafana ecosystem (Loki + Prometheus)
 ```
 
 The `make install` command automatically:
-- Deploys the correct storage backend
+- Deploys the correct storage stack
 - Configures Falcosidekick to send alerts to the chosen backend
 - Sets up Grafana with the appropriate datasources and dashboards
+- For VM stack: includes node_exporter for host metrics
 
 ## 🌐 Access Points
 
-| Service | URL | Binding |
-|---------|-----|---------|
-| **Grafana** | http://localhost:3000 | External (0.0.0.0) |
-| **Sidekick API** | http://localhost:2801 | External (0.0.0.0) |
-| **VictoriaLogs** | http://localhost:9428 | Localhost only |
-| **VictoriaMetrics** | http://localhost:8428 | Localhost only |
-| **Loki** | http://localhost:3100 | Localhost only |
-| **Prometheus** | http://localhost:9090 | Localhost only |
+| Service | URL | Stack |
+|---------|-----|-------|
+| **Grafana** | http://localhost:3000 | Both |
+| **Sidekick API** | http://localhost:2801 | Both |
+| **Loki** | http://localhost:3100 | `grafana` only |
+| **Prometheus** | http://localhost:9090 | `grafana` only |
+| **VictoriaLogs** | http://localhost:9428 | `vm` only |
+| **VictoriaMetrics** | http://localhost:8428 | `vm` only |
 
 Default Grafana credentials: `admin` / `admin`
 
-> **Note:** Only the storage backend you selected via `LOGS_ENDPOINT` will be running (VictoriaLogs or Loki, not both).
+> **Note:** Only the services for your selected `STACK` will be running.
 
 > ⚠️ **Fleet Security Note:** Sidekick API (2801) is exposed externally so fleet hosts can send events. Use firewall rules to restrict access to your fleet nodes only:
 > ```bash

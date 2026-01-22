@@ -1,7 +1,7 @@
 # Falcosidekick Configuration
 debug: false
 
-# The logs backend host/port used by Falcosidekick. This value is substituted from .env via the Makefile.
-# Use __LOGS_HOSTPORT__ placeholder which Makefile replaces when generating config.yaml
+# Loki output - VictoriaLogs is Loki-compatible for ingestion
+# Works with both Loki (STACK=grafana) and VictoriaLogs (STACK=vm)
 loki:
-  hostport: "__LOGS_HOSTPORT__"
+  hostport: "__LOKI_HOSTPORT__"

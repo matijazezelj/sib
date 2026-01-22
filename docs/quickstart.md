@@ -122,19 +122,21 @@ Run the pipeline test to ensure everything is working:
 This script:
 1. Checks if all containers are running
 2. Generates a test event
-3. Verifies the event reaches Loki
+3. Verifies the event reaches VictoriaLogs
 4. Confirms Grafana can query the event
 
 Expected output:
 ```
 [✓] Falco is running
 [✓] Falcosidekick is running
-[✓] Loki is running
+[✓] VictoriaLogs is running
 [✓] Grafana is running
 [✓] Test event generated
-[✓] Event found in Loki
+[✓] Event found in VictoriaLogs
 [✓] Pipeline is working correctly!
 ```
+
+> **Note:** If you're using the Grafana stack (`STACK=grafana`), the output will show "Loki" instead of "VictoriaLogs".
 
 ---
 

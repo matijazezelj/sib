@@ -1,0 +1,58 @@
+# VM Collectors Stack - vmagent + node_exporter
+# Lightweight alternative to Alloy for VictoriaMetrics ecosystem
+# Deploy on remote hosts to ship logs/metrics to SIB server
+
+services:
+  vmagent:
+    image: victoriametrics/vmagent:latest
+    container_name: sib-vmagent
+    hostname: ${HOSTNAME:-collector}
+    restart: unless-stopped
+    command:
+      - "-promscrape.config=/etc/vmagent/config.yml"
+      - "-remoteWrite.url=${SIB_SERVER:-http://localhost}:8428/api/v1/write"
+      - "-remoteWrite.label=host=${HOSTNAME:-collector}"
+    ports:
+      - "127.0.0.1:8429:8429"
+    volumes:
+      - ./config/vmagent.yml:/etc/vmagent/config.yml:ro
+      - vmagent-data:/vmagent-data
+    depends_on:
+      - node-exporter
+    network_mode: host
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: sib-node-exporter
+    hostname: ${HOSTNAME:-collector}
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    network_mode: host
+    pid: host
+
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: sib-vector
+    hostname: ${HOSTNAME:-collector}
+    restart: unless-stopped
+    volumes:
+      - ./config/vector.toml:/etc/vector/vector.toml:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - vector-data:/var/lib/vector
+    environment:
+      - HOSTNAME=${HOSTNAME:-collector}
+      - SIB_SERVER=${SIB_SERVER:-localhost}
+    network_mode: host
+
+volumes:
+  vmagent-data:
+  vector-data:

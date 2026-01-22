@@ -1328,8 +1328,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats by (rule) count()",
-          "legendFormat": "{{rule}}",
+          "expr": "source:syscall | stats by (rule) count() as Count",
           "queryType": "stats",
           "refId": "A"
         }
@@ -1337,26 +1336,12 @@
       "title": "🎯 Top Detected Techniques",
       "transformations": [
         {
-          "id": "labelsToFields",
-          "options": {
-            "mode": "columns"
-          }
-        },
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true
-            },
+            "excludeByName": {},
             "indexByName": {},
             "renameByName": {
-              "Value": "Count",
-              "rule": "Technique",
-              "Value #A": "Count"
+              "rule": "Technique"
             }
           }
         },

@@ -16,6 +16,14 @@ scrape_configs:
         labels:
           instance: 'sib-victoriametrics'
 
+  # Host metrics via node_exporter
+  - job_name: 'node'
+    static_configs:
+      - targets: ['sib-node-exporter:9100']
+        labels:
+          instance: 'sib-host'
+          host: 'sib-host'
+
   # Falcosidekick metrics
   - job_name: 'falcosidekick'
     static_configs:

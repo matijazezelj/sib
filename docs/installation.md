@@ -77,12 +77,14 @@ That's it! Your SIB instance is now running.
 
 ## Access Points
 
-| Service | URL | Binding |
-|---------|-----|---------|
-| **Grafana** | http://localhost:3000 | External (0.0.0.0) |
-| **Sidekick API** | http://localhost:2801 | External (0.0.0.0) |
-| Loki | http://localhost:3100 | Localhost only |
-| Prometheus | http://localhost:9090 | Localhost only |
+| Service | URL | Binding | Stack |
+|---------|-----|---------|-------|
+| **Grafana** | http://localhost:3000 | External (0.0.0.0) | Both |
+| **Sidekick API** | http://localhost:2801 | External (0.0.0.0) | Both |
+| VictoriaLogs | http://localhost:9428 | Localhost only | VM (default) |
+| VictoriaMetrics | http://localhost:8428 | Localhost only | VM (default) |
+| Loki | http://localhost:3100 | Localhost only | Grafana |
+| Prometheus | http://localhost:9090 | Localhost only | Grafana |
 
 Default Grafana credentials: `admin` / `admin`
 
@@ -163,10 +165,12 @@ make install
 
 This will start:
 - **Falco** — Runtime security detection
-- **Falcosidekick** — Alert routing to Loki and UI
-- **Loki** — Log storage
-- **Prometheus** — Metrics storage
+- **Falcosidekick** — Alert routing to log storage
+- **VictoriaLogs** — Log storage (default stack)
+- **VictoriaMetrics** — Metrics storage (default stack)
 - **Grafana** — Visualization dashboards
+
+> **Note:** To use the Grafana stack (Loki + Prometheus) instead, set `STACK=grafana` in your `.env` file before running `make install`.
 
 ### 5. Verify Installation
 
@@ -204,7 +208,7 @@ If you want to collect logs from other hosts:
 make enable-remote
 ```
 
-This exposes Loki (3100) and Prometheus (9090) externally. Configure your firewall appropriately.
+This exposes VictoriaLogs (9428) and VictoriaMetrics (8428) externally — or Loki (3100) and Prometheus (9090) if using the Grafana stack. Configure your firewall appropriately.
 
 ### Install AI Analysis (Optional)
 
@@ -266,7 +270,10 @@ docker run --rm --privileged alpine echo "OK"
 # Check Falcosidekick is receiving events
 docker logs sib-sidekick --tail 20
 
-# Query Loki directly
+# Query VictoriaLogs directly (default stack)
+curl -s "http://localhost:9428/select/logsql/query?query=*" | jq .
+
+# Or query Loki directly (Grafana stack)
 curl -s "http://localhost:3100/loki/api/v1/query?query={source=\"syscall\"}" | jq .
 ```
 
