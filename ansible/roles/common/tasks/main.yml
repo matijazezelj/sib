@@ -61,6 +61,32 @@
   tags: always
 
 # ============================================================================
+# Determine effective collector deployment method (VM stack)
+# ============================================================================
+
+- name: Set effective collectors deployment method
+  ansible.builtin.set_fact:
+    common_effective_collectors_deployment: >-
+      {%- if collector_deployment | default('auto') == 'native' -%}
+        native
+      {%- elif collector_deployment | default('auto') == 'docker' -%}
+        docker
+      {%- elif docker_available -%}
+        docker
+      {%- elif install_docker_if_missing -%}
+        docker
+      {%- else -%}
+        native
+      {%- endif -%}
+  tags: always
+
+- name: Display effective collectors deployment method
+  ansible.builtin.debug:
+    msg: "Effective collectors deployment method: {{ common_effective_collectors_deployment | trim }}"
+  when: sib_stack | default('vm') == 'vm'
+  tags: always
+
+# ============================================================================
 # Package Installation
 # ============================================================================
 

@@ -1,0 +1,14 @@
+# ==============================================
+# vmagent Configuration for SIB Fleet Collectors
+# ==============================================
+# Scrapes local node_exporter and sends to SIB VictoriaMetrics
+
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # Host metrics via node_exporter
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']

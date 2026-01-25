@@ -40,8 +40,17 @@
       register: alloy_docker_status
       changed_when: false
       failed_when: false
-      when: docker_available | bool
+      when: docker_available | bool and sib_stack | default('vm') == 'grafana'
       tags: alloy
+
+    - name: Check VM collectors container status
+      ansible.builtin.command: >-
+        docker ps --filter name=sib-vmagent --filter name=sib-node-exporter --format "{{ '{{.Names}}: {{.Status}}' }}"
+      register: vm_collectors_docker_status
+      changed_when: false
+      failed_when: false
+      when: docker_available | bool and sib_stack | default('vm') == 'vm'
+      tags: vm_collectors
 
     # =========================================================================
     # Native service checks
@@ -63,7 +72,7 @@
     # =========================================================================
     # Connectivity checks
     # =========================================================================
-    - name: Test connectivity to SIB Loki
+    - name: Test connectivity to SIB Loki (Grafana stack)
       ansible.builtin.uri:
         url: "{{ sib_loki_url }}/ready"
         method: GET
@@ -71,6 +80,18 @@
         timeout: 5
       register: loki_health
       failed_when: false
+      when: sib_stack | default('vm') == 'grafana'
+      tags: connectivity
+
+    - name: Test connectivity to SIB VictoriaMetrics (VM stack)
+      ansible.builtin.uri:
+        url: "{{ sib_victoriametrics_url }}/health"
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: vm_health
+      failed_when: false
+      when: sib_stack | default('vm') == 'vm'
       tags: connectivity
 
     - name: Test connectivity to SIB Falcosidekick
@@ -94,7 +115,10 @@
         alloy_healthy: >-
           {{ (alloy_docker_status.stdout | default('')) is search('Up') or
              (alloy_native_status.stdout | default('')) == 'active' }}
+        vm_collectors_healthy: >-
+          {{ (vm_collectors_docker_status.stdout | default('')) is search('Up') }}
         loki_reachable: "{{ loki_health.status | default(0) == 200 }}"
+        vm_reachable: "{{ vm_health.status | default(0) == 200 }}"
         sidekick_reachable: "{{ sidekick_health.status | default(0) == 200 }}"
         falco_deployment_type: >-
           {{ 'docker' if (falco_docker_status.stdout | default('')) is search('Up') else
@@ -113,11 +137,19 @@
           
           Local Services:
             Falco:     {{ '✅ Running' if falco_healthy else '❌ NOT RUNNING' }} ({{ falco_deployment_type | trim }})
+            {% if sib_stack | default('vm') == 'grafana' %}
             Alloy:     {{ '✅ Running' if alloy_healthy else '❌ NOT RUNNING' }} ({{ alloy_deployment_type | trim }})
+            {% else %}
+            VM Collectors: {{ '✅ Running' if vm_collectors_healthy else '❌ NOT RUNNING' }} (docker)
+            {% endif %}
             Docker:    {{ '✅ Available' if docker_available else '⚠️  Not installed' }}
           
           Central Connectivity:
+            {% if sib_stack | default('vm') == 'grafana' %}
             Loki:      {{ '✅ Reachable' if loki_reachable else '❌ UNREACHABLE' }}
+            {% else %}
+            VictoriaMetrics: {{ '✅ Reachable' if vm_reachable else '❌ UNREACHABLE' }}
+            {% endif %}
             Sidekick:  {{ '✅ Reachable' if sidekick_reachable else '❌ UNREACHABLE' }}
           
           Host Info:
@@ -130,7 +162,10 @@
     - name: Fail if critical services are down
       ansible.builtin.fail:
         msg: "Critical services not healthy on {{ inventory_hostname }}"
-      when: not (falco_healthy and alloy_healthy)
+      when: >-
+        not falco_healthy or
+        (sib_stack | default('vm') == 'grafana' and not alloy_healthy) or
+        (sib_stack | default('vm') == 'vm' and not vm_collectors_healthy)
       tags: verify
 
 

@@ -1,0 +1,92 @@
+# VM Collectors role - installs vmagent + node_exporter for metrics shipping
+# Falco events are shipped directly to Sidekick (with optional mTLS)
+---
+
+- name: Display VM collectors deployment method
+  ansible.builtin.debug:
+    msg: "Deploying VM collectors using: {{ common_effective_collectors_deployment | trim }} method"
+  tags: vm_collectors
+
+- name: Create VM collectors config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/sib-collector
+    - /etc/sib-collector/config
+    - /var/lib/sib-vmagent
+  tags: vm_collectors
+
+- name: Deploy vmagent configuration
+  ansible.builtin.template:
+    src: vmagent.yml.j2
+    dest: /etc/sib-collector/config/vmagent.yml
+    owner: root
+    group: root
+    mode: '0644'
+  tags: vm_collectors
+
+# ============================================================================
+# Docker Deployment
+# ============================================================================
+
+- name: Deploy VM collectors via Docker
+  when: common_effective_collectors_deployment | trim == 'docker'
+  block:
+    - name: Pull vmagent image
+      community.docker.docker_image:
+        name: "{{ vmagent_image }}"
+        source: pull
+      tags: vm_collectors
+
+    - name: Pull node_exporter image
+      community.docker.docker_image:
+        name: "{{ node_exporter_image }}"
+        source: pull
+      tags: vm_collectors
+
+    - name: Run node_exporter container
+      community.docker.docker_container:
+        name: sib-node-exporter
+        image: "{{ node_exporter_image }}"
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        pid_mode: host
+        hostname: "{{ inventory_hostname }}"
+        command:
+          - '--path.procfs=/host/proc'
+          - '--path.sysfs=/host/sys'
+          - '--path.rootfs=/host/root'
+          - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+        volumes:
+          - /proc:/host/proc:ro
+          - /sys:/host/sys:ro
+          - /:/host/root:ro
+      tags: vm_collectors
+
+    - name: Run vmagent container
+      community.docker.docker_container:
+        name: sib-vmagent
+        image: "{{ vmagent_image }}"
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        hostname: "{{ inventory_hostname }}"
+        command:
+          - "-promscrape.config=/etc/vmagent/config.yml"
+          - "-remoteWrite.url={{ sib_victoriametrics_url }}/api/v1/write"
+          - "-remoteWrite.label=host={{ inventory_hostname }}"
+        volumes:
+          - /etc/sib-collector/config/vmagent.yml:/etc/vmagent/config.yml:ro
+          - /var/lib/sib-vmagent:/vmagent-data
+      tags: vm_collectors
+
+- name: VM collectors native deployment not supported
+  when: common_effective_collectors_deployment | trim != 'docker'
+  ansible.builtin.debug:
+    msg: "VM collectors currently support Docker deployment only. Set collector_deployment=docker or install Docker on fleet hosts."
+  tags: vm_collectors

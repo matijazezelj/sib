@@ -1,5 +1,5 @@
 # Deploy SIB Fleet Agents
-# Installs Falco and Alloy on all fleet hosts
+# Installs Falco and collectors (Alloy or vmagent) on all fleet hosts
 #
 # Usage:
 #   ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml
@@ -21,6 +21,7 @@
         msg: |
           Deploying SIB agents to {{ inventory_hostname }}
           SIB Server: {{ sib_server }}
+          Stack: {{ sib_stack | default('vm') }}
           Falco Version: {{ falco_version }}
           Deployment Strategy: {{ deployment_strategy }}
           mTLS Enabled: {{ mtls_enabled | default(false) }}
@@ -63,8 +64,15 @@
     - role: falco
       tags: [falco, detection]
 
+    # Grafana stack: use Alloy for logs/metrics
     - role: alloy
       tags: [alloy, shipping]
+      when: sib_stack | default('vm') == 'grafana'
+
+    # VM stack: use vmagent + node_exporter for metrics
+    - role: vm_collectors
+      tags: [vm_collectors, shipping]
+      when: sib_stack | default('vm') == 'vm'
 
   post_tasks:
     - name: Verify Falco is running
@@ -87,6 +95,16 @@
       register: alloy_status
       changed_when: false
       failed_when: false
+      when: sib_stack | default('vm') == 'grafana'
+      tags: verify
+
+    - name: Verify VM collectors are running
+      ansible.builtin.command: >-
+        docker ps --filter name=sib-vmagent --filter name=sib-node-exporter --format "{{ '{{.Names}}: {{.Status}}' }}"
+      register: vm_collectors_status
+      changed_when: false
+      failed_when: false
+      when: sib_stack | default('vm') == 'vm'
       tags: verify
 
     - name: Deployment summary
@@ -95,9 +113,14 @@
           ✅ Deployment complete for {{ inventory_hostname }}
 
           Falco: {{ falco_status.stdout | default('not running') }}
+          {% if sib_stack | default('vm') == 'grafana' %}
           Alloy: {{ alloy_status.stdout | default('not running') }}
-          mTLS: {{ 'enabled' if mtls_enabled | default(false) | bool else 'disabled' }}
-
           Logs shipping to: {{ sib_loki_url }}
+          Metrics shipping to: {{ sib_prometheus_url }}
+          {% else %}
+          VM Collectors: {{ vm_collectors_status.stdout | default('not running') }}
+          Metrics shipping to: {{ sib_victoriametrics_url }}
+          {% endif %}
+          mTLS: {{ 'enabled' if mtls_enabled | default(false) | bool else 'disabled' }}
           Events shipping to: {{ falco_outputs.http_url }}
       tags: verify

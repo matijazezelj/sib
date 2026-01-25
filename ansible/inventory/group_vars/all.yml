@@ -6,10 +6,19 @@
 # =============================================================================
 
 sib_server: "192.168.1.163"
-# Storage URLs - automatically switch to HTTPS when mTLS is enabled
-# Note: Port numbers may differ for TLS endpoints (configured in storage backends)
-sib_loki_url: "{{ 'https' if mtls_enabled | default(false) else 'http' }}://{{ sib_server }}:{{ '9429' if mtls_enabled | default(false) else '9428' }}"
-sib_prometheus_url: "{{ 'https' if mtls_enabled | default(false) else 'http' }}://{{ sib_server }}:{{ '8429' if mtls_enabled | default(false) else '8428' }}"
+
+# Stack selection for fleet collectors: vm or grafana
+# vm = VictoriaLogs + VictoriaMetrics (default, uses vmagent + node_exporter)
+# grafana = Loki + Prometheus (uses Alloy)
+sib_stack: "vm"
+
+# Grafana stack endpoints (Loki + Prometheus)
+sib_loki_url: "http://{{ sib_server }}:3100"
+sib_prometheus_url: "http://{{ sib_server }}:9090"
+
+# VM stack endpoints (VictoriaLogs + VictoriaMetrics)
+sib_victorialogs_url: "http://{{ sib_server }}:9428"
+sib_victoriametrics_url: "http://{{ sib_server }}:8428"
 
 # =============================================================================
 # Docker Configuration (Static Binary Installation)
@@ -79,6 +88,19 @@ alloy_scrape_targets:
   - job: node
     port: 9100
     metrics_path: /metrics
+
+# =============================================================================
+# VM Collectors Configuration (vmagent + node_exporter)
+# =============================================================================
+# Used when sib_stack: vm
+
+vmagent_image: "victoriametrics/vmagent:latest"
+node_exporter_image: "prom/node-exporter:latest"
+
+# Collector deployment strategy (VM stack)
+# auto   - Use Docker if available, otherwise skip (VM collectors require Docker)
+# docker - Force Docker containers
+collector_deployment: auto
 
 # =============================================================================
 # Common Settings

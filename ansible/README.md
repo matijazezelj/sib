@@ -18,13 +18,16 @@ Deploy and manage SIB security agents across your infrastructure.
             │             │   (mTLS)     │             │
      ┌──────┴──────┐ ┌────┴────┐ ┌──────┴──────┐      │
      │   Host A    │ │  Host B │ │   Host C    │  ... │
-     │ Falco+Alloy │ │ Falco+  │ │ Falco+Alloy │      │
+     │ Falco+vmagent││ Falco+  │ │Falco+vmagent│      │
      └─────────────┘ └─────────┘ └─────────────┘      │
             └─────────────────────────────────────────┘
                      Managed by Ansible (in Docker)
 ```
 
-> **Note:** Default stack uses VictoriaLogs + VictoriaMetrics. Set `STACK=grafana` in `.env` to use Loki + Prometheus instead.
+Fleet hosts run:
+- **Falco** → Security events → Sidekick (with mTLS)  
+- **vmagent + node_exporter** → Metrics → VictoriaMetrics (VM stack)
+- **Alloy** → Logs/Metrics → Loki/Prometheus (Grafana stack)
 
 ## Quick Start
 
@@ -72,7 +75,7 @@ make fleet-health
 | Command | Description |
 |---------|-------------|
 | `make fleet-build` | Build Ansible Docker image (auto-runs on first deploy) |
-| `make deploy-fleet` | Deploy Falco + Alloy to all fleet hosts |
+| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
 | `make update-rules` | Push updated detection rules to fleet |
 | `make fleet-health` | Check health of all fleet agents |
 | `make fleet-docker-check` | Check if Docker is installed, install if missing |
@@ -137,16 +140,32 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 
 ### Falco
 - Runtime security detection using eBPF
-- Configured to send events to central Falcosidekick
+- Configured to send events to central Falcosidekick (with optional mTLS)
 - Custom rules from `detection/config/rules/`
 
-### Alloy (Grafana Agent)
-- Collects and ships logs to central Loki
-- Collects and ships metrics to central Prometheus
-- Includes Docker container logs
-- Includes systemd journal logs
+### Collectors (stack-dependent)
+
+**VM stack (default, `sib_stack: vm`)**
+- vmagent + node_exporter for metrics → VictoriaMetrics
+- No log shipping (Falco events go via Sidekick)
+
+**Grafana stack (`sib_stack: grafana`)**
+- Alloy (Grafana Agent)
+- Logs → Loki, Metrics → Prometheus
 
 ## Configuration
+
+### Stack Selection
+
+Set in `ansible/inventory/group_vars/all.yml`:
+
+```yaml
+# VM stack (default) - vmagent + node_exporter for metrics
+sib_stack: vm
+
+# Grafana stack - Alloy for logs/metrics
+# sib_stack: grafana
+```
 
 ### Host Labels
 
@@ -191,22 +210,26 @@ This approach works on any Linux distribution without requiring apt/yum/dnf acce
 
 ### Deployment Strategy
 
-SIB supports both native package installation and Docker containers. **Native is recommended** for better visibility into all host processes.
+SIB supports both native package installation and Docker containers. **Native is recommended** for Falco visibility.
 
 | Strategy | Description |
 |----------|-------------|
-| `native` (default) | Install Falco from repo, Alloy as binary with systemd |
-| `docker` | Run Falco and Alloy as containers |
+| `native` (default) | Install Falco from repo. VM collectors always use Docker. |
+| `docker` | Run Falco as container |
 | `auto` | Use Docker if available, otherwise native |
 
 Configure in `inventory/group_vars/all.yml`:
 
 ```yaml
-# Deployment Strategy
+# Deployment Strategy (for Falco)
 # native - Native packages (recommended, better process visibility)
 # docker - Docker containers (requires Docker)
 # auto   - Use Docker if available, otherwise native
 deployment_strategy: native
+
+# Collector deployment (VM stack: vmagent + node_exporter)
+# docker - Always use Docker (recommended, only option for VM collectors)
+collector_deployment: docker
 
 # Install Docker if not present? (only applies when strategy is 'auto' or 'docker')
 install_docker_if_missing: true
@@ -262,10 +285,13 @@ make update-rules
 
 ### Check agent status on a host
 ```bash
-# Native deployment
-ssh user@host "systemctl status falco-modern-bpf alloy"
+# Native Falco deployment
+ssh user@host "systemctl status falco-modern-bpf"
 
-# Docker deployment
+# Docker deployment (Falco + VM collectors)
+ssh user@host "docker ps | grep -E 'sib-falco|sib-vmagent|sib-node-exporter'"
+
+# Grafana stack (Alloy)
 ssh user@host "docker ps | grep -E 'sib-falco|sib-alloy'"
 ```
 
@@ -278,7 +304,13 @@ ssh user@host "journalctl -u falco-modern-bpf -f"
 ssh user@host "docker logs sib-falco --tail 100"
 ```
 
-### View Alloy logs
+### View VM collectors logs
+```bash
+ssh user@host "docker logs sib-vmagent --tail 100"
+ssh user@host "docker logs sib-node-exporter --tail 100"
+```
+
+### View Alloy logs (Grafana stack)
 ```bash
 # Native deployment
 ssh user@host "journalctl -u alloy -f"
@@ -289,6 +321,11 @@ ssh user@host "docker logs sib-alloy --tail 100"
 
 ### Test connectivity to central
 ```bash
+# VM stack
+ssh user@host "curl -s http://SIB_SERVER:8428/health"
+ssh user@host "curl -s http://SIB_SERVER:2801/healthz"
+
+# Grafana stack
 ssh user@host "curl -s http://SIB_SERVER:3100/ready"
 ssh user@host "curl -s http://SIB_SERVER:2801/healthz"
 ```
@@ -346,19 +383,21 @@ See [Security Hardening](../docs/security-hardening.md) for complete mTLS docume
 1. **SSH Keys**: Use SSH keys, not passwords
 2. **Become**: Playbooks use `become: true` (sudo)
 3. **Network**: Fleet hosts need outbound access to SIB server ports:
-   - 3100 (Loki) or 9428 (VictoriaLogs)
-   - 2801 (Falcosidekick)
-   - 9090 (Prometheus) or 8428 (VictoriaMetrics)
+   - 2801 (Falcosidekick) - for Falco events (supports mTLS)
+   - 8428 (VictoriaMetrics) - for metrics (VM stack)
+   - 3100 (Loki) + 9090 (Prometheus) - for logs/metrics (Grafana stack)
 
-4. **Firewall**: Sidekick API (2801) is exposed externally for fleet access. Restrict to fleet nodes only:
+4. **Firewall**: Restrict access to fleet nodes only:
    ```bash
    # UFW example
    ufw allow from 192.168.1.0/24 to any port 2801
-   ufw allow from 10.0.0.0/8 to any port 2801
+   ufw allow from 192.168.1.0/24 to any port 8428
    
    # iptables example
    iptables -A INPUT -p tcp --dport 2801 -s 192.168.1.0/24 -j ACCEPT
+   iptables -A INPUT -p tcp --dport 8428 -s 192.168.1.0/24 -j ACCEPT
    iptables -A INPUT -p tcp --dport 2801 -j DROP
+   iptables -A INPUT -p tcp --dport 8428 -j DROP
    ```
 
 ## File Structure
@@ -376,8 +415,10 @@ ansible/
 │   └── remove-fleet.yml       # Uninstall agents
 ├── roles/
 │   ├── common/                # Prerequisites
+│   ├── certs/                 # mTLS certificate distribution
 │   ├── falco/                 # Falco installation
-│   └── alloy/                 # Alloy installation
+│   ├── alloy/                 # Alloy installation (Grafana stack)
+│   └── vm_collectors/         # vmagent + node_exporter (VM stack)
 ├── requirements.yml           # Ansible collections
 └── README.md                  # This file
 ```

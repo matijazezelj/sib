@@ -55,6 +55,17 @@
       ignore_errors: true
       tags: alloy
 
+    - name: Stop and remove VM collectors containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - sib-vmagent
+        - sib-node-exporter
+      when: docker_available | bool
+      ignore_errors: true
+      tags: vm_collectors
+
     # =========================================================================
     # Remove native Falco installation
     # =========================================================================
@@ -124,6 +135,20 @@
       ansible.builtin.file:
         path: /etc/alloy
         state: absent
+      tags: cleanup
+
+    - name: Remove VM collectors configuration directory
+      ansible.builtin.file:
+        path: /etc/sib-collector
+        state: absent
+      tags: cleanup
+
+    - name: Remove VM collectors data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/sib-vmagent
       tags: cleanup
 
     - name: Remove SIB directories
