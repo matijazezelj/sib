@@ -672,7 +672,11 @@ update: ## Pull latest images and restart all stacks
 	@echo "$(CYAN)Pulling latest images...$(RESET)"
 	@cd detection && $(DOCKER_COMPOSE) pull
 	@cd alerting && $(DOCKER_COMPOSE) pull
-	@cd storage && $(DOCKER_COMPOSE) pull
+ifeq ($(STACK),grafana)
+	@cd storage && $(DOCKER_COMPOSE) -f compose-grafana.yaml pull
+else
+	@cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml pull
+endif
 	@cd grafana && $(DOCKER_COMPOSE) pull
 	@echo ""
 	@echo "$(CYAN)Restarting stacks with new images...$(RESET)"
