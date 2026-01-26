@@ -39,7 +39,37 @@ Default configuration:
 Recommendations:
 - Use firewall rules to restrict access
 - Use VPN or private network for remote collectors
-- Change default Grafana password immediately
+- Enable mTLS for production fleet deployments
+
+### mTLS (Mutual TLS)
+
+SIB supports mTLS for encrypted, authenticated communication between components:
+
+**Components secured by mTLS (when enabled):**
+- **Falco → Falcosidekick**: Falco sends alerts over HTTPS with client certificate authentication
+- **Fleet agents → Falcosidekick**: Remote Falco instances authenticate with client certs
+
+**Enable mTLS:**
+```bash
+# Generate certificates
+make generate-certs
+
+# Enable mTLS
+echo "MTLS_ENABLED=true" >> .env
+
+# Reinstall to apply
+make install
+```
+
+**For fleet deployments:**
+```bash
+# Generate client certs for each host
+make generate-client-cert HOST=hostname
+
+# Deploy via Ansible with mtls_enabled: true
+```
+
+See [Security Hardening](docs/security-hardening.md) for complete mTLS documentation.
 
 ### API Keys
 
@@ -86,8 +116,8 @@ The AI Analysis feature:
 ## Known Limitations
 
 - Falco requires kernel access, which needs privileged mode
-- TLS is not enabled by default between components
-- Authentication between internal services relies on network isolation
+- mTLS is optional but recommended for production (disabled by default)
+- Storage backends (Loki/VictoriaLogs) rely on network isolation (localhost binding)
 
 ## Security Updates
 
