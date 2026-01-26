@@ -57,11 +57,10 @@ The AI Analysis feature:
 
 ## Security Best Practices
 
-1. **Change default passwords**
+1. **Grafana password is auto-generated**
    ```bash
-   # Edit .env and change GRAFANA_ADMIN_PASSWORD
-   cp .env.example .env
-   nano .env
+   # View your generated password
+   grep GRAFANA_ADMIN_PASSWORD .env
    ```
 
 2. **Keep images updated**

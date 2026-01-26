@@ -189,17 +189,21 @@ make logs
 
 ## Post-Installation
 
-### Change Default Password
+### Grafana Password
 
-Change the Grafana admin password:
+A secure password is **auto-generated** during `make install` and saved to `.env`.
+
+To view your password:
+```bash
+grep GRAFANA_ADMIN_PASSWORD .env
+```
+
+To change it:
 1. Log in to Grafana at http://localhost:3000
 2. Click your profile icon (bottom left)
 3. Select "Change password"
 
-Or set it in `.env` before installation:
-```bash
-GRAFANA_ADMIN_PASSWORD=your-secure-password
-```
+Or regenerate by setting `GRAFANA_ADMIN_PASSWORD=CHANGE_ME` in `.env` and running `make install` again.
 
 ### Enable Remote Access
 

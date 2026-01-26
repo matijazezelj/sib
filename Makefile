@@ -71,12 +71,18 @@ install: network ## Install all security stacks
 	@if [ ! -f .env ]; then \
 		echo "$(YELLOW)! No .env file found. Creating from .env.example...$(RESET)"; \
 		cp .env.example .env; \
-		echo "$(YELLOW)! Please edit .env and set a secure GRAFANA_ADMIN_PASSWORD$(RESET)"; \
-		echo ""; \
 	fi
-	@if grep -q "CHANGE_ME" .env 2>/dev/null; then \
-		echo "$(RED)⚠️  WARNING: You're using default passwords!$(RESET)"; \
-		echo "$(YELLOW)   Edit .env file and change GRAFANA_ADMIN_PASSWORD$(RESET)"; \
+	@if grep -q "CHANGE_ME" .env 2>/dev/null || grep -q "GRAFANA_ADMIN_PASSWORD=$$" .env 2>/dev/null; then \
+		GRAFANA_PASS=$$(openssl rand -base64 16 | tr -d '/+='); \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			sed -i '' "s/GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=$$GRAFANA_PASS/" .env; \
+		else \
+			sed -i "s/GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=$$GRAFANA_PASS/" .env; \
+		fi; \
+		echo ""; \
+		echo "$(GREEN)🔐 Generated Grafana admin password$(RESET)"; \
+		echo "$(BOLD)   Password: $$GRAFANA_PASS$(RESET)"; \
+		echo "$(YELLOW)   (saved in .env file)$(RESET)"; \
 		echo ""; \
 	fi
 	@# Install based on STACK selection (grafana or vm)
