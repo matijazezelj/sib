@@ -20,11 +20,20 @@ from obfuscator import obfuscate_alert, ObfuscationLevel
 from prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, MITRE_MAPPING
 
 
+def _validate_url(url: str) -> str:
+    """Validate that a URL uses http(s) scheme to prevent SSRF via file:// etc."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"Invalid URL scheme: {parsed.scheme} (only http/https allowed)")
+    return url.rstrip('/')
+
+
 class LokiClient:
     """Client for querying alerts from Loki."""
-    
+
     def __init__(self, url: str = "http://localhost:3100"):
-        self.url = url.rstrip('/')
+        self.url = _validate_url(url)
     
     def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
         """Query Loki for logs in a time range."""
@@ -35,7 +44,7 @@ class LokiClient:
             'limit': limit,
         }
         
-        response = requests.get(f"{self.url}/loki/api/v1/query_range", params=params)
+        response = requests.get(f"{self.url}/loki/api/v1/query_range", params=params, timeout=30)
         response.raise_for_status()
         
         data = response.json()
@@ -77,7 +86,8 @@ class LokiClient:
             response = requests.post(
                 f"{self.url}/loki/api/v1/push",
                 json=payload,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
+                timeout=30
             )
             response.raise_for_status()
             return True
@@ -97,7 +107,7 @@ class OllamaProvider(LLMProvider):
     """Local Ollama LLM provider."""
     
     def __init__(self, url: str = "http://localhost:11434", model: str = "llama3.1:8b"):
-        self.url = url.rstrip('/')
+        self.url = _validate_url(url)
         self.model = model
     
     def analyze(self, system_prompt: str, user_prompt: str) -> dict:
@@ -281,8 +291,9 @@ class AlertAnalyzer:
         try:
             analysis = self.provider.analyze(SYSTEM_PROMPT, user_prompt)
         except Exception as e:
+            print(f"LLM analysis failed: {e}", file=sys.stderr)
             analysis = {
-                'error': str(e),
+                'error': 'LLM analysis failed',
                 'fallback_mitre': quick_mitre
             }
         

@@ -6,14 +6,19 @@ Provides endpoints for Grafana to trigger alert analysis via data links.
 """
 
 import os
+import re
 import sys
 import json
+import time
 import logging
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from markupsafe import escape as html_escape
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,14 +31,73 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Allow Grafana to call API
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB request size limit
+
+# CORS - configurable origins via env var (default: allow all for backward compat)
+cors_origins = os.environ.get('CORS_ORIGINS', '*')
+if cors_origins != '*':
+    cors_origins = [o.strip() for o in cors_origins.split(',')]
+CORS(app, resources={r"/api/*": {"origins": cors_origins}, r"/analyze": {"origins": cors_origins}})
+
+# Rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
+# API key authentication (optional - set API_KEY env var to enable)
+API_KEY = os.environ.get('API_KEY')
+
+@app.before_request
+def check_auth():
+    """Check API key if configured. Skip for health endpoint."""
+    if not API_KEY:
+        return None
+    if request.path == '/health':
+        return None
+    provided_key = request.headers.get('X-API-Key')
+    if provided_key != API_KEY:
+        return jsonify({'error': 'Authentication required'}), 401
 
 # Load config once at startup
 config = load_config()
 
+# Valid alert priorities
+VALID_PRIORITIES = {'Critical', 'High', 'Medium', 'Low', 'Notice', 'Warning', 'Error', 'Unknown'}
+
 # Analysis cache directory
 CACHE_DIR = Path(os.environ.get('ANALYSIS_CACHE_DIR', '/app/cache'))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    os.chmod(CACHE_DIR, 0o700)
+except OSError:
+    pass
+
+
+def cleanup_old_cache(max_age_days: int = 7):
+    """Remove cache files older than max_age_days."""
+    cutoff = time.time() - (max_age_days * 86400)
+    removed = 0
+    for cache_file in CACHE_DIR.glob("*.json"):
+        try:
+            if cache_file.stat().st_mtime < cutoff:
+                cache_file.unlink()
+                removed += 1
+        except OSError:
+            pass
+    if removed:
+        logger.info(f"Cache cleanup: removed {removed} old entries")
+
+
+# Run cache cleanup on startup
+cleanup_old_cache()
+
+
+def is_valid_cache_key(key: str) -> bool:
+    """Validate cache key format (16 hex chars from SHA256)."""
+    return bool(re.match(r'^[a-f0-9]{16}$', key))
 
 # HTML template for analysis results page
 ANALYSIS_TEMPLATE = """
@@ -486,6 +550,10 @@ def save_to_cache(cache_key: str, result: dict, original_output: str, rule: str,
     try:
         with open(cache_file, 'w') as f:
             json.dump(cache_data, f, indent=2, default=str)
+        try:
+            os.chmod(cache_file, 0o600)
+        except OSError:
+            pass
         logger.info(f"Cached analysis: {cache_key}")
     except Exception as e:
         logger.warning(f"Failed to save cache: {e}")
@@ -519,6 +587,7 @@ def health():
 
 
 @app.route('/api/analyze', methods=['POST'])
+@limiter.limit("5 per minute")
 def analyze_api():
     """
     API endpoint for analyzing an alert.
@@ -566,10 +635,11 @@ def analyze_api():
         
     except Exception as e:
         logger.exception("Analysis failed")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal analysis error'}), 500
 
 
 @app.route('/analyze', methods=['GET'])
+@limiter.limit("5 per minute")
 def analyze_page():
     """
     Web page for analyzing an alert (called from Grafana data link).
@@ -582,10 +652,12 @@ def analyze_page():
         - store: whether to store result (default: true)
     """
     try:
-        output = request.args.get('output', '')
-        rule = request.args.get('rule', 'Unknown')
+        output = request.args.get('output', '')[:50000]
+        rule = request.args.get('rule', 'Unknown')[:500]
         priority = request.args.get('priority', 'Unknown')
-        hostname = request.args.get('hostname', 'Unknown')
+        if priority not in VALID_PRIORITIES:
+            priority = 'Unknown'
+        hostname = request.args.get('hostname', 'Unknown')[:500]
         store = request.args.get('store', 'true').lower() == 'true'
         show_mapping = request.args.get('show_mapping', 'false').lower() == 'true'
         
@@ -675,7 +747,7 @@ def analyze_page():
     except Exception as e:
         logger.exception("Analysis page failed")
         return render_template_string(ANALYSIS_TEMPLATE,
-            error=str(e),
+            error="An internal error occurred during analysis. Check server logs for details.",
             analysis={},
             original_output=request.args.get('output', ''),
             obfuscated_output='',
@@ -688,21 +760,23 @@ def analyze_page():
 
 
 @app.route('/history', methods=['GET'])
+@limiter.limit("30 per minute")
 def history_page():
     """List all cached analyses."""
     analyses = list_cached_analyses(limit=100)
     
     rows = ""
     for a in analyses:
-        severity = a.get('severity', 'unknown')
-        severity_color = {'critical': '#f2495c', 'high': '#ff9830', 'medium': '#fade2a', 'low': '#73bf69'}.get(severity, '#8e8e8e')
+        severity = html_escape(a.get('severity', 'unknown'))
+        severity_color = {'critical': '#f2495c', 'high': '#ff9830', 'medium': '#fade2a', 'low': '#73bf69'}.get(str(severity), '#8e8e8e')
+        cache_key = html_escape(a.get('cache_key', ''))
         rows += f"""
-        <tr onclick="window.location='/history/{a['cache_key']}'" style="cursor: pointer;">
-            <td>{a.get('timestamp', '')[:19]}</td>
-            <td>{a.get('rule', '')}</td>
-            <td>{a.get('priority', '')}</td>
+        <tr onclick="window.location='/history/{cache_key}'" style="cursor: pointer;">
+            <td>{html_escape(a.get('timestamp', '')[:19])}</td>
+            <td>{html_escape(a.get('rule', ''))}</td>
+            <td>{html_escape(a.get('priority', ''))}</td>
             <td style="color: {severity_color}; font-weight: bold;">{severity}</td>
-            <td>{a.get('hostname', '')}</td>
+            <td>{html_escape(a.get('hostname', ''))}</td>
         </tr>"""
     
     return f"""
@@ -735,8 +809,11 @@ def history_page():
 
 
 @app.route('/history/<cache_key>', methods=['GET'])
+@limiter.limit("30 per minute")
 def history_detail(cache_key: str):
     """View a cached analysis."""
+    if not is_valid_cache_key(cache_key):
+        return "Invalid cache key format", 400
     cached = get_cached_analysis(cache_key)
     if not cached:
         return "Analysis not found", 404
@@ -760,9 +837,10 @@ def history_detail(cache_key: str):
 
 
 @app.route('/api/history', methods=['GET'])
+@limiter.limit("30 per minute")
 def api_history():
     """API endpoint to list cached analyses."""
-    limit = request.args.get('limit', 50, type=int)
+    limit = min(request.args.get('limit', 50, type=int), 100)
     return jsonify(list_cached_analyses(limit=limit))
 
 
@@ -839,7 +917,15 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
+    if args.debug:
+        logger.warning("Debug mode enabled - do NOT use in production (exposes stack traces)")
+
+    if API_KEY:
+        print(f"🔑 API key authentication enabled")
+    else:
+        print(f"⚠️  No API_KEY set - endpoints are unauthenticated")
+
     print(f"🛡️  SIB Analysis API starting on http://{args.host}:{args.port}")
     print(f"📊 Grafana data link URL: http://localhost:{args.port}/analyze?output={{alert}}")
-    
+
     app.run(host=args.host, port=args.port, debug=args.debug)

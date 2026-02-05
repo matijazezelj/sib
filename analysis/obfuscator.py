@@ -157,10 +157,10 @@ class Obfuscator:
         'pagerduty_api_key': r'\b[A-Za-z0-9+/]{20}\b',
         
         # Database connection strings
-        'postgres_uri': r'postgres(ql)?://[^:]+:[^@]+@[^/]+/\w+',
-        'mysql_uri': r'mysql://[^:]+:[^@]+@[^/]+/\w+',
-        'mongodb_uri': r'mongodb(\+srv)?://[^:]+:[^@]+@[^/]+',
-        'redis_uri': r'redis://[^:]+:[^@]+@[^/]+',
+        'postgres_uri': r'postgres(ql)?://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}/\w+',
+        'mysql_uri': r'mysql://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}/\w+',
+        'mongodb_uri': r'mongodb(\+srv)?://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}',
+        'redis_uri': r'redis://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}',
         
         # Generic patterns
         'jwt': r'\beyJ[A-Za-z0-9-_]*\.eyJ[A-Za-z0-9-_]*\.[A-Za-z0-9-_.+/]*\b',
@@ -397,8 +397,6 @@ class Obfuscator:
         
         # Match potential secrets (base64-like, hex, alphanumeric)
         text = re.sub(r'\b[A-Za-z0-9+/=_-]{20,}\b', replace_high_entropy, text)
-        return text
-        
         return text
     
     def _obfuscate_emails(self, text: str) -> str:
