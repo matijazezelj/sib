@@ -733,16 +733,16 @@ After running `make update-threatintel`:
 ```
 threatintel/
 ├── feeds/                      # Individual feed downloads
-│   ├── feodo_ipblocklist.txt
-│   ├── sslbl_aggressive.txt
-│   ├── emerging_threats.txt
+│   ├── feodotracker.txt
+│   ├── sslbl.txt
+│   ├── et_compromised.txt
 │   ├── spamhaus_drop.txt
-│   ├── blocklist_de_ssh.txt
-│   ├── blocklist_de_all.txt
-│   └── cinsscore.txt
-├── combined_blocklist.txt      # Unified blocklist
+│   ├── blocklist_ssh.txt
+│   ├── blocklist_all.txt
+│   ├── ci_army.txt
+│   └── combined_blocklist.txt  # Unified blocklist
 ├── falco_threatintel_rules.yaml # Generated Falco rules
-└── lookup-ip.sh                # IP lookup utility
+└── lookup-ip.sh                # Generated IP lookup utility
 ```
 
 ### Using Threat Intel

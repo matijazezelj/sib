@@ -360,9 +360,15 @@ uninstall-analysis: ## Remove AI Analysis API and volumes
 	@cd analysis && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ AI Analysis API removed$(RESET)"
 
-uninstall-collectors: ## Remove Alloy collectors and volumes
+uninstall-collectors: ## Remove collectors and volumes
 	@echo "$(YELLOW)Removing collectors...$(RESET)"
-	@cd collectors && $(DOCKER_COMPOSE) down -v 2>/dev/null || true
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	STACK=$${STACK:-vm}; \
+	if [ "$$STACK" = "vm" ]; then \
+		cd collectors && $(DOCKER_COMPOSE) -f compose-vm.yaml down -v 2>/dev/null || true; \
+	else \
+		cd collectors && $(DOCKER_COMPOSE) -f compose-grafana.yaml down -v 2>/dev/null || true; \
+	fi
 	@echo "$(GREEN)✓ Collectors removed$(RESET)"
 
 # ==================== Status ====================
@@ -514,9 +520,9 @@ logs: ## Tail logs from all stacks
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
 	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
-		docker compose -f detection/compose.yaml -f alerting/compose.yaml -f storage/compose-vm.yaml -f grafana/compose.yaml logs -f; \
+		$(DOCKER_COMPOSE) -f detection/compose.yaml -f alerting/compose.yaml -f storage/compose-vm.yaml -f grafana/compose.yaml logs -f; \
 	else \
-		docker compose -f detection/compose.yaml -f alerting/compose.yaml -f storage/compose-grafana.yaml -f grafana/compose.yaml logs -f; \
+		$(DOCKER_COMPOSE) -f detection/compose.yaml -f alerting/compose.yaml -f storage/compose-grafana.yaml -f grafana/compose.yaml logs -f; \
 	fi
 
 logs-falco: ## Tail Falco logs
@@ -660,7 +666,14 @@ check-ports: ## Check if required ports are available
 	@echo ""
 	@echo "$(BOLD)🔌 Port Check$(RESET)"
 	@echo ""
-	@for port in 2801 3000 3100 9090; do \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	STACK=$${STACK:-vm}; \
+	if [ "$$STACK" = "vm" ]; then \
+		PORTS="2801 3000 9428 8428"; \
+	else \
+		PORTS="2801 3000 3100 9090"; \
+	fi; \
+	for port in $$PORTS; do \
 		if lsof -Pi :$$port -sTCP:LISTEN -t >/dev/null 2>&1; then \
 			proc=$$(lsof -Pi :$$port -sTCP:LISTEN -t 2>/dev/null | head -1); \
 			echo "  $(YELLOW)!$(RESET) Port $$port is in use (PID: $$proc)"; \
@@ -675,15 +688,16 @@ validate: ## Validate all configuration files
 	@echo "$(BOLD)🔍 Validating configurations...$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Docker Compose files:$(RESET)"
-	@for dir in detection alerting storage grafana; do \
-		if [ -f "$$dir/compose.yaml" ]; then \
-			cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$dir/compose.yaml" || echo "  $(RED)✗$(RESET) $$dir/compose.yaml has errors"; \
-			cd ..; \
+	@for file in detection/compose.yaml alerting/compose.yaml grafana/compose.yaml analysis/compose.yaml ansible/compose.yaml \
+		storage/compose-vm.yaml storage/compose-grafana.yaml \
+		collectors/compose-vm.yaml collectors/compose-grafana.yaml; do \
+		if [ -f "$$file" ]; then \
+			$(DOCKER_COMPOSE) -f $$file config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$file" || echo "  $(RED)✗$(RESET) $$file has errors"; \
 		fi; \
 	done
 	@echo ""
 	@echo "$(CYAN)YAML syntax:$(RESET)"
-	@for file in storage/config/loki-config.yml storage/config/prometheus.yml; do \
+	@for file in storage/config/loki-config.yml storage/config/prometheus.yml storage/config/prometheus-vm.yml; do \
 		if [ -f "$$file" ]; then \
 			docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1 && \
 			echo "  $(GREEN)✓$(RESET) $$file" || echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
