@@ -7,6 +7,7 @@ to provide attack vector analysis and mitigation strategies.
 
 import json
 import os
+import re
 import sys
 import argparse
 import requests
@@ -20,20 +21,21 @@ from obfuscator import obfuscate_alert, ObfuscationLevel
 from prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, MITRE_MAPPING
 
 
-def _validate_url(url: str) -> str:
-    """Validate that a URL uses http(s) scheme to prevent SSRF via file:// etc."""
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    if parsed.scheme not in ('http', 'https'):
-        raise ValueError(f"Invalid URL scheme: {parsed.scheme} (only http/https allowed)")
-    return url.rstrip('/')
+class LogClient:
+    """Base class for log storage clients."""
+
+    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
+        raise NotImplementedError
+
+    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+        raise NotImplementedError
 
 
-class LokiClient:
+class LokiClient(LogClient):
     """Client for querying alerts from Loki."""
-
+    
     def __init__(self, url: str = "http://localhost:3100"):
-        self.url = _validate_url(url)
+        self.url = url.rstrip('/')
     
     def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
         """Query Loki for logs in a time range."""
@@ -44,7 +46,7 @@ class LokiClient:
             'limit': limit,
         }
         
-        response = requests.get(f"{self.url}/loki/api/v1/query_range", params=params, timeout=30)
+        response = requests.get(f"{self.url}/loki/api/v1/query_range", params=params)
         response.raise_for_status()
         
         data = response.json()
@@ -86,13 +88,82 @@ class LokiClient:
             response = requests.post(
                 f"{self.url}/loki/api/v1/push",
                 json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=30
+                headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
             return True
         except Exception as e:
             print(f"Failed to push to Loki: {e}", file=sys.stderr)
+            return False
+
+
+class VictoriaLogsClient(LogClient):
+    """Client for querying alerts from VictoriaLogs."""
+
+    def __init__(self, url: str = "http://localhost:9428"):
+        self.url = url.rstrip('/')
+
+    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
+        """Query VictoriaLogs for logs in a time range using LogsQL."""
+        params = {
+            'query': query,
+            'start': start.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'end': end.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'limit': limit,
+        }
+
+        response = requests.get(f"{self.url}/select/logsql/query", params=params)
+        response.raise_for_status()
+
+        alerts = []
+        for line in response.text.strip().split('\n'):
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                msg = entry.get('_msg', '')
+                try:
+                    alert = json.loads(msg)
+                except (json.JSONDecodeError, TypeError):
+                    alert = {'output': msg}
+
+                # Non-underscore fields are labels
+                labels = {k: v for k, v in entry.items() if not k.startswith('_')}
+                alert['_labels'] = labels
+
+                ts = entry.get('_time', '')
+                try:
+                    alert['_timestamp'] = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    alert['_timestamp'] = datetime.now()
+
+                alerts.append(alert)
+            except json.JSONDecodeError:
+                continue
+
+        return alerts
+
+    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+        """Push a log entry to VictoriaLogs via JSON line protocol."""
+        if timestamp is None:
+            timestamp = datetime.now()
+
+        entry = {
+            '_msg': log_line,
+            '_time': timestamp.isoformat(),
+        }
+        entry.update(labels)
+
+        try:
+            response = requests.post(
+                f"{self.url}/insert/jsonline",
+                data=json.dumps(entry) + '\n',
+                headers={"Content-Type": "application/stream+x-ndjson"}
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Failed to push to VictoriaLogs: {e}", file=sys.stderr)
             return False
 
 
@@ -107,7 +178,7 @@ class OllamaProvider(LLMProvider):
     """Local Ollama LLM provider."""
     
     def __init__(self, url: str = "http://localhost:11434", model: str = "llama3.1:8b"):
-        self.url = _validate_url(url)
+        self.url = url.rstrip('/')
         self.model = model
     
     def analyze(self, system_prompt: str, user_prompt: str) -> dict:
@@ -163,7 +234,7 @@ class OpenAIProvider(LLMProvider):
 class AnthropicProvider(LLMProvider):
     """Anthropic Claude API provider."""
     
-    def __init__(self, api_key: str, model: str = "claude-3-haiku-20240307"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
         self.api_key = api_key
         self.model = model
     
@@ -193,7 +264,6 @@ class AnthropicProvider(LLMProvider):
             return json.loads(content)
         except json.JSONDecodeError:
             # Try to find JSON in the response
-            import re
             match = re.search(r'\{.*\}', content, re.DOTALL)
             if match:
                 return json.loads(match.group())
@@ -205,7 +275,16 @@ class AlertAnalyzer:
     
     def __init__(self, config: dict):
         self.config = config
-        self.loki = LokiClient(config.get('loki', {}).get('url', 'http://localhost:3100'))
+        self.backend = config.get('storage', {}).get('backend', 'loki')
+        if self.backend in ('victorialogs', 'vm'):
+            vl_url = config.get('victorialogs', {}).get('url', 'http://localhost:9428')
+            self.log_client = VictoriaLogsClient(vl_url)
+            self.backend = 'victorialogs'
+        else:
+            self.log_client = LokiClient(config.get('loki', {}).get('url', 'http://localhost:3100'))
+            self.backend = 'loki'
+        # Backward compatibility alias
+        self.loki = self.log_client
         self.obfuscation_level = config.get('analysis', {}).get('obfuscation_level', 'standard')
         self.provider = self._create_provider()
     
@@ -239,23 +318,30 @@ class AlertAnalyzer:
     
     def fetch_alerts(self, priority: Optional[str] = None, 
                      last: str = "1h", limit: int = 10) -> List[dict]:
-        """Fetch alerts from Loki."""
+        """Fetch alerts from the configured log storage backend."""
         # Parse time duration
         duration_map = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
         unit = last[-1]
+        if unit not in duration_map:
+            raise ValueError(f"Invalid time unit '{unit}'. Use 'm' (minutes), 'h' (hours), or 'd' (days).")
         value = int(last[:-1])
         delta = timedelta(**{duration_map[unit]: value})
         
         end = datetime.now()
         start = end - delta
         
-        # Build query
-        if priority:
-            query = f'{{source="syscall", priority="{priority}"}}'
+        # Build query based on backend
+        if self.backend == 'victorialogs':
+            query = 'source:syscall'
+            if priority:
+                query += f' AND priority:{priority}'
         else:
-            query = '{source="syscall"}'
+            if priority:
+                query = f'{{source="syscall", priority="{priority}"}}'
+            else:
+                query = '{source="syscall"}'
         
-        return self.loki.query_range(query, start, end, limit)
+        return self.log_client.query_range(query, start, end, limit)
     
     def analyze_alert(self, alert: dict, dry_run: bool = False) -> dict:
         """Analyze a single alert."""
@@ -291,9 +377,8 @@ class AlertAnalyzer:
         try:
             analysis = self.provider.analyze(SYSTEM_PROMPT, user_prompt)
         except Exception as e:
-            print(f"LLM analysis failed: {e}", file=sys.stderr)
             analysis = {
-                'error': 'LLM analysis failed',
+                'error': str(e),
                 'fallback_mitre': quick_mitre
             }
         
@@ -324,7 +409,7 @@ class AlertAnalyzer:
             'severity': risk.get('severity', 'unknown').lower(),
             'mitre_tactic': mitre.get('tactic', 'unknown').replace(' ', '_'),
             'mitre_technique': mitre.get('technique_id', 'unknown'),
-            'false_positive': str(fp.get('likely', False)).lower(),
+            'false_positive': str(fp.get('likelihood', 'unknown')).lower(),
         }
         
         # Build the enriched log entry
@@ -343,7 +428,7 @@ class AlertAnalyzer:
             'investigate': analysis.get('investigate', []),
         }
         
-        return self.loki.push(
+        return self.log_client.push(
             enriched_labels,
             json.dumps(enriched_entry),
             original.get('_timestamp')
@@ -352,57 +437,49 @@ class AlertAnalyzer:
     def analyze_batch(self, alerts: List[dict], dry_run: bool = False, store: bool = False) -> List[dict]:
         """Analyze multiple alerts."""
         results = []
+        backend_name = 'VictoriaLogs' if self.backend == 'victorialogs' else 'Loki'
         for i, alert in enumerate(alerts):
             print(f"Analyzing alert {i+1}/{len(alerts)}...", file=sys.stderr)
             result = self.analyze_alert(alert, dry_run)
             results.append(result)
             
-            # Store in Loki if requested
+            # Store in log backend if requested
             if store and not dry_run and 'error' not in result.get('analysis', {}):
                 if self.store_analysis(result):
-                    print(f"  ✓ Stored analysis in Loki", file=sys.stderr)
+                    print(f"  ✓ Stored analysis in {backend_name}", file=sys.stderr)
                 else:
                     print(f"  ✗ Failed to store analysis", file=sys.stderr)
         
         return results
 
 
-def read_secret(env_var: str, default: str = '') -> str:
-    """Read a secret from environment variable or file.
+def read_secret(env_var: str) -> Optional[str]:
+    """Read a secret from env var or Docker secret file.
 
-    Supports Docker-native secret pattern:
-    - If {ENV_VAR}_FILE is set, read secret from that file path
-    - Otherwise, use {ENV_VAR} value directly
-    - Falls back to default if neither is set
-
-    Example:
-        ANTHROPIC_API_KEY=sk-xxx           # Direct value
-        ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic  # File-based
+    Supports the Docker Secrets convention: if {ENV_VAR}_FILE is set,
+    read the secret from that file path instead of the env var directly.
+    This allows secure secret injection without embedding values in env vars.
     """
-    # Check for _FILE variant first (Docker secrets pattern)
-    file_var = f"{env_var}_FILE"
-    file_path = os.environ.get(file_var)
-
+    file_path = os.environ.get(f"{env_var}_FILE")
     if file_path:
         try:
             with open(file_path, 'r') as f:
                 return f.read().strip()
-        except (IOError, OSError) as e:
-            print(f"Warning: Could not read secret from {file_path}: {e}", file=sys.stderr)
+        except OSError:
+            pass
+    return os.environ.get(env_var)
 
-    # Fall back to direct env var
-    return os.environ.get(env_var, default)
+
+# Environment variable names that should support Docker Secrets (_FILE suffix)
+_SECRET_VARS = {'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OLLAMA_API_KEY', 'GRAFANA_ADMIN_PASSWORD'}
 
 
 def expand_env_vars(obj):
     """Recursively expand environment variables in config values.
 
-    Supports:
-    - ${VAR} - simple variable expansion
-    - ${VAR:-default} - with default value
-    - ${VAR}_FILE pattern for file-based secrets (via read_secret)
+    Supports Docker Secrets: for known secret variables, checks for
+    a {VAR}_FILE env pointing to a file containing the secret value.
     """
-    import re
     if isinstance(obj, dict):
         return {k: expand_env_vars(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -412,9 +489,10 @@ def expand_env_vars(obj):
         def replace_var(match):
             var_name = match.group(1)
             default = match.group(3) if match.group(3) else ''
-            # Use read_secret for API key variables to support _FILE pattern
-            if 'API_KEY' in var_name or 'SECRET' in var_name or 'PASSWORD' in var_name:
-                return read_secret(var_name, default)
+            # Use Docker Secrets-aware lookup for secret vars
+            if var_name in _SECRET_VARS:
+                value = read_secret(var_name)
+                return value if value is not None else default
             return os.environ.get(var_name, default)
         # Pattern matches ${VAR} or ${VAR:-default}
         return re.sub(r'\$\{([^}:]+)(:-([^}]*))?\}', replace_var, obj)
@@ -456,8 +534,14 @@ def load_config(config_path: Optional[str] = None) -> dict:
                 'model': 'llama3.1:8b'
             }
         },
+        'storage': {
+            'backend': os.environ.get('STACK', 'loki'),
+        },
         'loki': {
             'url': 'http://localhost:3100'
+        },
+        'victorialogs': {
+            'url': 'http://localhost:9428'
         }
     }
 
@@ -552,6 +636,9 @@ def main():
     parser.add_argument('--json', '-j', action='store_true',
                         help='Output raw JSON instead of formatted text')
     parser.add_argument('--loki-url', help='Override Loki URL')
+    parser.add_argument('--victorialogs-url', help='Override VictoriaLogs URL')
+    parser.add_argument('--backend', '-b', choices=['loki', 'vm', 'victorialogs'],
+                        help='Storage backend (default: auto-detect from STACK env)')
     
     args = parser.parse_args()
     
@@ -559,8 +646,14 @@ def main():
     config = load_config(args.config)
     
     # Override with CLI args
+    if args.backend:
+        config.setdefault('storage', {})['backend'] = args.backend
     if args.loki_url:
         config.setdefault('loki', {})['url'] = args.loki_url
+        config.setdefault('storage', {})['backend'] = 'loki'
+    if args.victorialogs_url:
+        config.setdefault('victorialogs', {})['url'] = args.victorialogs_url
+        config.setdefault('storage', {})['backend'] = 'victorialogs'
     
     # Check if analysis is enabled
     if not config.get('analysis', {}).get('enabled', True):

@@ -21,6 +21,13 @@ analysis:
     api_key: ${OPENAI_API_KEY}
     model: ${OPENAI_MODEL:-gpt-4o}
 
+# Storage backend: loki or vm (auto-detected from STACK env var)
+storage:
+  backend: ${STACK:-loki}
+
 loki:
   # Use sib-loki for Docker, localhost for local development
   url: ${LOKI_URL:-http://sib-loki:3100}
+
+victorialogs:
+  url: ${VICTORIALOGS_URL:-http://sib-victorialogs:9428}

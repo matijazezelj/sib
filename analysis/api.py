@@ -9,16 +9,15 @@ import os
 import re
 import sys
 import json
-import time
 import logging
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from markupsafe import escape as html_escape
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from markupsafe import escape
+
+from typing import Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -31,73 +30,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB request size limit
-
-# CORS - configurable origins via env var (default: allow all for backward compat)
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
-if cors_origins != '*':
-    cors_origins = [o.strip() for o in cors_origins.split(',')]
-CORS(app, resources={r"/api/*": {"origins": cors_origins}, r"/analyze": {"origins": cors_origins}})
-
-# Rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://",
-)
-
-# API key authentication (optional - set API_KEY env var to enable)
-API_KEY = os.environ.get('API_KEY')
-
-@app.before_request
-def check_auth():
-    """Check API key if configured. Skip for health endpoint."""
-    if not API_KEY:
-        return None
-    if request.path == '/health':
-        return None
-    provided_key = request.headers.get('X-API-Key')
-    if provided_key != API_KEY:
-        return jsonify({'error': 'Authentication required'}), 401
+CORS(app)  # Allow Grafana to call API
 
 # Load config once at startup
 config = load_config()
 
-# Valid alert priorities
-VALID_PRIORITIES = {'Critical', 'High', 'Medium', 'Low', 'Notice', 'Warning', 'Error', 'Unknown'}
-
 # Analysis cache directory
 CACHE_DIR = Path(os.environ.get('ANALYSIS_CACHE_DIR', '/app/cache'))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-try:
-    os.chmod(CACHE_DIR, 0o700)
-except OSError:
-    pass
 
-
-def cleanup_old_cache(max_age_days: int = 7):
-    """Remove cache files older than max_age_days."""
-    cutoff = time.time() - (max_age_days * 86400)
-    removed = 0
-    for cache_file in CACHE_DIR.glob("*.json"):
-        try:
-            if cache_file.stat().st_mtime < cutoff:
-                cache_file.unlink()
-                removed += 1
-        except OSError:
-            pass
-    if removed:
-        logger.info(f"Cache cleanup: removed {removed} old entries")
-
-
-# Run cache cleanup on startup
-cleanup_old_cache()
-
-
-def is_valid_cache_key(key: str) -> bool:
-    """Validate cache key format (16 hex chars from SHA256)."""
-    return bool(re.match(r'^[a-f0-9]{16}$', key))
+# Cache TTL in seconds (default 24h). Entries older than this are re-analyzed.
+CACHE_TTL = int(os.environ.get('ANALYSIS_CACHE_TTL', 86400))
 
 # HTML template for analysis results page
 ANALYSIS_TEMPLATE = """
@@ -439,78 +382,30 @@ ANALYSIS_TEMPLATE = """
 </html>
 """
 
-# Loading page template
-LOADING_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyzing Alert...</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #111217;
-            color: #d8d9da;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .loading { text-align: center; }
-        .spinner {
-            border: 4px solid #2c3235;
-            border-top: 4px solid #3274d9;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        h2 { color: #ff9830; margin-bottom: 10px; }
-        p { color: #8e8e8e; }
-    </style>
-</head>
-<body>
-    <div class="loading">
-        <div class="spinner"></div>
-        <h2>🔍 Analyzing Alert</h2>
-        <p>Obfuscating sensitive data and sending to AI...</p>
-        <p style="font-size: 0.9em; margin-top: 20px;">This may take 10-30 seconds</p>
-    </div>
-    <script>
-        // Auto-submit form to trigger analysis
-        setTimeout(function() {
-            window.location.href = window.location.href.replace('/loading', '/result');
-        }, 500);
-    </script>
-</body>
-</html>
-"""
-
 # ==================== Cache Functions ====================
 
 def normalize_output(output: str) -> str:
     """Normalize alert output for consistent cache keys.
     
-    Removes timestamps and normalizes whitespace to ensure
-    the same logical event produces the same cache key.
+    Strips timestamps, PIDs, UIDs, and other varying numeric fields
+    so that alerts from the same rule with different specifics share a
+    cache key. File paths are kept as-is since they carry important context.
     """
-    import re
     # Normalize whitespace
     normalized = ' '.join(output.split())
     # Remove common timestamp patterns that make each event unique
-    # ISO format: 2026-01-09T12:34:56.789Z
-    normalized = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?', '[TIME]', normalized)
+    # ISO format: 2026-01-09T12:34:56.789Z or with offset +0000
+    normalized = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{4})?', '[TIME]', normalized)
     # Unix timestamp: 1234567890 or 1234567890.123
     normalized = re.sub(r'\b\d{10,13}(\.\d+)?\b', '[TIMESTAMP]', normalized)
     # Common date formats
     normalized = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '[TIME]', normalized)
+    # Normalize numeric IDs (user_uid=0, user_loginuid=1000, pid=12345, etc.)
+    normalized = re.sub(r'(user_uid|user_loginuid|pid|ppid|gid|tid|res)=\d+', r'\1=[ID]', normalized)
+    # Normalize container IDs (64-char hex or short hex)
+    normalized = re.sub(r'(container_id)=[a-f0-9]{8,64}', r'\1=[CID]', normalized)
+    # Normalize IP addresses
+    normalized = re.sub(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?', '[IP]', normalized)
     return normalized
 
 
@@ -521,20 +416,41 @@ def get_cache_key(output: str, rule: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
-def get_cached_analysis(cache_key: str) -> dict | None:
-    """Retrieve cached analysis if it exists."""
+def get_cached_analysis(cache_key: str) -> Optional[dict]:
+    """Retrieve cached analysis if it exists and hasn't expired.
+    
+    Returns None if cache entry is missing or older than CACHE_TTL.
+    Increments the dedup hit counter on cache hits.
+    """
     cache_file = CACHE_DIR / f"{cache_key}.json"
     if cache_file.exists():
         try:
             with open(cache_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+            # Check TTL
+            cached_time = data.get('timestamp', '')
+            if cached_time:
+                try:
+                    cached_dt = datetime.fromisoformat(cached_time)
+                    age = (datetime.now() - cached_dt).total_seconds()
+                    if age > CACHE_TTL:
+                        logger.info(f"Cache expired for {cache_key} (age={age:.0f}s, ttl={CACHE_TTL}s)")
+                        return None
+                except (ValueError, TypeError):
+                    pass
+            # Increment hit counter
+            data['dedup_count'] = data.get('dedup_count', 1) + 1
+            data['last_seen'] = datetime.now().isoformat()
+            with open(cache_file, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+            return data
         except Exception as e:
             logger.warning(f"Failed to read cache: {e}")
     return None
 
 
 def save_to_cache(cache_key: str, result: dict, original_output: str, rule: str, priority: str, hostname: str):
-    """Save analysis result to cache."""
+    """Save analysis result to cache with dedup tracking."""
     cache_file = CACHE_DIR / f"{cache_key}.json"
     cache_data = {
         'cache_key': cache_key,
@@ -545,15 +461,13 @@ def save_to_cache(cache_key: str, result: dict, original_output: str, rule: str,
         'hostname': hostname,
         'analysis': result.get('analysis', {}),
         'obfuscated_output': result.get('obfuscated_alert', {}).get('output', '') if isinstance(result.get('obfuscated_alert'), dict) else '',
-        'obfuscation_mapping': result.get('obfuscation_mapping', {})
+        'obfuscation_mapping': result.get('obfuscation_mapping', {}),
+        'dedup_count': 1,
+        'last_seen': datetime.now().isoformat(),
     }
     try:
         with open(cache_file, 'w') as f:
             json.dump(cache_data, f, indent=2, default=str)
-        try:
-            os.chmod(cache_file, 0o600)
-        except OSError:
-            pass
         logger.info(f"Cached analysis: {cache_key}")
     except Exception as e:
         logger.warning(f"Failed to save cache: {e}")
@@ -573,7 +487,9 @@ def list_cached_analyses(limit: int = 50) -> list:
                     'rule': data.get('rule'),
                     'priority': data.get('priority'),
                     'hostname': data.get('hostname'),
-                    'severity': data.get('analysis', {}).get('risk', {}).get('severity', 'unknown')
+                    'severity': data.get('analysis', {}).get('risk', {}).get('severity', 'unknown'),
+                    'dedup_count': data.get('dedup_count', 1),
+                    'last_seen': data.get('last_seen'),
                 })
         except Exception:
             pass
@@ -586,8 +502,79 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'sib-analysis-api'})
 
 
+@app.route('/api/health/all', methods=['GET'])
+def health_all():
+    """Aggregate health check for all SIB services.
+
+    Returns structured JSON with the status of every SIB component.
+    Uses Docker-internal hostnames (sib-*) by default; override with
+    query params if running outside Docker.
+    """
+    timeout = float(request.args.get('timeout', 3))
+    results = {}
+
+    checks = {
+        'falcosidekick': {
+            'url': os.environ.get('SIDEKICK_HEALTH_URL', 'http://sib-sidekick:2801/healthz'),
+        },
+        'grafana': {
+            'url': os.environ.get('GRAFANA_HEALTH_URL', 'http://sib-grafana:3000/api/health'),
+        },
+    }
+
+    # Stack-aware storage checks
+    stack = os.environ.get('STACK', config.get('storage', {}).get('backend', 'loki'))
+    if stack in ('vm', 'victorialogs'):
+        checks['victorialogs'] = {
+            'url': os.environ.get('VICTORIALOGS_HEALTH_URL', 'http://sib-victorialogs:9428/health'),
+        }
+        checks['victoriametrics'] = {
+            'url': os.environ.get('VICTORIAMETRICS_HEALTH_URL', 'http://sib-victoriametrics:8428/health'),
+        }
+    else:
+        checks['loki'] = {
+            'url': os.environ.get('LOKI_HEALTH_URL', 'http://sib-loki:3100/ready'),
+        }
+        checks['prometheus'] = {
+            'url': os.environ.get('PROMETHEUS_HEALTH_URL', 'http://sib-prometheus:9090/-/ready'),
+        }
+
+    import requests as http_client
+    for name, check in checks.items():
+        try:
+            r = http_client.get(check['url'], timeout=timeout)
+            results[name] = {
+                'status': 'healthy' if r.ok else 'unhealthy',
+                'code': r.status_code,
+            }
+        except http_client.ConnectionError:
+            results[name] = {'status': 'unreachable'}
+        except http_client.Timeout:
+            results[name] = {'status': 'timeout'}
+        except Exception as e:
+            results[name] = {'status': 'error', 'detail': str(e)}
+
+    # Self (analysis API) is healthy if we're serving this request
+    results['analysis'] = {'status': 'healthy'}
+
+    # Determine overall status
+    statuses = [s['status'] for s in results.values()]
+    if all(s == 'healthy' for s in statuses):
+        overall = 'healthy'
+    elif any(s == 'healthy' for s in statuses):
+        overall = 'degraded'
+    else:
+        overall = 'unhealthy'
+
+    return jsonify({
+        'status': overall,
+        'stack': stack,
+        'services': results,
+        'checked_at': datetime.now().isoformat(),
+    })
+
+
 @app.route('/api/analyze', methods=['POST'])
-@limiter.limit("5 per minute")
 def analyze_api():
     """
     API endpoint for analyzing an alert.
@@ -623,7 +610,7 @@ def analyze_api():
         analyzer = AlertAnalyzer(config)
         result = analyzer.analyze_alert(alert, dry_run=False)
         
-        # Optionally store in Loki
+        # Optionally store in log backend
         if data.get('store', False):
             analyzer.store_analysis(result)
         
@@ -635,11 +622,10 @@ def analyze_api():
         
     except Exception as e:
         logger.exception("Analysis failed")
-        return jsonify({'error': 'Internal analysis error'}), 500
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/analyze', methods=['GET'])
-@limiter.limit("5 per minute")
 def analyze_page():
     """
     Web page for analyzing an alert (called from Grafana data link).
@@ -652,12 +638,10 @@ def analyze_page():
         - store: whether to store result (default: true)
     """
     try:
-        output = request.args.get('output', '')[:50000]
-        rule = request.args.get('rule', 'Unknown')[:500]
+        output = request.args.get('output', '')
+        rule = request.args.get('rule', 'Unknown')
         priority = request.args.get('priority', 'Unknown')
-        if priority not in VALID_PRIORITIES:
-            priority = 'Unknown'
-        hostname = request.args.get('hostname', 'Unknown')[:500]
+        hostname = request.args.get('hostname', 'Unknown')
         store = request.args.get('store', 'true').lower() == 'true'
         show_mapping = request.args.get('show_mapping', 'false').lower() == 'true'
         
@@ -712,7 +696,7 @@ def analyze_page():
         analyzer = AlertAnalyzer(config)
         result = analyzer.analyze_alert(alert, dry_run=False)
         
-        # Store in Loki if requested
+        # Store in log backend if requested
         if store and 'error' not in result.get('analysis', {}):
             try:
                 analyzer.store_analysis(result)
@@ -747,7 +731,7 @@ def analyze_page():
     except Exception as e:
         logger.exception("Analysis page failed")
         return render_template_string(ANALYSIS_TEMPLATE,
-            error="An internal error occurred during analysis. Check server logs for details.",
+            error=str(e),
             analysis={},
             original_output=request.args.get('output', ''),
             obfuscated_output='',
@@ -760,23 +744,22 @@ def analyze_page():
 
 
 @app.route('/history', methods=['GET'])
-@limiter.limit("30 per minute")
 def history_page():
     """List all cached analyses."""
     analyses = list_cached_analyses(limit=100)
     
     rows = ""
     for a in analyses:
-        severity = html_escape(a.get('severity', 'unknown'))
+        severity = escape(a.get('severity', 'unknown'))
         severity_color = {'critical': '#f2495c', 'high': '#ff9830', 'medium': '#fade2a', 'low': '#73bf69'}.get(str(severity), '#8e8e8e')
-        cache_key = html_escape(a.get('cache_key', ''))
         rows += f"""
-        <tr onclick="window.location='/history/{cache_key}'" style="cursor: pointer;">
-            <td>{html_escape(a.get('timestamp', '')[:19])}</td>
-            <td>{html_escape(a.get('rule', ''))}</td>
-            <td>{html_escape(a.get('priority', ''))}</td>
+        <tr onclick="window.location='/history/{escape(a['cache_key'])}'" style="cursor: pointer;">
+            <td>{escape(a.get('timestamp', '')[:19])}</td>
+            <td>{escape(a.get('rule', ''))}</td>
+            <td>{escape(a.get('priority', ''))}</td>
             <td style="color: {severity_color}; font-weight: bold;">{severity}</td>
-            <td>{html_escape(a.get('hostname', ''))}</td>
+            <td>{escape(a.get('hostname', ''))}</td>
+            <td>{a.get('dedup_count', 1)}</td>
         </tr>"""
     
     return f"""
@@ -800,7 +783,7 @@ def history_page():
         <h1>📜 Analysis History</h1>
         <p>{len(analyses)} cached analyses</p>
         <table>
-            <tr><th>Timestamp</th><th>Rule</th><th>Priority</th><th>AI Severity</th><th>Hostname</th></tr>
+            <tr><th>Timestamp</th><th>Rule</th><th>Priority</th><th>AI Severity</th><th>Hostname</th><th>Seen</th></tr>
             {rows}
         </table>
     </body>
@@ -809,11 +792,8 @@ def history_page():
 
 
 @app.route('/history/<cache_key>', methods=['GET'])
-@limiter.limit("30 per minute")
 def history_detail(cache_key: str):
     """View a cached analysis."""
-    if not is_valid_cache_key(cache_key):
-        return "Invalid cache key format", 400
     cached = get_cached_analysis(cache_key)
     if not cached:
         return "Analysis not found", 404
@@ -837,10 +817,9 @@ def history_detail(cache_key: str):
 
 
 @app.route('/api/history', methods=['GET'])
-@limiter.limit("30 per minute")
 def api_history():
     """API endpoint to list cached analyses."""
-    limit = min(request.args.get('limit', 50, type=int), 100)
+    limit = request.args.get('limit', 50, type=int)
     return jsonify(list_cached_analyses(limit=limit))
 
 
@@ -899,6 +878,9 @@ def index():
         <h3>GET /health</h3>
         <p>Health check endpoint.</p>
         
+        <h3>GET /api/health/all</h3>
+        <p>Aggregate health check for all SIB services. Returns JSON with status of every component.</p>
+        
         <h2>Grafana Integration</h2>
         <p>Add a data link to your log panels:</p>
         <pre>http://localhost:5000/analyze?output=${{__value.raw}}&amp;rule=${{__data.fields.rule}}&amp;priority=${{__data.fields.priority}}&amp;hostname=${{__data.fields.hostname}}</pre>
@@ -917,15 +899,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    if args.debug:
-        logger.warning("Debug mode enabled - do NOT use in production (exposes stack traces)")
-
-    if API_KEY:
-        print(f"🔑 API key authentication enabled")
-    else:
-        print(f"⚠️  No API_KEY set - endpoints are unauthenticated")
-
     print(f"🛡️  SIB Analysis API starting on http://{args.host}:{args.port}")
     print(f"📊 Grafana data link URL: http://localhost:{args.port}/analyze?output={{alert}}")
-
+    
     app.run(host=args.host, port=args.port, debug=args.debug)

@@ -25,12 +25,12 @@ echo ""
 
 # Create temp config with correct server IP
 TEMP_CONFIG=$(mktemp)
-sed "s/SIB_SERVER_IP/$SIB_SERVER/g" "$COLLECTORS_DIR/config/config.alloy" > "$TEMP_CONFIG"
+sed "s|SIB_SERVER_IP|$SIB_SERVER|g" "$COLLECTORS_DIR/config/config.alloy" > "$TEMP_CONFIG"
 
 echo "[1/4] Copying Alloy configuration..."
 ssh "$REMOTE_HOST" "mkdir -p ~/sib-collector/config"
 scp "$TEMP_CONFIG" "$REMOTE_HOST:~/sib-collector/config/config.alloy"
-scp "$COLLECTORS_DIR/compose-vm.yaml" "$REMOTE_HOST:~/sib-collector/compose.yaml"
+scp "$COLLECTORS_DIR/compose-grafana.yaml" "$REMOTE_HOST:~/sib-collector/compose.yaml"
 rm "$TEMP_CONFIG"
 
 echo "[2/4] Starting Alloy container..."

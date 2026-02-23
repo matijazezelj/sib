@@ -6,6 +6,7 @@ the structure and relationships needed for security analysis.
 """
 
 import re
+import math
 import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, Set
@@ -157,10 +158,10 @@ class Obfuscator:
         'pagerduty_api_key': r'\b[A-Za-z0-9+/]{20}\b',
         
         # Database connection strings
-        'postgres_uri': r'postgres(ql)?://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}/\w+',
-        'mysql_uri': r'mysql://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}/\w+',
-        'mongodb_uri': r'mongodb(\+srv)?://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}',
-        'redis_uri': r'redis://[^:]{1,256}:[^@]{1,256}@[^/]{1,256}',
+        'postgres_uri': r'postgres(ql)?://[^:]+:[^@]+@[^/]+/\w+',
+        'mysql_uri': r'mysql://[^:]+:[^@]+@[^/]+/\w+',
+        'mongodb_uri': r'mongodb(\+srv)?://[^:]+:[^@]+@[^/]+',
+        'redis_uri': r'redis://[^:]+:[^@]+@[^/]+',
         
         # Generic patterns
         'jwt': r'\beyJ[A-Za-z0-9-_]*\.eyJ[A-Za-z0-9-_]*\.[A-Za-z0-9-_.+/]*\b',
@@ -378,7 +379,6 @@ class Obfuscator:
     
     def _obfuscate_high_entropy(self, text: str) -> str:
         """Detect and redact high-entropy strings that might be secrets (paranoid mode only)."""
-        import math
         
         def entropy(s):
             """Calculate Shannon entropy of a string."""

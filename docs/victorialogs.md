@@ -95,7 +95,7 @@ When using `STACK=vm` (default):
 ## VictoriaLogs Dashboards
 
 Dashboards are available under **SIEM in a Box**:
-- **Events Explorer** — Security events with AI analysis links
+- **Events Explorer** — Security events with AI analysis links. Includes a **severity filter dropdown** to quickly filter by priority level (Critical, Error, Warning, Notice).
 - **Security Overview** — High-level security posture
 - **MITRE ATT&CK Coverage** — Detection mapping to ATT&CK
 - **Fleet Overview** — Host metrics and log volumes

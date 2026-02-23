@@ -7,7 +7,6 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TEMPLATE="${PROJECT_ROOT}/alerting/config/config.yaml.template"
 OUTPUT="${PROJECT_ROOT}/alerting/config/config.yaml"
 
 # Load environment

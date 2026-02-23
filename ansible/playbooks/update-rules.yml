@@ -12,6 +12,7 @@
   
   vars:
     rules_source: "{{ playbook_dir }}/../../detection/config/rules"
+    effective_deployment: "{{ deployment_strategy | default('native') }}"
   
   tasks:
     - name: Check if custom rules exist locally
@@ -37,8 +38,8 @@
 
     - name: Validate Falco rules syntax
       ansible.builtin.command: >
-        {% if falco_deployment == 'docker' %}
-        docker exec falco falco --validate /etc/falco/rules.d/
+        {% if effective_deployment == 'docker' %}
+        docker exec sib-falco falco --validate /etc/falco/rules.d/
         {% else %}
         falco --validate /etc/falco/rules.d/
         {% endif %}
@@ -49,17 +50,17 @@
 
     - name: Display validation result
       ansible.builtin.debug:
-        msg: "✅ Rules validated successfully on {{ inventory_hostname }}"
+        msg: "Rules validated successfully on {{ inventory_hostname }}"
       tags: validate
 
   handlers:
     - name: Restart Falco
       ansible.builtin.service:
-        name: "{{ 'docker' if falco_deployment == 'docker' else 'falco' }}"
+        name: falco
         state: restarted
-      when: falco_deployment == 'native'
+      when: effective_deployment == 'native'
       
     - name: Restart Falco Docker
-      ansible.builtin.command: docker restart falco
-      when: falco_deployment == 'docker'
+      ansible.builtin.command: docker restart sib-falco
+      when: effective_deployment == 'docker'
       listen: Restart Falco

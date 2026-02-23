@@ -44,6 +44,9 @@ Once installed, all log panels show a "🤖 Analyze with AI" link when you click
 | `/analyze` | GET | Web interface with beautiful HTML results |
 | `/api/analyze` | POST | JSON API for programmatic access |
 | `/health` | GET | Health check endpoint |
+| `/api/health/all` | GET | Aggregated health from all SIB services (Falco, Sidekick, storage, Grafana). Returns JSON with each service's status |
+| `/history` | GET | List past analyses |
+| `/history/<id>` | GET | View a specific cached analysis |
 
 ### Environment Variables
 
@@ -55,7 +58,12 @@ environment:
   - OLLAMA_MODEL=qwen2.5:14b                    # Model to use
   - LOKI_URL=http://loki:3100                   # Loki for storing results
   - OBFUSCATION_LEVEL=standard                  # minimal, standard, paranoid
+  - STACK=vm                                     # Storage backend: vm or grafana (auto-detected)
+  - VICTORIALOGS_URL=http://sib-victorialogs:9428  # VictoriaLogs URL (when STACK=vm)
+  - ANALYSIS_CACHE_TTL=86400                     # Cache TTL in seconds (default: 24h)
 ```
+
+> **Docker Secrets:** Any environment variable can be loaded from a Docker secret by appending a `_FILE` suffix. For example, `ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key` will read the key from the secret file instead of the environment variable.
 
 ## Privacy & Security
 
@@ -97,6 +105,10 @@ analysis:
 | `minimal` | Only secrets and credentials obfuscated |
 | `standard` | IPs, hostnames, users, paths obfuscated (recommended) |
 | `paranoid` | Everything except alert type and priority obfuscated |
+
+## Storage Backend
+
+The analyzer auto-detects the storage backend from the `STACK` environment variable. When `STACK=vm`, it queries VictoriaLogs instead of Loki for log context.
 
 ## LLM Providers
 
@@ -161,6 +173,10 @@ curl -X POST http://localhost:5000/api/analyze \
 ### Caching
 
 Analysis results are cached to avoid repeated LLM calls for the same event. Cache is stored in `/app/cache` (persisted via Docker volume).
+
+- Cache entries expire after `ANALYSIS_CACHE_TTL` seconds (default: 24 hours)
+- Cache keys are normalized: timestamps, numeric IDs, IPs, and container IDs are stripped so similar events share a cache key
+- A `dedup_count` field tracks how many times the same alert was requested
 
 ## How It Works
 

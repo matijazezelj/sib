@@ -18,7 +18,6 @@ Usage:
 import argparse
 import sys
 import yaml
-import json
 import re
 from pathlib import Path
 from datetime import datetime
@@ -151,7 +150,7 @@ def convert_detection_to_falco_condition(detection: Dict[str, Any]) -> str:
                         conditions.append(f'{falco_field} contains "{pattern}"')
     
     # Parse the condition logic
-    condition_logic = detection.get('condition', ' and '.join(detection.keys()))
+    condition_logic = detection.get('condition', ' and '.join(k for k in detection.keys() if k != 'condition'))
     
     # Simple condition parsing
     if 'all of' in condition_logic:

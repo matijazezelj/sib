@@ -296,7 +296,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_initial_access | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_initial_access | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -363,7 +363,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_execution | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_execution | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -430,7 +430,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_persistence | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_persistence | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -497,7 +497,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_privilege_escalation | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_privilege_escalation | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -564,7 +564,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_defense_evasion | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_defense_evasion | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -631,7 +631,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_credential_access | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_credential_access | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -698,7 +698,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_discovery | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_discovery | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -765,7 +765,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_lateral_movement | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_lateral_movement | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -832,7 +832,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_collection | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_collection | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -899,7 +899,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_command_and_control | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_command_and_control | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -966,7 +966,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_exfiltration | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_exfiltration | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -1033,7 +1033,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_impact | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_impact | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -1171,7 +1171,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_execution | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_execution | stats count()",
           "legendFormat": "Execution",
           "queryType": "statsRange",
           "refId": "A"
@@ -1181,7 +1181,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_credential_access | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_credential_access | stats count()",
           "legendFormat": "Credential Access",
           "queryType": "statsRange",
           "refId": "B"
@@ -1191,7 +1191,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_persistence | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_persistence | stats count()",
           "legendFormat": "Persistence",
           "queryType": "statsRange",
           "refId": "C"
@@ -1201,7 +1201,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_impact | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_impact | stats count()",
           "legendFormat": "Impact",
           "queryType": "statsRange",
           "refId": "D"
@@ -1211,7 +1211,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname tags:mitre_privilege_escalation | stats count()",
+          "expr": "source:syscall $hostname tags:mitre_privilege_escalation | stats count()",
           "legendFormat": "Privilege Escalation",
           "queryType": "statsRange",
           "refId": "E"
@@ -1420,7 +1420,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats by (priority) count()",
+          "expr": "source:syscall $hostname | stats by (priority) count()",
           "legendFormat": "{{priority}}",
           "queryType": "stats",
           "refId": "A"
@@ -1461,7 +1461,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname (priority:Critical or priority:Error)",
+          "expr": "source:syscall $hostname (priority:Critical or priority:Error)",
           "queryType": "instant",
           "refId": "A"
         }
@@ -1500,7 +1500,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname",
+          "expr": "source:syscall $hostname",
           "queryType": "instant",
           "refId": "A"
         }
@@ -1521,12 +1521,12 @@
     "list": [
       {
         "current": {
-          "text": "*",
-          "value": "*"
+          "text": "",
+          "value": ""
         },
         "name": "hostname",
-        "label": "Hostname",
-        "query": "*",
+        "label": "Filter",
+        "query": "",
         "type": "textbox"
       }
     ]

@@ -11,12 +11,6 @@ analysis:
   # - paranoid: Everything except alert type and priority
   obfuscation_level: standard
   
-  # Automatically analyze and enrich incoming alerts
-  auto_enrich: false
-  auto_enrich_priority:
-    - Critical
-    - Error
-  
   # LLM Provider: ollama, openai, anthropic
   provider: ollama
   

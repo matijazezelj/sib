@@ -222,12 +222,12 @@ verify_certs() {
             local CA_EXPIRY=$(openssl x509 -in "${CERTS_DIR}/ca/ca.crt" -noout -enddate | cut -d= -f2)
             success "CA certificate valid (expires: ${CA_EXPIRY})"
         else
-            error "CA certificate is invalid"
-            ((ERRORS++))
+            warn "CA certificate is invalid"
+            ERRORS=$((ERRORS + 1))
         fi
     else
         warn "CA certificate not found"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     fi
 
     # Check server cert
@@ -237,7 +237,7 @@ verify_certs() {
             success "Server certificate valid (expires: ${SERVER_EXPIRY})"
         else
             warn "Server certificate verification failed"
-            ((ERRORS++))
+            ERRORS=$((ERRORS + 1))
         fi
     else
         warn "Server certificate not found"
@@ -252,7 +252,7 @@ verify_certs() {
             success "Client '${CLIENT_NAME}' certificate valid (expires: ${CLIENT_EXPIRY})"
         else
             warn "Client '${CLIENT_NAME}' certificate verification failed"
-            ((ERRORS++))
+            ERRORS=$((ERRORS + 1))
         fi
     done
 

@@ -66,11 +66,10 @@ threatintel/
 
 ### Add to Falco Detection
 
-```bash
-# Append generated rules to custom rules
-cat threatintel/falco_threatintel_rules.yaml >> detection/config/rules/custom_rules.yaml
+The `update-feeds.sh` script now auto-populates the `threat_intel_ips` list directly in the Falco rule file — no manual concatenation needed. Just run:
 
-# Restart to apply
+```bash
+make update-threatintel
 make restart
 ```
 

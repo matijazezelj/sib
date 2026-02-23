@@ -10,32 +10,28 @@ This directory contains Grafana for unified security visualization.
 
 ## Pre-configured Datasources
 
-| Datasource | Description |
-|------------|-------------|
-| **Loki** | Security events and logs |
-| **Prometheus** | Metrics from Falcosidekick |
+Datasources are provisioned based on the `STACK` setting in `.env`:
+
+| Datasource | Stack | Description |
+|------------|-------|-------------|
+| **VictoriaLogs** | `vm` | Security events and logs |
+| **VictoriaMetrics** | `vm` | Host and service metrics |
+| **Loki** | `grafana` | Security events and logs |
+| **Prometheus** | `grafana` | Metrics from Falcosidekick |
 
 ## Dashboards
 
-### Security Overview
-High-level security posture with:
-- Total events count by severity
-- Events over time
-- Top triggered rules
-- Recent alerts
+SIB ships 10 dashboards — 5 for each storage backend (Loki and VictoriaLogs variants):
 
-### Events Explorer
-Search and filter security events with:
-- LogQL query builder
-- Time range selection
-- Field extraction
-- Export capabilities
+| Dashboard | Description |
+|-----------|-------------|
+| **Security Overview** | High-level security posture: event counts by severity, events over time, top rules, recent alerts |
+| **Events Explorer** | Search and filter security events with query builder, severity filter dropdown, and AI analysis links |
+| **MITRE ATT&CK Coverage** | Detection events mapped to ATT&CK tactics with coverage matrix and technique breakdown |
+| **Fleet Overview** | Multi-host monitoring: CPU, memory, disk, network, and log volume per host |
+| **Risk Scores** | Host risk assessment based on event severity and frequency |
 
-### Alert History
-Historical view of all alerts with:
-- Timeline visualization
-- Rule-based filtering
-- Container/host breakdown
+> **Note:** The Events Explorer includes a **severity filter dropdown** to quickly filter events by priority level (Critical, Error, Warning, Notice).
 
 ## Access
 

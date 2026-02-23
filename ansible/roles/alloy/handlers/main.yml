@@ -6,7 +6,13 @@
     daemon_reload: true
 
 - name: Restart Alloy
-  ansible.builtin.debug:
-    msg: "Alloy configuration updated - container will use new config on next restart"
-  changed_when: false
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted
+  when: effective_deployment | default('native') == 'native'
+
+- name: Restart Alloy Docker
+  ansible.builtin.command: docker restart sib-alloy
+  listen: Restart Alloy
+  when: effective_deployment | default('native') == 'docker'
 

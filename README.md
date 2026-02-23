@@ -237,6 +237,10 @@ make logs-analysis        # View analysis API logs
 # Utilities
 make open                 # Open Grafana in browser
 make info                 # Show all endpoints
+
+# Backup & Restore
+make backup               # Create timestamped backup of configs, rules, and Grafana dashboards
+make restore              # Restore from a backup file
 ```
 
 ## 📚 Documentation
@@ -384,6 +388,8 @@ Sensitive data is **obfuscated before sending to the LLM**:
 - Hostnames → `[HOST-1]`
 - Container IDs → `[CONTAINER-1]`
 - Secrets/credentials → `[REDACTED]`
+
+The analyzer auto-detects the storage backend from the `STACK` env var — it queries VictoriaLogs when `STACK=vm` (default) or Loki when `STACK=grafana`.
 
 ### Quick Start
 
@@ -733,16 +739,16 @@ After running `make update-threatintel`:
 ```
 threatintel/
 ├── feeds/                      # Individual feed downloads
-│   ├── feodotracker.txt
-│   ├── sslbl.txt
-│   ├── et_compromised.txt
+│   ├── feodo_ipblocklist.txt
+│   ├── sslbl_aggressive.txt
+│   ├── emerging_threats.txt
 │   ├── spamhaus_drop.txt
-│   ├── blocklist_ssh.txt
-│   ├── blocklist_all.txt
-│   ├── ci_army.txt
-│   └── combined_blocklist.txt  # Unified blocklist
+│   ├── blocklist_de_ssh.txt
+│   ├── blocklist_de_all.txt
+│   └── cinsscore.txt
+├── combined_blocklist.txt      # Unified blocklist
 ├── falco_threatintel_rules.yaml # Generated Falco rules
-└── lookup-ip.sh                # Generated IP lookup utility
+└── lookup-ip.sh                # IP lookup utility
 ```
 
 ### Using Threat Intel

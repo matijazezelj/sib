@@ -129,11 +129,43 @@ cache:
   enabled: true
   ttl: 3600  # seconds
 
+# Storage backend (auto-detected from STACK env var)
+# STACK=vm → queries VictoriaLogs
+# STACK=grafana (or unset) → queries Loki
+
 # Server settings
 server:
   host: 0.0.0.0
   port: 5000
 ```
+
+### Cache Deduplication
+
+- Cache entries expire after `ANALYSIS_CACHE_TTL` seconds (default: 24 hours, configurable via env var)
+- Cache keys are normalized — timestamps, numeric IDs, IPs, and container IDs are stripped so similar alerts share a single cache entry
+- Duplicate requests increment a `dedup_count` counter rather than re-running analysis
+
+### Storage Backend
+
+The analyzer auto-detects the storage backend from the `STACK` environment variable:
+
+| `STACK` value | Backend |
+|---------------|-------------------|
+| `vm` | VictoriaLogs |
+| `grafana` (or unset) | Loki |
+
+No additional configuration is needed — set `STACK` in your `.env` file and the analysis service will query the correct backend.
+
+### Docker Secrets
+
+API keys can be loaded from Docker secrets instead of environment variables. Use the `_FILE` suffix to point to a secret file:
+
+```bash
+ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key
+OPENAI_API_KEY_FILE=/run/secrets/openai_key
+```
+
+When a `_FILE` variant is set, the service reads the key from that file at startup. This avoids storing secrets in `.env` or `config.yaml`.
 
 ---
 
@@ -252,6 +284,14 @@ Response:
 ```bash
 curl http://localhost:5000/health
 ```
+
+### Aggregated Health Check
+
+```bash
+curl http://localhost:5000/api/health/all
+```
+
+Returns JSON with health status of all SIB services (Falco, Falcosidekick, storage, Grafana, etc.).
 
 ---
 

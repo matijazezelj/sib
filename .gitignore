@@ -34,13 +34,17 @@ temp/
 # Backup files
 *.bak
 *.backup
+backups/
+CLAUDE.md
 
 # Secrets (never commit these)
-secrets/*
-!secrets/README.md
+secrets/
 *.pem
 *.key
 *.crt
+
+# Ansible inventory (contains real host IPs)
+ansible/inventory/hosts.yml
 
 # Test outputs
 coverage/

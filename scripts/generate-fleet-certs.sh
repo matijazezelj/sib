@@ -129,11 +129,11 @@ main() {
     local GENERATED=0
 
     for hostname in $HOSTS; do
-        ((COUNT++))
+        COUNT=$((COUNT + 1))
 
         if [ -f "${CERTS_DIR}/clients/${hostname}.crt" ] && [ "$FORCE" != "true" ]; then
             warn "[${COUNT}] Skipping '${hostname}' - certificate already exists"
-            ((SKIPPED++))
+            SKIPPED=$((SKIPPED + 1))
             continue
         fi
 
@@ -166,7 +166,7 @@ main() {
 
         if [ -f "${CERTS_DIR}/clients/${hostname}.crt" ]; then
             success "Generated certificate for '${hostname}'"
-            ((GENERATED++))
+            GENERATED=$((GENERATED + 1))
         else
             warn "Failed to generate certificate for '${hostname}'"
         fi

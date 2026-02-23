@@ -84,8 +84,15 @@ echo -e "  ${GREEN}✓${NC} Combined blocklist: ${YELLOW}$total_ips${NC} unique 
 echo ""
 echo -e "${CYAN}Generating Falco rules...${NC}"
 
-# Generate Falco rules for threat intel
-cat > "$FALCO_RULE_FILE" << 'EOF'
+# Populate IP list from combined blocklist (capped for Falco memory)
+MAX_IPS=${MAX_THREATINTEL_IPS:-10000}
+actual_count=$(wc -l < "$COMBINED_FILE" | tr -d ' ')
+if [ "$actual_count" -gt "$MAX_IPS" ]; then
+    echo -e "  ${YELLOW}!${NC} Capping IP list to ${YELLOW}$MAX_IPS${NC} of $actual_count IPs (set MAX_THREATINTEL_IPS to change)"
+fi
+
+# Build the Falco rule file in parts so the IP list is populated
+cat > "$FALCO_RULE_FILE" << 'HEADER'
 # =============================================================================
 # Threat Intel Rules for Falco - Auto-generated
 # =============================================================================
@@ -93,9 +100,16 @@ cat > "$FALCO_RULE_FILE" << 'EOF'
 # Run ./threatintel/update-feeds.sh to update the blocklists.
 # =============================================================================
 
-# List of known malicious IPs (sample - full list loaded from file)
-- list: threatintel_ips
-  items: []
+HEADER
+
+# Generate IP list from combined blocklist
+echo "# IPs loaded from combined_blocklist.txt" >> "$FALCO_RULE_FILE"
+echo "- list: threatintel_ips" >> "$FALCO_RULE_FILE"
+echo "  items:" >> "$FALCO_RULE_FILE"
+head -n "$MAX_IPS" "$COMBINED_FILE" | awk '{printf "    - \"%s\"\n", $1}' >> "$FALCO_RULE_FILE"
+
+# Append the rest of the rules
+cat >> "$FALCO_RULE_FILE" << 'RULES'
 
 # Macro to check if an IP is in the threat intel list
 - macro: known_malicious_ip
@@ -111,9 +125,9 @@ cat > "$FALCO_RULE_FILE" << 'EOF'
   condition: >
     outbound and
     fd.typechar = 4 and
+    known_malicious_ip and
     fd.dip != "127.0.0.1" and
-    fd.dip != "0.0.0.0" and
-    container
+    fd.dip != "0.0.0.0"
   output: >
     Threat Intel Alert: Outbound connection to suspicious IP
     (connection=%fd.name command=%proc.cmdline container=%container.name image=%container.image.repository ip=%fd.dip port=%fd.dport)
@@ -125,6 +139,7 @@ cat > "$FALCO_RULE_FILE" << 'EOF'
   condition: >
     inbound and
     fd.typechar = 4 and
+    known_malicious_ip and
     fd.sip != "127.0.0.1"
   output: >
     Threat Intel Alert: Inbound connection from suspicious IP
@@ -174,9 +189,11 @@ cat > "$FALCO_RULE_FILE" << 'EOF'
     (command=%proc.cmdline dest=%fd.dip process=%proc.name)
   priority: NOTICE
   tags: [network, dns, mitre_command_and_control]
-EOF
+RULES
 
 echo -e "  ${GREEN}✓${NC} Generated: $FALCO_RULE_FILE"
+loaded_count=$((actual_count < MAX_IPS ? actual_count : MAX_IPS))
+echo -e "  ${GREEN}✓${NC} Loaded ${YELLOW}$loaded_count${NC} IPs into threatintel_ips list"
 
 # Create a simple IP lookup script
 cat > "$SCRIPT_DIR/lookup-ip.sh" << 'LOOKUP_EOF'
@@ -195,12 +212,12 @@ echo ""
 
 for feed in "$INTEL_DIR"/*.txt; do
     name=$(basename "$feed" .txt)
-    if grep -q "^$IP" "$feed" 2>/dev/null; then
+    if grep -q "^${IP}$" "$feed" 2>/dev/null; then
         echo "  ⚠️  FOUND in $name"
     fi
 done
 
-if grep -q "^$IP" "$INTEL_DIR/combined_blocklist.txt" 2>/dev/null; then
+if grep -q "^${IP}$" "$INTEL_DIR/combined_blocklist.txt" 2>/dev/null; then
     echo ""
     echo "  🚨 IP is in combined blocklist!"
 else

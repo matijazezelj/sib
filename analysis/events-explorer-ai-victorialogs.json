@@ -47,7 +47,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "* | stats by (rule) count()",
+          "expr": "* $severity | stats by (rule) count()",
           "legendFormat": "{{rule}}",
           "queryType": "statsRange",
           "refId": "A"
@@ -102,7 +102,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "*",
+          "expr": "* $severity",
           "refId": "A"
         }
       ],
@@ -183,7 +183,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "*",
+          "expr": "* $severity",
           "refId": "A"
         }
       ]
@@ -193,7 +193,28 @@
   "schemaVersion": 39,
   "tags": ["sib", "security", "falco", "events", "victorialogs"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {"selected": true, "text": "All", "value": ""},
+        "description": "Filter events by severity level",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Severity",
+        "multi": false,
+        "name": "severity",
+        "options": [
+          {"selected": true, "text": "All", "value": ""},
+          {"selected": false, "text": "Critical", "value": "priority:Critical"},
+          {"selected": false, "text": "Error", "value": "priority:Error"},
+          {"selected": false, "text": "Warning", "value": "priority:Warning"},
+          {"selected": false, "text": "Notice", "value": "priority:Notice"}
+        ],
+        "query": " , priority:Critical, priority:Error, priority:Warning, priority:Notice",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
   },
   "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},

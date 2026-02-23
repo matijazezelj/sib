@@ -175,6 +175,10 @@ make open
 
 # Show all endpoints
 make info
+
+# Backup & Restore
+make backup               # Create timestamped backup of configs, rules, and dashboards
+make restore              # Restore from a backup file
 ```
 
 ---

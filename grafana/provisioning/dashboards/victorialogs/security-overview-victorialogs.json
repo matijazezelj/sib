@@ -39,7 +39,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats count()",
+          "expr": "source:syscall $hostname | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -87,7 +87,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname (priority:Critical or priority:Error) | stats count()",
+          "expr": "source:syscall $hostname (priority:Critical or priority:Error) | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -135,7 +135,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname priority:Warning | stats count()",
+          "expr": "source:syscall $hostname priority:Warning | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -183,7 +183,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname priority:Notice | stats count()",
+          "expr": "source:syscall $hostname priority:Notice | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -220,7 +220,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats by (priority) count()",
+          "expr": "source:syscall $hostname | stats by (priority) count()",
           "legendFormat": "{{priority}}",
           "queryType": "statsRange",
           "refId": "A"
@@ -268,7 +268,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats by (rule) count()",
+          "expr": "source:syscall $hostname | stats by (rule) count()",
           "legendFormat": "{{rule}}",
           "queryType": "stats",
           "refId": "A"
@@ -316,7 +316,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname | stats by (priority) count()",
+          "expr": "source:syscall $hostname | stats by (priority) count()",
           "legendFormat": "{{priority}}",
           "queryType": "stats",
           "refId": "A"
@@ -361,7 +361,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname priority:Critical",
+          "expr": "source:syscall $hostname priority:Critical",
           "queryType": "instant",
           "refId": "A"
         }
@@ -400,7 +400,7 @@
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "source:syscall hostname:$hostname",
+          "expr": "source:syscall $hostname",
           "queryType": "instant",
           "refId": "A"
         }
@@ -421,12 +421,12 @@
     "list": [
       {
         "current": {
-          "text": "*",
-          "value": "*"
+          "text": "",
+          "value": ""
         },
         "name": "hostname",
-        "label": "Hostname",
-        "query": "*",
+        "label": "Filter",
+        "query": "",
         "type": "textbox"
       }
     ]
