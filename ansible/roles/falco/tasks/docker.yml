@@ -80,6 +80,7 @@
       - /dev:/host/dev:ro
       - /etc/sib/falco/falco.yaml:/etc/falco/falco.yaml:ro
       - /etc/sib/falco/rules:/etc/falco/rules:ro
+      - "{{ mtls_cert_dir }}:{{ mtls_cert_dir }}:ro"
     env:
       HOST_ROOT: /host
       FALCOCTL_DRIVER_TYPE: modern_ebpf

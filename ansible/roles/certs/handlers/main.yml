@@ -20,7 +20,7 @@
   ansible.builtin.systemd:
     name: alloy
     state: restarted
-  when: effective_deployment | default('native') | trim == 'native'
+  when: sib_stack | default('vm') == 'grafana' and effective_deployment | default('native') | trim == 'native'
   listen: Restart Alloy
 
 - name: Restart Alloy container
@@ -28,5 +28,5 @@
     name: sib-alloy
     state: started
     restart: true
-  when: effective_deployment | default('native') | trim == 'docker'
+  when: sib_stack | default('vm') == 'grafana' and effective_deployment | default('native') | trim == 'docker'
   listen: Restart Alloy

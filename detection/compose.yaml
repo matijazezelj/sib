@@ -11,6 +11,8 @@ services:
       # Falco configuration
       - ./config/falco.yaml:/etc/falco/falco.yaml:ro
       - ./config/rules:/etc/falco/rules:ro
+      # mTLS certificates (mounted when MTLS_ENABLED=true)
+      - ../certs:/etc/falco/certs:ro
       # Required for syscall monitoring
       - /var/run/docker.sock:/host/var/run/docker.sock:ro
       - /dev:/host/dev:ro

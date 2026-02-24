@@ -60,7 +60,7 @@ falco_outputs:
 
 # Enable mutual TLS for encrypted communication between fleet and server
 # Requires certificates: run 'make generate-certs' and 'make generate-fleet-certs'
-mtls_enabled: false
+mtls_enabled: true
 
 # Certificate paths on fleet hosts (set by certs role)
 mtls_cert_dir: /etc/sib/certs

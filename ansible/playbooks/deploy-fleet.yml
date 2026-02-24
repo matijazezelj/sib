@@ -41,8 +41,9 @@
       block:
         - name: Check if client certificate exists for this host
           ansible.builtin.stat:
-            path: "{{ playbook_dir }}/../certs/clients/{{ inventory_hostname }}.crt"
+            path: "/certs/clients/{{ inventory_hostname }}.crt"
           delegate_to: localhost
+          become: false
           register: client_cert_check
 
         - name: Fail if mTLS enabled but certificate missing

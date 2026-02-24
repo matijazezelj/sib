@@ -9,6 +9,8 @@ services:
       - .:/ansible:ro
       # Mount detection config for pushing to fleet (falco.yaml + rules)
       - ../detection/config:/detection-config:ro
+      # Mount certificates for mTLS distribution
+      - ../certs:/certs:ro
       # Mount SSH keys from host (ansible user is uid 1000)
       - ~/.ssh:/home/ansible/.ssh:ro
       # Mount SSH agent socket (for macOS/Linux)
