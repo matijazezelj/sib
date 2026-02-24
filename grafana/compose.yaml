@@ -13,7 +13,6 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_INSTALL_PLUGINS=victoriametrics-logs-datasource
-      - GF_FEATURE_TOGGLES_ENABLE=
       # Anonymous access (for demo purposes, disable in production)
       - GF_AUTH_ANONYMOUS_ENABLED=false
       # Logging

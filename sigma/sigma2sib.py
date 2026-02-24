@@ -21,7 +21,7 @@ import yaml
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 # MITRE ATT&CK mapping for tags
 MITRE_TACTICS = {
@@ -51,14 +51,6 @@ SIGMA_TO_FALCO_FIELDS = {
     'DestinationPort': 'fd.dport',
     'ProcessName': 'proc.name',
     'CurrentDirectory': 'proc.cwd',
-}
-
-# Sigma to LogQL label mapping (Loki)
-SIGMA_TO_LOGQL_LABELS = {
-    'CommandLine': 'cmdline',
-    'Image': 'exe',
-    'User': 'user',
-    'ProcessName': 'process',
 }
 
 # Sigma to LogsQL field mapping (VictoriaLogs)
@@ -459,13 +451,8 @@ def main():
     parser.add_argument(
         '-o', '--output',
         choices=['falco', 'logql', 'logsql', 'both', 'all'],
-        default='both',
-        help='Output format: falco, logql (Loki), logsql (VictoriaLogs), both (falco+logql), all (default: both)'
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
+        default='all',
+        help='Output format: falco, logql (Loki), logsql (VictoriaLogs), both (falco+logql), all (default: all)'
     )
     
     args = parser.parse_args()

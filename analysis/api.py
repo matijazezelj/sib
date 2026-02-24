@@ -23,7 +23,6 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from analyzer import AlertAnalyzer, load_config
-from obfuscator import Obfuscator, ObfuscationLevel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

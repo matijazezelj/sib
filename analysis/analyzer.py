@@ -1,7 +1,7 @@
 """
 SIB Alert Analyzer - LLM-powered security alert analysis
 
-Fetches alerts from Loki, obfuscates sensitive data, and uses LLM
+Fetches alerts from VictoriaLogs or Loki, obfuscates sensitive data, and uses LLM
 to provide attack vector analysis and mitigation strategies.
 """
 
@@ -283,8 +283,6 @@ class AlertAnalyzer:
         else:
             self.log_client = LokiClient(config.get('loki', {}).get('url', 'http://localhost:3100'))
             self.backend = 'loki'
-        # Backward compatibility alias
-        self.loki = self.log_client
         self.obfuscation_level = config.get('analysis', {}).get('obfuscation_level', 'standard')
         self.provider = self._create_provider()
     

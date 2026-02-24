@@ -152,11 +152,11 @@ cat >> "$FALCO_RULE_FILE" << 'RULES'
 # =============================================================================
 
 - rule: Connection to Known C2 Server
-  desc: Detects connections to known Command & Control servers
+  desc: Detects connections to known Command & Control servers from threat intel feeds
   condition: >
     outbound and
     fd.typechar = 4 and
-    (fd.dport = 443 or fd.dport = 80 or fd.dport = 8080 or fd.dport = 4444)
+    fd.sip in (threatintel_ips)
   output: >
     Possible C2 Connection Detected
     (command=%proc.cmdline dest=%fd.dip:%fd.dport container=%container.name)
@@ -179,16 +179,17 @@ cat >> "$FALCO_RULE_FILE" << 'RULES'
 # DNS-based Detection
 # =============================================================================
 
-- rule: DNS Query to Suspicious Domain
-  desc: Detects DNS queries to suspicious domains (DGA-like patterns)
+- rule: Connection to Known Malicious IP
+  desc: Detects any connection to IPs in the threat intel blocklist
   condition: >
-    evt.type in (sendto, connect) and
-    fd.dport = 53
+    outbound and
+    fd.typechar = 4 and
+    fd.sip in (threatintel_ips)
   output: >
-    DNS Query Detected
-    (command=%proc.cmdline dest=%fd.dip process=%proc.name)
-  priority: NOTICE
-  tags: [network, dns, mitre_command_and_control]
+    Connection to Known Malicious IP
+    (command=%proc.cmdline dest=%fd.dip:%fd.dport process=%proc.name container=%container.name)
+  priority: WARNING
+  tags: [network, threatintel, mitre_command_and_control]
 RULES
 
 echo -e "  ${GREEN}✓${NC} Generated: $FALCO_RULE_FILE"
@@ -231,7 +232,7 @@ echo -e "  ${GREEN}✓${NC} Generated: $SCRIPT_DIR/lookup-ip.sh"
 
 echo ""
 echo -e "${CYAN}Summary:${NC}"
-echo -e "  • Downloaded ${YELLOW}7${NC} threat intel feeds"
+echo -e "  • Downloaded ${YELLOW}$(ls "$FEED_DIR"/*.txt 2>/dev/null | wc -l | tr -d ' ')${NC} threat intel feeds"
 echo -e "  • Combined ${YELLOW}$total_ips${NC} unique malicious IPs"
 echo -e "  • Generated Falco rules"
 echo ""

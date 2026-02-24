@@ -107,14 +107,5 @@ collector_deployment: auto
 # Common Settings
 # =============================================================================
 
-# Timezone for all hosts
-timezone: "UTC"
-
 # Package manager (auto-detected, but can override)
 # package_manager: apt  # or yum, dnf
-
-# Docker settings
-docker_network: "sib-fleet"
-
-# Logging
-log_level: info

@@ -27,7 +27,6 @@ class ObfuscationMap:
     users: Dict[str, str] = field(default_factory=dict)
     containers: Dict[str, str] = field(default_factory=dict)
     paths: Dict[str, str] = field(default_factory=dict)
-    pids: Dict[str, str] = field(default_factory=dict)
     emails: Dict[str, str] = field(default_factory=dict)
     secrets: Set[str] = field(default_factory=set)
     
@@ -39,7 +38,6 @@ class ObfuscationMap:
             "users": self.users,
             "containers": self.containers,
             "paths": self.paths,
-            "pids": self.pids,
             "emails": self.emails,
             "secrets_count": len(self.secrets)
         }
@@ -264,7 +262,6 @@ class Obfuscator:
             'user': 0,
             'container': 0,
             'path': 0,
-            'pid': 0,
             'email': 0,
         }
     

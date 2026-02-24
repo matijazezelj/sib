@@ -23,7 +23,7 @@ if [ -f "$SCRIPT_DIR/../.env" ]; then
     source "$SCRIPT_DIR/../.env"
 fi
 
-STACK="${STACK:-grafana}"
+STACK="${STACK:-vm}"
 SIDEKICK_URL="${SIDEKICK_URL:-http://localhost:2801}"
 TIMEOUT=60
 

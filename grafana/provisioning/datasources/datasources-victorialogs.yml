@@ -1,4 +1,0 @@
-# NOTE: This file is intentionally empty.
-# Use grafana/provisioning/datasources/templates/ as templates,
-# and copy one to grafana/provisioning/datasources/datasources.yml
-# via Make targets (use-loki-datasource/use-victorialogs-datasource).

@@ -109,10 +109,18 @@ info "Reading sensitive file (/etc/shadow)..."
 sudo cat /etc/shadow > /dev/null 2>&1 || true
 
 info "Executing shell in container..."
-docker exec sib-loki sh -c "whoami" > /dev/null 2>&1 || true
+if [ "$STACK" = "vm" ]; then
+    docker exec sib-victorialogs sh -c "whoami" > /dev/null 2>&1 || true
+else
+    docker exec sib-loki sh -c "whoami" > /dev/null 2>&1 || true
+fi
 
 info "Reading files in container..."
-docker exec sib-loki cat /etc/passwd > /dev/null 2>&1 || true
+if [ "$STACK" = "vm" ]; then
+    docker exec sib-victorialogs cat /etc/passwd > /dev/null 2>&1 || true
+else
+    docker exec sib-loki cat /etc/passwd > /dev/null 2>&1 || true
+fi
 
 info "Waiting for events to propagate..."
 sleep 3

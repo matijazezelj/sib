@@ -87,7 +87,7 @@ install: network ## Install all security stacks
 	fi
 	@# Install based on STACK selection (grafana or vm)
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		echo "$(CYAN)📦 Installing VictoriaMetrics Stack...$(RESET)"; \
 		$(MAKE) --no-print-directory install-storage-vm; \
@@ -154,7 +154,7 @@ install-grafana: network ## Install Grafana dashboard
 	@echo "$(GREEN)✓ Grafana installed$(RESET)"
 	@# Configure datasources based on STACK
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		cp grafana/provisioning/datasources/templates/datasources-vm.yml grafana/provisioning/datasources/datasources.yml; \
 		echo "$(GREEN)✓ Datasources: VictoriaLogs + VictoriaMetrics$(RESET)"; \
@@ -176,7 +176,7 @@ install-analysis: network ## Install AI Analysis API service
 		host="$(ANALYSIS_HOST)"; \
 	fi; \
 	set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		echo "$(CYAN)Using VictoriaLogs Events Explorer dashboard...$(RESET)"; \
 		sed "s|ANALYSIS_HOST|$$host|g" analysis/events-explorer-ai-victorialogs.json > grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json; \
@@ -200,7 +200,7 @@ install-analysis: network ## Install AI Analysis API service
 
 start: ## Start all stacks based on STACK setting
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		$(MAKE) --no-print-directory start-storage-vm; \
 	else \
@@ -236,7 +236,7 @@ stop: ## Stop all stacks based on STACK setting
 	@$(MAKE) --no-print-directory stop-alerting
 	@$(MAKE) --no-print-directory stop-grafana
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		$(MAKE) --no-print-directory stop-storage-vm; \
 	else \
@@ -266,7 +266,7 @@ stop-analysis: ## Stop AI Analysis API
 
 restart: ## Restart all stacks based on STACK setting
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		$(MAKE) --no-print-directory restart-storage-vm; \
 	else \
@@ -324,7 +324,7 @@ uninstall-storage: ## Remove storage stack and volumes
 	@echo "$(YELLOW)Removing storage stack...$(RESET)"
 	@# Read STACK from .env to decide which compose file to remove
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	cd storage; \
 	if [ "$$STACK" = "vm" ]; then \
 		$(DOCKER_COMPOSE) -f compose-vm.yaml down -v; \
@@ -343,9 +343,15 @@ uninstall-analysis: ## Remove AI Analysis API and volumes
 	@cd analysis && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ AI Analysis API removed$(RESET)"
 
-uninstall-collectors: ## Remove Alloy collectors and volumes
+uninstall-collectors: ## Remove collectors and volumes
 	@echo "$(YELLOW)Removing collectors...$(RESET)"
-	@cd collectors && $(DOCKER_COMPOSE) down -v 2>/dev/null || true
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	STACK=$${STACK:-vm}; \
+	if [ "$$STACK" = "grafana" ]; then \
+		cd collectors && $(DOCKER_COMPOSE) -f compose-grafana.yaml down -v 2>/dev/null || true; \
+	else \
+		cd collectors && $(DOCKER_COMPOSE) -f compose-vm.yaml down -v 2>/dev/null || true; \
+	fi
 	@echo "$(GREEN)✓ Collectors removed$(RESET)"
 
 # ==================== Status ====================
@@ -429,7 +435,7 @@ health: ## Quick health check of all services
 	@echo ""
 	@echo "$(CYAN)Storage:$(RESET)"
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		curl -sf http://localhost:9428/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) VictoriaLogs is healthy" || echo "  $(RED)✗$(RESET) VictoriaLogs is not responding"; \
 		curl -sf http://localhost:8428/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) VictoriaMetrics is healthy" || echo "  $(RED)✗$(RESET) VictoriaMetrics is not responding"; \
@@ -507,7 +513,7 @@ logs-sidekick: ## Tail Falcosidekick logs
 
 logs-storage: ## Tail storage stack logs based on STACK setting
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml logs -f; \
 	else \
@@ -528,8 +534,14 @@ shell-falco: ## Open shell in Falco container
 shell-grafana: ## Open shell in Grafana container
 	@docker exec -it sib-grafana /bin/bash
 
-shell-loki: ## Open shell in Loki container
-	@docker exec -it sib-loki /bin/sh
+shell-storage: ## Open shell in storage container (VictoriaLogs or Loki)
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	STACK=$${STACK:-vm}; \
+	if [ "$$STACK" = "grafana" ]; then \
+		docker exec -it sib-loki /bin/sh; \
+	else \
+		docker exec -it sib-victorialogs /bin/sh; \
+	fi
 
 shell-analysis: ## Open shell in Analysis container
 	@docker exec -it sib-analysis /bin/bash
@@ -596,7 +608,7 @@ info: ## Show all endpoints and ports
 	@echo "$(BOLD)📡 SIB Endpoints$(RESET)"
 	@echo ""
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	echo "$(CYAN)Web Interfaces:$(RESET)"; \
 	echo "  Grafana:            $(YELLOW)http://localhost:3000$(RESET)"; \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
@@ -797,7 +809,7 @@ restore: ## Restore SIB data from backup (BACKUP=path/to/backup)
 	fi
 	@echo ""
 	@echo "$(CYAN)Restoring configuration...$(RESET)"
-	@if [ -f "$(BACKUP)/dashboards" ]; then \
+	@if [ -d "$(BACKUP)/dashboards" ]; then \
 		cp -r "$(BACKUP)/dashboards" grafana/provisioning/ && echo "  $(GREEN)✓$(RESET) Dashboards restored"; \
 	fi
 	@if [ -f "$(BACKUP)/custom_rules.yaml" ]; then \
@@ -816,11 +828,13 @@ update: ## Pull latest images and restart all stacks
 	@echo "$(CYAN)Pulling latest images...$(RESET)"
 	@cd detection && $(DOCKER_COMPOSE) pull
 	@cd alerting && $(DOCKER_COMPOSE) pull
-ifeq ($(STACK),grafana)
-	@cd storage && $(DOCKER_COMPOSE) -f compose-grafana.yaml pull
-else
-	@cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml pull
-endif
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	STACK=$${STACK:-vm}; \
+	if [ "$$STACK" = "grafana" ]; then \
+		cd storage && $(DOCKER_COMPOSE) -f compose-grafana.yaml pull; \
+	else \
+		cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml pull; \
+	fi
 	@cd grafana && $(DOCKER_COMPOSE) pull
 	@echo ""
 	@echo "$(CYAN)Restarting stacks with new images...$(RESET)"
@@ -834,11 +848,13 @@ endif
         restart restart-detection restart-alerting restart-storage-grafana restart-storage-vm restart-grafana restart-analysis \
         uninstall uninstall-detection uninstall-alerting uninstall-storage uninstall-grafana uninstall-analysis uninstall-collectors \
 	status health doctor logs logs-falco logs-sidekick logs-storage logs-grafana logs-analysis \
-        shell-falco shell-grafana shell-loki shell-analysis \
+        shell-falco shell-grafana shell-storage shell-analysis \
         test-alert demo demo-quick test-rules open info ps check-ports validate clean update backup restore \
 	enable-remote deploy-collector \
 	generate-certs generate-client-cert generate-fleet-certs verify-certs rotate-certs \
-	test-mtls test-alert-mtls
+	test-mtls test-alert-mtls \
+	fleet-build deploy-fleet update-rules fleet-health fleet-docker-check remove-fleet fleet-shell fleet-ping \
+	convert-sigma update-threatintel
 
 # ==================== Remote Collectors ====================
 
@@ -846,7 +862,7 @@ enable-remote: ## Enable remote connections from collectors
 	@echo "$(CYAN)🌐 Enabling remote connections for collectors...$(RESET)"
 	@echo ""
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		echo "$(YELLOW)This will expose VictoriaLogs (9428) and VictoriaMetrics (8428) externally.$(RESET)"; \
 	else \
@@ -861,7 +877,7 @@ enable-remote: ## Enable remote connections from collectors
 		echo "STORAGE_BIND=0.0.0.0" >> .env; \
 	fi
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
-	STACK=$${STACK:-grafana}; \
+	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml up -d; \
 		echo ""; \
@@ -980,7 +996,6 @@ test-alert-mtls: ## Send test alert via mTLS
 # ==================== Fleet Management (Ansible) ====================
 
 # Ansible runs in Docker - no local installation needed
-ANSIBLE_IMAGE := sib-ansible:latest
 ANSIBLE_RUN := docker compose -f ansible/compose.yaml run --rm ansible
 ANSIBLE_LIMIT := $(if $(LIMIT),--limit $(LIMIT),)
 ANSIBLE_ARGS := $(if $(ARGS),$(ARGS),)
