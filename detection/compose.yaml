@@ -4,6 +4,7 @@ services:
   falco:
     image: falcosecurity/falco:0.39.2
     container_name: sib-falco
+    hostname: sib-host
     privileged: true
     restart: unless-stopped
     volumes:
@@ -15,8 +16,6 @@ services:
       - /dev:/host/dev:ro
       - /proc:/host/proc:ro
       - /etc:/host/etc:ro
-      # mTLS certificates (mounted when MTLS_ENABLED=true)
-      - ../certs:/etc/falco/certs:ro
     environment:
       - HOST_ROOT=/host
       # Use modern eBPF driver - no kernel headers needed

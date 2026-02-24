@@ -5,7 +5,7 @@
 # SIB Central Server Configuration
 # =============================================================================
 
-sib_server: "192.168.1.163"
+sib_server: "192.168.1.196"
 
 # Stack selection for fleet collectors: vm or grafana
 # vm = VictoriaLogs + VictoriaMetrics (default, uses vmagent + node_exporter)
@@ -36,13 +36,13 @@ install_docker_if_missing: true
 # auto   - Detect Docker, use containers if available, native if not
 # docker - Force Docker containers (will install Docker if missing)
 # native - Force native packages (no Docker required)
-deployment_strategy: native
+deployment_strategy: auto
 
 # =============================================================================
 # Falco Configuration
 # =============================================================================
 
-falco_version: "0.39.2"
+falco_version: "0.40.0"
 falco_priority: "notice"  # debug, info, notice, warning, error, critical
 
 # Custom rules to deploy (from detection/config/rules/)
@@ -96,6 +96,7 @@ alloy_scrape_targets:
 
 vmagent_image: "victoriametrics/vmagent:latest"
 node_exporter_image: "prom/node-exporter:latest"
+vector_image: "timberio/vector:latest-alpine"
 
 # Collector deployment strategy (VM stack)
 # auto   - Use Docker if available, otherwise skip (VM collectors require Docker)

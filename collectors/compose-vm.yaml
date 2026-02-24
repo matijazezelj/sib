@@ -1,6 +1,10 @@
 # VM Collectors Stack - vmagent + node_exporter
 # Lightweight alternative to Alloy for VictoriaMetrics ecosystem
 # Deploy on remote hosts to ship logs/metrics to SIB server
+#
+# Usage:
+#   SIB_SERVER=192.168.1.196 HOSTNAME=$(hostname) docker compose -f compose.yaml up -d
+#   To skip node-exporter (if already running): add --scale node-exporter=0
 
 services:
   vmagent:
@@ -10,15 +14,11 @@ services:
     restart: unless-stopped
     command:
       - "-promscrape.config=/etc/vmagent/config.yml"
-      - "-remoteWrite.url=${SIB_SERVER:-http://localhost}:8428/api/v1/write"
+      - "-remoteWrite.url=http://${SIB_SERVER:-localhost}:8428/api/v1/write"
       - "-remoteWrite.label=host=${HOSTNAME:-collector}"
-    ports:
-      - "127.0.0.1:8429:8429"
     volumes:
       - ./config/vmagent.yml:/etc/vmagent/config.yml:ro
       - vmagent-data:/vmagent-data
-    depends_on:
-      - node-exporter
     network_mode: host
 
   node-exporter:
@@ -51,6 +51,7 @@ services:
     environment:
       - HOSTNAME=${HOSTNAME:-collector}
       - SIB_SERVER=${SIB_SERVER:-localhost}
+      - VECTOR_CONFIG=/etc/vector/vector.toml
     network_mode: host
 
 volumes:

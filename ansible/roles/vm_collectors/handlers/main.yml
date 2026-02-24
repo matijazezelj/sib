@@ -1,0 +1,12 @@
+---
+- name: Restart sib-vector
+  community.docker.docker_container:
+    name: sib-vector
+    restart: true
+  listen: restart vector
+
+- name: Restart sib-vmagent
+  community.docker.docker_container:
+    name: sib-vmagent
+    restart: true
+  listen: restart vmagent

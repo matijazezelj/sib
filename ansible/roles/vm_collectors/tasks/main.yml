@@ -1,4 +1,6 @@
-# VM Collectors role - installs vmagent + node_exporter for metrics shipping
+# VM Collectors role - installs vmagent + node_exporter + vector
+# Metrics: vmagent scrapes node_exporter → VictoriaMetrics
+# Logs: Vector ships system/container logs → VictoriaLogs
 # Falco events are shipped directly to Sidekick (with optional mTLS)
 ---
 
@@ -18,6 +20,7 @@
     - /etc/sib-collector
     - /etc/sib-collector/config
     - /var/lib/sib-vmagent
+    - /var/lib/sib-vector
   tags: vm_collectors
 
 - name: Deploy vmagent configuration
@@ -27,6 +30,46 @@
     owner: root
     group: root
     mode: '0644'
+  notify: restart vmagent
+  tags: vm_collectors
+
+- name: Deploy Vector configuration
+  ansible.builtin.template:
+    src: vector.toml.j2
+    dest: /etc/sib-collector/config/vector.toml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart vector
+  tags: vm_collectors
+
+# ============================================================================
+# Check for existing node_exporter
+# ============================================================================
+
+- name: Check if port 9100 is already in use
+  ansible.builtin.wait_for:
+    port: 9100
+    host: 127.0.0.1
+    timeout: 2
+    state: started
+  register: port_9100_check
+  ignore_errors: true
+  tags: vm_collectors
+
+- name: Set node_exporter deployment flag
+  ansible.builtin.set_fact:
+    deploy_node_exporter: "{{ port_9100_check.failed | default(true) }}"
+  tags: vm_collectors
+
+- name: Display node_exporter status
+  ansible.builtin.debug:
+    msg: >-
+      {% if deploy_node_exporter %}
+      Port 9100 is free — will deploy node_exporter container
+      {% else %}
+      Port 9100 already in use (existing node_exporter detected) — skipping container deployment, vmagent will scrape existing instance
+      {% endif %}
   tags: vm_collectors
 
 # ============================================================================
@@ -35,18 +78,23 @@
 
 - name: Deploy VM collectors via Docker
   when: common_effective_collectors_deployment | trim == 'docker'
+  tags: vm_collectors
   block:
     - name: Pull vmagent image
       community.docker.docker_image:
         name: "{{ vmagent_image }}"
         source: pull
-      tags: vm_collectors
 
     - name: Pull node_exporter image
       community.docker.docker_image:
         name: "{{ node_exporter_image }}"
         source: pull
-      tags: vm_collectors
+      when: deploy_node_exporter
+
+    - name: Pull Vector image
+      community.docker.docker_image:
+        name: "{{ vector_image | default('timberio/vector:latest-alpine') }}"
+        source: pull
 
     - name: Run node_exporter container
       community.docker.docker_container:
@@ -66,7 +114,7 @@
           - /proc:/host/proc:ro
           - /sys:/host/sys:ro
           - /:/host/root:ro
-      tags: vm_collectors
+      when: deploy_node_exporter
 
     - name: Run vmagent container
       community.docker.docker_container:
@@ -83,7 +131,23 @@
         volumes:
           - /etc/sib-collector/config/vmagent.yml:/etc/vmagent/config.yml:ro
           - /var/lib/sib-vmagent:/vmagent-data
-      tags: vm_collectors
+
+    - name: Run Vector container
+      community.docker.docker_container:
+        name: sib-vector
+        image: "{{ vector_image | default('timberio/vector:latest-alpine') }}"
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        hostname: "{{ inventory_hostname }}"
+        env:
+          HOSTNAME: "{{ inventory_hostname }}"
+          VECTOR_CONFIG: /etc/vector/vector.toml
+        volumes:
+          - /etc/sib-collector/config/vector.toml:/etc/vector/vector.toml:ro
+          - /var/log:/var/log:ro
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - /var/lib/sib-vector:/var/lib/vector
 
 - name: VM collectors native deployment not supported
   when: common_effective_collectors_deployment | trim != 'docker'

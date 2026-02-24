@@ -1,0 +1,71 @@
+# ==============================================
+# Vector Configuration for SIB Fleet Collectors
+# ==============================================
+# Collects logs and ships to VictoriaLogs
+# Managed by Ansible - do not edit manually
+
+# ============================================
+# SOURCES - Log collection
+# ============================================
+
+# System logs
+[sources.syslog]
+type = "file"
+include = ["/var/log/syslog", "/var/log/messages"]
+read_from = "end"
+
+[sources.auth_logs]
+type = "file"
+include = ["/var/log/auth.log", "/var/log/secure"]
+read_from = "end"
+
+[sources.kernel_logs]
+type = "file"
+include = ["/var/log/kern.log"]
+read_from = "end"
+
+# Docker container logs
+[sources.docker_logs]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+
+# ============================================
+# TRANSFORMS - Processing
+# ============================================
+
+# Add common labels
+[transforms.add_labels]
+type = "remap"
+inputs = ["syslog", "auth_logs", "kernel_logs", "docker_logs"]
+source = '''
+.hostname = "{{ inventory_hostname }}"
+.collector = "vector"
+'''
+
+# ============================================
+# SINKS - Ship to VictoriaLogs
+# ============================================
+
+[sinks.victorialogs]
+type = "elasticsearch"
+inputs = ["add_labels"]
+endpoints = ["{{ sib_victorialogs_url }}/insert/elasticsearch/"]
+mode = "bulk"
+api_version = "v8"
+compression = "gzip"
+
+[sinks.victorialogs.healthcheck]
+enabled = false
+
+[sinks.victorialogs.query]
+_msg_field = "message"
+_time_field = "timestamp"
+_stream_fields = "hostname,collector"
+
+[sinks.victorialogs.request]
+headers.AccountID = "0"
+headers.ProjectID = "0"
+
+[sinks.victorialogs.batch]
+max_bytes = 1048576
+timeout_secs = 1
