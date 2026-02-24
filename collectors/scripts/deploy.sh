@@ -6,7 +6,7 @@ set -e
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <user@remote-host> <sib-server-ip>"
-    echo "Example: $0 matija@192.168.1.50 192.168.1.163"
+    echo "Example: $0 user@192.168.1.50 192.168.1.100"
     exit 1
 fi
 

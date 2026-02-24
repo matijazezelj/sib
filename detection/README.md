@@ -22,41 +22,16 @@ Falco monitors system calls and Kubernetes audit events to detect:
 ## Configuration
 
 ### Falco Configuration
-Edit `config/falco.yaml`:
+
+`config/falco.yaml` is **generated** by `make install-detection` (via `scripts/generate-falco-config.sh`). Do not edit directly — changes will be overwritten on next install. To customize:
+
+- Edit `config/falco.yaml.template` for structural changes
+- Use `.env` settings (`MTLS_ENABLED`, etc.) for runtime options
+
+Key settings in the generated config:
 - `json_output`: Enable JSON output for Falcosidekick
 - `priority`: Minimum alert priority
-- `buffered_outputs`: Performance optimization
-- `http_output`: Output destination (Falcosidekick)
-
-### mTLS Configuration
-
-For production deployments, enable mTLS to encrypt communication with Falcosidekick.
-
-```bash
-# Set environment variable
-echo "MTLS_ENABLED=true" >> .env
-
-# Generate certificates (if not already done)
-make generate-certs
-
-# Reinstall detection stack
-make install-detection
-```
-
-When `MTLS_ENABLED=true`, Falco's http_output is configured with:
-
-```yaml
-http_output:
-  enabled: true
-  url: "https://sib-sidekick:2801/"
-  insecure: false
-  ca_cert: /etc/falco/certs/ca/ca.crt
-  client_cert: /etc/falco/certs/clients/local.crt
-  client_key: /etc/falco/certs/clients/local.key
-  mtls: true
-```
-
-See [Security Hardening](../docs/security-hardening.md) for complete mTLS documentation.
+- `engine.kind`: `modern_ebpf` (default driver)
 
 ### Rules
 - `config/rules/falco_rules.yaml`: Default rules (from Falco)

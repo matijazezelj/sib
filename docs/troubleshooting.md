@@ -249,15 +249,16 @@ chmod 700 ~/.ssh
 ssh-copy-id -i ~/.ssh/id_rsa user@remote-host
 ```
 
-### Alloy Not Sending Data
+### Collectors Not Sending Data
 
 On the remote host:
 ```bash
-# Check Alloy logs
-docker logs sib-alloy --tail 50
+# VM stack (default) — check Vector and vmagent
+docker logs sib-vector --tail 50
+docker logs sib-vmagent --tail 50
 
-# Or for native deployment
-journalctl -u alloy -n 50
+# Grafana stack — check Alloy
+docker logs sib-alloy --tail 50
 
 # Verify network connectivity to SIB server
 # VictoriaLogs (default):
@@ -275,9 +276,13 @@ curl -s http://SIB_SERVER:9090/-/ready
 2. Verify firewall allows traffic to SIB server ports
    - **VictoriaMetrics stack**: 9428, 8428, 2801
    - **Grafana stack**: 3100, 9090, 2801
-3. Check `host` label in Loki:
+3. Check metrics `host` label in VictoriaMetrics:
    ```bash
-   curl http://localhost:3100/loki/api/v1/label/host/values
+   curl 'http://localhost:8428/api/v1/label/host/values'
+   ```
+4. Check logs `hostname` field in VictoriaLogs:
+   ```bash
+   curl 'http://localhost:9428/select/logsql/query?query=hostname:*|stats+by(hostname)+count()&limit=10'
    ```
 
 ---

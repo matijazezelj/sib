@@ -43,6 +43,11 @@ secrets/
 *.key
 *.crt
 
+# Generated configs (created by make install)
+grafana/provisioning/datasources/datasources.yml
+alerting/config/config.yaml
+detection/config/falco.yaml
+
 # Ansible inventory (contains real host IPs)
 ansible/inventory/hosts.yml
 
@@ -51,3 +56,4 @@ coverage/
 .coverage
 .ansible/
 analysis/__pycache__/
+**/__pycache__/

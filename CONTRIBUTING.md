@@ -40,15 +40,19 @@ sib/
 ├── alerting/       # Falcosidekick configuration
 ├── analysis/       # AI-powered analysis API
 ├── ansible/        # Fleet deployment automation
-├── collectors/     # Alloy collector configuration
+├── certs/          # mTLS certificates (generated)
+├── collectors/     # Remote host collectors (Vector/vmagent or Alloy)
 ├── detection/      # Falco rules and configuration
 ├── docs/           # Documentation
 ├── grafana/        # Dashboards and visualization
 ├── scripts/        # Helper scripts
 ├── sigma/          # Sigma rule conversion
-├── storage/        # Loki and Prometheus configuration
+├── storage/        # VictoriaLogs/VictoriaMetrics or Loki/Prometheus
 └── threatintel/    # Threat intelligence feeds
 ```
+
+> **Note:** Some config files are **generated** by `make install` and listed in `.gitignore`:
+> `detection/config/falco.yaml`, `alerting/config/config.yaml`, `grafana/provisioning/datasources/datasources.yml`
 
 ## Types of Contributions
 
@@ -134,4 +138,4 @@ Open a GitHub issue with the `question` label.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0.
+By contributing, you agree that your contributions will be licensed under the MIT License.

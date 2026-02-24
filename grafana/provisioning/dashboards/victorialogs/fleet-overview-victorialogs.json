@@ -7,7 +7,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 3, "w": 6, "x": 0, "y": 0},
       "id": 1,
       "options": {
@@ -23,9 +23,8 @@
       },
       "targets": [
         {
-          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "hostname:* | stats by (hostname) count() | stats count()",
-          "queryType": "stats",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(count by (host) (up{job=~\"node|integrations/unix\",host=~\"$host\"}))",
           "refId": "A"
         }
       ],
@@ -50,7 +49,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "count(count by (host) (node_uname_info{job=~\"node|integrations/unix\"}))",
+          "expr": "count(count by (host) (node_uname_info{job=~\"node|integrations/unix\",host=~\"$host\"}))",
           "refId": "A"
         }
       ],
@@ -75,7 +74,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "* | stats count()",
+          "expr": "hostname:~\"$host\" | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -101,7 +100,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "source:syscall | stats count()",
+          "expr": "source:syscall hostname:~\"$host\" | stats count()",
           "queryType": "stats",
           "refId": "A"
         }
@@ -212,7 +211,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "hostname:* | stats by (hostname) count()",
+          "expr": "hostname:~\"$host\" | stats by (hostname) count()",
           "legendFormat": "{{hostname}}",
           "queryType": "statsRange",
           "refId": "A"
@@ -318,7 +317,7 @@
       "targets": [
         {
           "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-          "expr": "*",
+          "expr": "hostname:~\"$host\"",
           "queryType": "instant",
           "refId": "A"
         }
@@ -333,18 +332,18 @@
   "templating": {
     "list": [
       {
-        "current": {"text": ".*", "value": ".*"},
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(node_uname_info{job=~\"node|integrations/unix\"}, host)",
+        "includeAll": true,
+        "multi": true,
         "name": "host",
         "label": "Host",
-        "query": ".*",
-        "type": "textbox"
-      },
-      {
-        "current": {"text": ".*", "value": ".*"},
-        "name": "job",
-        "label": "Job",
-        "query": ".*",
-        "type": "textbox"
+        "query": "label_values(node_uname_info{job=~\"node|integrations/unix\"}, host)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },

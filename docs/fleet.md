@@ -25,13 +25,14 @@ SIB includes Ansible-based fleet management to deploy security agents across mul
                           │              │
      ┌────────────────────┼──────────────┼────────────────┐
      │   Host A           │   Host B     │   Host C       │
-     │ Falco + Alloy ─────┴──────────────┴─── ...         │
+     │ Falco + collectors ┴──────────────┴─── ...         │
      └────────────────────────────────────────────────────┘
 ```
 
 Each fleet host gets:
-- **Falco** — Runtime security detection
-- **Alloy** — Ships logs and metrics to central SIB
+- **Falco** — Runtime security detection (events sent directly to Falcosidekick)
+- **VM stack (default):** Vector (logs → VictoriaLogs) + vmagent + node_exporter (metrics → VictoriaMetrics)
+- **Grafana stack:** Alloy (logs → Loki, metrics → Prometheus)
 
 All events from all hosts appear in your central Grafana dashboards.
 
@@ -39,15 +40,15 @@ All events from all hosts appear in your central Grafana dashboards.
 
 ## Deployment Strategies
 
-SIB supports both **native packages** (default) and **Docker containers**:
+SIB supports both **native packages** and **Docker containers**:
 
 | Strategy | Description |
 |----------|-------------|
-| `native` (default) | Falco from repo + Alloy as systemd service. **Recommended for best visibility.** |
-| `docker` | Run agents as containers |
-| `auto` | Use Docker if available, otherwise native |
+| `docker` | Run agents as containers. **Recommended for simplicity.** |
+| `native` | Falco from repo as systemd service |
+| `auto` (default) | Use Docker if available, otherwise native |
 
-**Why native is recommended:** Native deployment sees all host processes, while Docker-based Falco may miss events from processes outside its container namespace.
+> **Note:** VM stack collectors (Vector, vmagent, node_exporter) always run as Docker containers regardless of strategy. The strategy setting primarily affects Falco deployment.
 
 > ⚠️ **LXC Limitation:** Falco cannot run in LXC containers due to kernel access restrictions. Use VMs or run Falco on the LXC host itself.
 
@@ -109,7 +110,7 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 
 | Command | Description |
 |---------|-------------|
-| `make deploy-fleet` | Deploy Falco + Alloy to all fleet hosts |
+| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
 | `make update-rules` | Push detection rules to fleet |
 | `make fleet-health` | Check health of all agents |
 | `make fleet-docker-check` | Check/install Docker on fleet hosts |
@@ -124,26 +125,24 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 Edit `ansible/inventory/group_vars/all.yml` to customize deployment:
 
 ```yaml
-# Deployment strategy: native, docker, or auto
-deployment_strategy: native
+# Stack type: vm (default) or grafana
+sib_stack: vm
+
+# Deployment strategy: auto, docker, or native
+deployment_strategy: auto
 
 # Falco settings
-falco_version: latest
+falco_version: "0.40.0"
 falco_driver: modern_ebpf
 
-# Alloy settings  
-alloy_version: latest
-
-# SIB server endpoints
-sib_loki_url: "http://{{ sib_server }}:3100"
-sib_prometheus_url: "http://{{ sib_server }}:9090"
+# SIB server endpoints (VM stack — default)
+sib_victorialogs_url: "http://{{ sib_server }}:9428"
+sib_victoriametrics_url: "http://{{ sib_server }}:8428"
 sib_sidekick_url: "http://{{ sib_server }}:2801"
 
-# What to collect
-collect_system_logs: true
-collect_auth_logs: true
-collect_docker_logs: true
-collect_metrics: true
+# mTLS — encrypt fleet-to-server communication
+mtls_enabled: false
+mtls_cert_dir: /etc/sib/certs
 ```
 
 ---
@@ -156,24 +155,24 @@ Before deploying fleet agents, enable remote access:
 make enable-remote
 ```
 
-This exposes:
-- **Loki** (3100) — For receiving logs
-- **Prometheus** (9090) — For receiving metrics
-- **Sidekick** (2801) — For receiving Falco events (already external)
+This exposes (depending on your stack):
+- **VM stack (default):** VictoriaLogs (9428), VictoriaMetrics (8428)
+- **Grafana stack:** Loki (3100), Prometheus (9090)
+- **Sidekick** (2801) — For receiving Falco events (always external)
 
 ### Firewall Configuration
 
 Restrict access to fleet nodes only:
 
 ```bash
-# UFW example
-ufw allow from 192.168.1.0/24 to any port 3100  # Loki
-ufw allow from 192.168.1.0/24 to any port 9090  # Prometheus
+# UFW example (VM stack)
+ufw allow from 192.168.1.0/24 to any port 9428  # VictoriaLogs
+ufw allow from 192.168.1.0/24 to any port 8428  # VictoriaMetrics
 ufw allow from 192.168.1.0/24 to any port 2801  # Sidekick
 
-# iptables example
-iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 3100 -j ACCEPT
-iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 9090 -j ACCEPT
+# iptables example (VM stack)
+iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 9428 -j ACCEPT
+iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 8428 -j ACCEPT
 iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 2801 -j ACCEPT
 ```
 
@@ -258,25 +257,26 @@ make deploy-collector HOST=user@remote-host
 ```
 
 The script will:
-1. Copy Alloy configuration to the remote host
+1. Copy collector configuration to the remote host
 2. Configure the SIB server address
-3. Start Alloy via Docker Compose
+3. Start collectors via Docker Compose
 4. Verify the deployment
 
-### Full Manual Setup
+### Full Manual Setup (VM Stack)
 
 ```bash
 # On the remote host
 mkdir -p ~/sib-collector/config
 
-# Copy and edit the config
-scp collectors/config/config.alloy user@remote:~/sib-collector/config/
-# Edit config.alloy - replace SIB_SERVER_IP with your SIB server IP
+# Copy configs
+scp collectors/config/vector.toml user@remote:~/sib-collector/config/
+scp collectors/config/vmagent.yml user@remote:~/sib-collector/config/
+# Edit configs - replace SIB_SERVER_IP with your SIB server IP
 
-# Copy compose file (use compose-vm.yaml or compose-grafana.yaml based on your stack)
+# Copy compose file
 scp collectors/compose-vm.yaml user@remote:~/sib-collector/compose.yaml
 
-# Start the collector
+# Start the collectors
 ssh user@remote "cd ~/sib-collector && HOSTNAME=\$(hostname) docker compose up -d"
 ```
 
@@ -284,19 +284,19 @@ ssh user@remote "cd ~/sib-collector && HOSTNAME=\$(hostname) docker compose up -
 
 ## What Gets Collected
 
-| Type | Sources | Labels |
-|------|---------|--------|
-| **System Logs** | `/var/log/syslog`, `/var/log/messages` | `job="syslog"` |
-| **Auth Logs** | `/var/log/auth.log`, `/var/log/secure` | `job="auth"` |
-| **Kernel Logs** | `/var/log/kern.log` | `job="kernel"` |
-| **Journal** | systemd journal | `job="journal"` |
-| **Docker Logs** | All containers | `job="docker"`, `container=...` |
-| **Node Metrics** | CPU, memory, disk, network | `job="node"`, `collector="alloy"` |
-| **Falco Events** | Security detections | Sent via Falcosidekick |
+| Type | Sources | Labels/Fields |
+|------|---------|---------------|
+| **System Logs** | `/var/log/syslog`, `/var/log/messages` | `hostname` field |
+| **Auth Logs** | `/var/log/auth.log`, `/var/log/secure` | `hostname` field |
+| **Kernel Logs** | `/var/log/kern.log` | `hostname` field |
+| **Docker Logs** | All containers | `hostname` field, `container_name` |
+| **Node Metrics** | CPU, memory, disk, network | `host` label, `job="node"` |
+| **Falco Events** | Security detections | `hostname` field (via Falcosidekick) |
 
-All data is tagged with:
-- `host` — Hostname of the remote machine
-- `collector="alloy"` — Identifies data from Alloy collectors
+Data labeling convention:
+- **Metrics** (VictoriaMetrics): tagged with `host` label (set by vmagent's `-remoteWrite.label`)
+- **Logs** (VictoriaLogs): tagged with `hostname` field (set by Vector transform)
+- **Falco events**: tagged with `hostname` field (set by Falcosidekick)
 
 ---
 
@@ -305,11 +305,12 @@ All data is tagged with:
 ### Check Collector Status
 
 ```bash
-# Check Alloy logs on remote host
-ssh user@remote "docker logs sib-alloy --tail 20"
+# VM stack (default) — check Vector and vmagent
+ssh user@remote "docker logs sib-vector --tail 20"
+ssh user@remote "docker logs sib-vmagent --tail 20"
 
-# Or for native deployment
-ssh user@remote "systemctl status alloy"
+# Grafana stack — check Alloy
+ssh user@remote "docker logs sib-alloy --tail 20"
 ```
 
 ### Verify Data in SIB
@@ -357,7 +358,7 @@ make fleet-health
 
 Checks:
 - Falco is running
-- Alloy is running and shipping data
+- Collectors are running and shipping data (Vector/vmagent or Alloy)
 - Connectivity to SIB server
 
 ---
@@ -388,19 +389,25 @@ ssh user@remote "journalctl -u falco -n 50"
 
 ### No Data in Grafana
 
-1. Check Alloy is running:
+1. Check collectors are running:
    ```bash
+   # VM stack (default)
+   ssh user@remote "docker ps | grep -E 'sib-(vector|vmagent|node-exporter)'"
+   # Grafana stack
    ssh user@remote "docker ps | grep alloy"
    ```
 
-2. Check Alloy logs for errors:
+2. Check collector logs for errors:
    ```bash
-   ssh user@remote "docker logs sib-alloy --tail 50"
+   ssh user@remote "docker logs sib-vector --tail 50"
+   ssh user@remote "docker logs sib-vmagent --tail 50"
    ```
 
 3. Verify network connectivity:
    ```bash
-   ssh user@remote "curl -s http://SIB_SERVER:3100/ready"
+   # VM stack (default)
+   ssh user@remote "curl -s http://SIB_SERVER:9428/health"
+   ssh user@remote "curl -s http://SIB_SERVER:8428/-/healthy"
    ```
 
 ---
@@ -417,8 +424,8 @@ make remove-fleet LIMIT=webserver
 
 This stops and removes:
 - Falco (native or Docker)
-- Alloy collector
-- Associated systemd services (for native deployment)
+- Collectors (Vector/vmagent/node_exporter or Alloy depending on stack)
+- Associated configuration files
 
 ---
 

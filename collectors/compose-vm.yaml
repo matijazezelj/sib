@@ -3,7 +3,7 @@
 # Deploy on remote hosts to ship logs/metrics to SIB server
 #
 # Usage:
-#   SIB_SERVER=192.168.1.196 HOSTNAME=$(hostname) docker compose -f compose.yaml up -d
+#   SIB_SERVER=192.168.1.100 HOSTNAME=$(hostname) docker compose -f compose.yaml up -d
 #   To skip node-exporter (if already running): add --scale node-exporter=0
 
 services:
