@@ -88,7 +88,9 @@ git clone https://github.com/SigmaHQ/sigma.git /tmp/sigma
 
 The converter handles basic Sigma rule patterns. Complex rules may require manual adjustment:
 
-- **Modifiers**: Only `contains`, `endswith`, `startswith` are fully supported
+- **Modifiers**: Only `contains`, `endswith`, `startswith` are fully supported. Others (e.g., `re`, `cidr`, `base64`) are silently passed through as-is and will produce invalid Falco conditions.
+- **Wildcard group selectors**: `1 of selection*`, `all of them`, `X of filter*` patterns silently degrade — all matched selections are joined with `and` regardless of the numeric threshold. Review converted output when the original rule uses these constructs.
+- **Nested condition logic**: Complex boolean trees with mixed `and`/`or`/`not` groupings may not faithfully preserve operator precedence. Always validate converted rules with `make test-rules`.
 - **Aggregations**: `count()`, `sum()` conditions need manual conversion
 - **Correlation**: Multi-event correlation rules are not supported
 - **Field Mapping**: Some fields may not have direct Falco equivalents

