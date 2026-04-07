@@ -101,54 +101,79 @@ def extract_mitre_tags(tags: List[str]) -> List[str]:
     return mitre_tags
 
 
+# Sigma field modifier → Falco operator
+SIGMA_MODIFIER_TO_FALCO_OP = {
+    'contains': 'contains',
+    'endswith': 'endswith',
+    'startswith': 'startswith',
+    're': 'pmatch',
+    'equals': '=',
+}
+
+
+def _parse_sigma_field(field: str):
+    """Split 'FieldName|modifier' into (falco_field, operator).
+    Returns (falco_field_name, falco_operator).
+    """
+    if '|' in field:
+        field_name, modifier = field.split('|', 1)
+        # 'contains|all' → still 'contains' at the clause level; AND logic handled above
+        modifier = modifier.split('|')[0]
+    else:
+        field_name, modifier = field, 'equals'
+    falco_field = SIGMA_TO_FALCO_FIELDS.get(field_name, field_name.lower())
+    operator = SIGMA_MODIFIER_TO_FALCO_OP.get(modifier, 'contains')
+    return falco_field, operator
+
+
+def _falco_clause(falco_field: str, operator: str, value: str) -> str:
+    """Build a single Falco condition clause, escaping embedded quotes."""
+    escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
+    if operator == '=':
+        return f'{falco_field} = "{escaped}"'
+    return f'{falco_field} {operator} "{escaped}"'
+
+
 def convert_detection_to_falco_condition(detection: Dict[str, Any]) -> str:
     """Convert Sigma detection block to Falco condition."""
     conditions = []
-    
+
     for key, value in detection.items():
         if key == 'condition':
             continue
-            
+
         if isinstance(value, dict):
-            # Field conditions
             for field, pattern in value.items():
-                falco_field = SIGMA_TO_FALCO_FIELDS.get(field, field.lower())
-                
+                falco_field, operator = _parse_sigma_field(field)
+
                 if isinstance(pattern, list):
-                    # Multiple values - OR them
-                    sub_conditions = []
-                    for p in pattern:
-                        sub_conditions.append(f'{falco_field} contains "{p}"')
-                    conditions.append(f'({" or ".join(sub_conditions)})')
+                    sub = [_falco_clause(falco_field, operator, p) for p in pattern]
+                    conditions.append(f'({" or ".join(sub)})')
                 elif isinstance(pattern, str):
                     if '*' in pattern:
-                        # Wildcard pattern
-                        clean_pattern = pattern.replace('*', '')
+                        clean = pattern.replace('*', '')
                         if pattern.startswith('*') and pattern.endswith('*'):
-                            conditions.append(f'{falco_field} contains "{clean_pattern}"')
+                            conditions.append(_falco_clause(falco_field, 'contains', clean))
                         elif pattern.startswith('*'):
-                            conditions.append(f'{falco_field} endswith "{clean_pattern}"')
-                        elif pattern.endswith('*'):
-                            conditions.append(f'{falco_field} startswith "{clean_pattern}"')
+                            conditions.append(_falco_clause(falco_field, 'endswith', clean))
+                        else:
+                            conditions.append(_falco_clause(falco_field, 'startswith', clean))
                     else:
-                        conditions.append(f'{falco_field} = "{pattern}"')
-                        
+                        conditions.append(_falco_clause(falco_field, operator, pattern))
+
         elif isinstance(value, list):
-            # List of conditions
             for item in value:
                 if isinstance(item, dict):
                     for field, pattern in item.items():
-                        falco_field = SIGMA_TO_FALCO_FIELDS.get(field, field.lower())
-                        conditions.append(f'{falco_field} contains "{pattern}"')
-    
-    # Parse the condition logic
-    condition_logic = detection.get('condition', ' and '.join(k for k in detection.keys() if k != 'condition'))
-    
-    # Simple condition parsing
+                        falco_field, operator = _parse_sigma_field(field)
+                        conditions.append(_falco_clause(falco_field, operator, str(pattern)))
+
+    condition_logic = detection.get('condition', '')
+
     if 'all of' in condition_logic:
-        return ' and '.join(conditions)
+        return ' and '.join(conditions) if conditions else 'evt.type = execve'
     elif '1 of' in condition_logic or 'any of' in condition_logic:
-        return ' or '.join(conditions)
+        return ' or '.join(conditions) if conditions else 'evt.type = execve'
     else:
         return ' and '.join(conditions) if conditions else 'evt.type = execve'
 
@@ -191,10 +216,9 @@ def convert_detection_to_logql(detection: Dict[str, Any], logsource: Dict[str, A
     
     # Build line filters
     if len(patterns) == 1:
-        line_filter = f'|= "{patterns[0]}"'
+        line_filter = f'|= "{re.escape(patterns[0])}"'
     elif len(patterns) > 1:
-        # Use regex for multiple patterns
-        regex_pattern = '|'.join(re.escape(p) for p in patterns[:5])  # Limit to 5
+        regex_pattern = '|'.join(re.escape(p) for p in patterns)
         line_filter = f'|~ "(?i)({regex_pattern})"'
     else:
         line_filter = ''
