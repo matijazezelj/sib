@@ -70,12 +70,15 @@ Example inventory:
 ```yaml
 all:
   vars:
-    sib_server: 192.168.1.100  # Your SIB server IP
+    sib_server: 192.168.1.100  # REQUIRED: Your SIB server IP
     ansible_user: ubuntu
     ansible_ssh_private_key_file: ~/.ssh/id_rsa
     
   children:
     fleet:
+      vars:
+        # Fleet hosts need sudo for installing/managing services
+        ansible_become: true
       hosts:
         webserver:
           ansible_host: 192.168.1.10
@@ -85,13 +88,26 @@ all:
           ansible_host: 192.168.1.12
 ```
 
-### 2. Test Connectivity
+> **Important:** Place `ansible_become: true` under `fleet.vars`, **not** at the top-level `all.vars`. Ansible runs some tasks locally (inside the Ansible container), and setting `become` globally would cause those tasks to fail with "sudo: not found".
+
+### 2. Enable Remote Access on SIB Server
+
+Fleet agents need to reach storage endpoints on the SIB server. By default, storage only listens on localhost.
+
+```bash
+# On the SIB server
+make enable-remote
+```
+
+This sets `STORAGE_BIND=0.0.0.0` in `.env` and recreates storage containers so VictoriaLogs (9428) and VictoriaMetrics (8428) — or Loki (3100) and Prometheus (9090) for the Grafana stack — accept remote connections.
+
+### 3. Test Connectivity
 
 ```bash
 make fleet-ping
 ```
 
-### 3. Deploy to Fleet
+### 4. Deploy to Fleet
 
 ```bash
 # Deploy to all hosts (native by default)
@@ -133,32 +149,27 @@ deployment_strategy: auto
 
 # Falco settings
 falco_version: "0.40.0"
-falco_driver: modern_ebpf
+falco_priority: notice
 
-# SIB server endpoints (VM stack — default)
+# Docker network name (must match SIB server's network)
+docker_network: sib-network
+
+# SIB server endpoints (VM stack — default, auto-derived from sib_server)
 sib_victorialogs_url: "http://{{ sib_server }}:9428"
 sib_victoriametrics_url: "http://{{ sib_server }}:8428"
-sib_sidekick_url: "http://{{ sib_server }}:2801"
 
 # mTLS — encrypt fleet-to-server communication
 mtls_enabled: false
 mtls_cert_dir: /etc/sib/certs
 ```
 
+> **Important:** `sib_server` must be set in your inventory file (`ansible/inventory/hosts.yml`) under `all.vars`. There is no default — deployments will fail without it.
+
 ---
 
-## Enable Remote Access on SIB Server
+## Remote Access Details
 
-Before deploying fleet agents, enable remote access:
-
-```bash
-make enable-remote
-```
-
-This exposes (depending on your stack):
-- **VM stack (default):** VictoriaLogs (9428), VictoriaMetrics (8428)
-- **Grafana stack:** Loki (3100), Prometheus (9090)
-- **Sidekick** (2801) — For receiving Falco events (always external)
+As described in the Quick Start, `make enable-remote` exposes storage endpoints. Here's what it changes and how to secure it.
 
 ### Firewall Configuration
 
@@ -180,11 +191,13 @@ iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 2801 -j ACCEPT
 
 ## Enable mTLS for Encrypted Fleet Communication
 
-For production deployments, enable mutual TLS (mTLS) to encrypt all communication between fleet agents and the SIB server.
+For production deployments, enable mutual TLS (mTLS) to encrypt all communication between fleet agents and the SIB server. This secures:
+- **Falco → Falcosidekick** (port 2801): events sent over HTTPS with client certificates
+- **Collectors → Storage** can additionally be secured via firewall rules
 
 ### Quick mTLS Setup
 
-> **Fresh Install?** If setting up a new SIB server with mTLS, generate certificates **before** running `make install`:
+> **Fresh Install?** If setting up a new SIB server with mTLS from the start:
 > ```bash
 > sed -i 's/MTLS_ENABLED=false/MTLS_ENABLED=true/' .env
 > make generate-certs
@@ -198,20 +211,29 @@ For existing SIB installations:
 make generate-certs
 
 # 2. Generate client certificates for all fleet hosts
+#    (reads hostnames from ansible/inventory/hosts.yml)
 make generate-fleet-certs
 
 # 3. Enable mTLS on SIB server
-echo "MTLS_ENABLED=true" >> .env
+sed -i 's/MTLS_ENABLED=false/MTLS_ENABLED=true/' .env
+
+# 4. Regenerate Falcosidekick config with mTLS and restart
 make install-alerting
+
+# 5. Regenerate Falco config with mTLS and restart
 make install-detection
 
-# 4. Enable mTLS in Ansible configuration
-# Edit ansible/inventory/group_vars/all.yml:
-# mtls_enabled: true
+# 6. Enable mTLS in Ansible group_vars
+#    Edit ansible/inventory/group_vars/all.yml:
+#    mtls_enabled: true
 
-# 5. Deploy fleet with mTLS
+# 7. Deploy fleet with mTLS certificates
 make deploy-fleet
 ```
+
+> **Certificate inventory format:** The `make generate-fleet-certs` command parses your `ansible/inventory/hosts.yml` and supports both flat and nested inventory formats (e.g., `fleet:` at root level or under `all.children.fleet.hosts`).
+
+> **Falco driver note:** Fleet hosts with kernel >= 5.8 automatically use the `modern_ebpf` driver, which works on all virtualization types (KVM, VMware, bare metal). No manual driver configuration is needed.
 
 ### Per-Host Certificate Generation
 
@@ -373,23 +395,53 @@ ssh -i ~/.ssh/id_rsa user@remote-host
 
 # Check SSH key permissions
 chmod 600 ~/.ssh/id_rsa
+
+# Test via Ansible
+make fleet-ping
 ```
 
 ### Falco Not Starting
 
 ```bash
-# Check kernel version on remote host
-ssh user@remote "uname -r"  # Need 5.8+
+# Check kernel version on remote host (need >= 5.8 for modern_ebpf)
+ssh user@remote "uname -r"
 
 # Check Falco logs
 ssh user@remote "docker logs sib-falco"
-# Or for native
+# Or for native install
 ssh user@remote "journalctl -u falco -n 50"
+```
+
+> **Common issue:** If Falco enters a restart loop, check the driver type. The `modern_ebpf` driver (used for kernel >= 5.8) works on all platforms including KVM VMs. The legacy `ebpf` driver requires a pre-compiled probe that may not be available in the container image.
+
+### Ansible "sudo: not found" Error
+
+This happens when `ansible_become: true` is set globally (under `all.vars`). Some tasks run locally inside the Ansible container, which doesn't have sudo. Move `ansible_become: true` to the fleet group:
+
+```yaml
+# Wrong — causes errors on local tasks
+all:
+  vars:
+    ansible_become: true   # ← Don't put it here
+
+# Correct — only applies to fleet hosts
+fleet:
+  vars:
+    ansible_become: true   # ← Put it here
 ```
 
 ### No Data in Grafana
 
-1. Check collectors are running:
+1. **Check storage is externally accessible:**
+   ```bash
+   # From a fleet host, test connectivity to VM stack endpoints
+   curl -s http://SIB_SERVER:9428/health      # VictoriaLogs
+   curl -s http://SIB_SERVER:8428/-/healthy    # VictoriaMetrics
+   ```
+   
+   If these fail, run `make enable-remote` on the SIB server to set `STORAGE_BIND=0.0.0.0`.
+
+2. **Check collectors are running:**
    ```bash
    # VM stack (default)
    ssh user@remote "docker ps | grep -E 'sib-(vector|vmagent|node-exporter)'"
@@ -397,18 +449,18 @@ ssh user@remote "journalctl -u falco -n 50"
    ssh user@remote "docker ps | grep alloy"
    ```
 
-2. Check collector logs for errors:
+3. **Check collector logs for errors:**
    ```bash
    ssh user@remote "docker logs sib-vector --tail 50"
    ssh user@remote "docker logs sib-vmagent --tail 50"
    ```
 
-3. Verify network connectivity:
+4. **Verify Falcosidekick is receiving events (on SIB server):**
    ```bash
-   # VM stack (default)
-   ssh user@remote "curl -s http://SIB_SERVER:9428/health"
-   ssh user@remote "curl -s http://SIB_SERVER:8428/-/healthy"
+   docker logs sib-sidekick --tail 20 2>&1 | grep -E "POST|Loki|Victoria"
    ```
+   
+   You should see `POST OK (204)` messages if events are flowing.
 
 ---
 

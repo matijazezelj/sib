@@ -4,23 +4,18 @@
 all:
   vars:
     # Central SIB server configuration
-    sib_server: "192.168.1.163"
-    sib_loki_port: 3100
-    sib_prometheus_port: 9090
+    sib_server: "192.168.1.100"  # REQUIRED: Change to your SIB server IP
     
     # Default SSH settings
     ansible_user: root
     ansible_ssh_private_key_file: ~/.ssh/id_rsa
     
   children:
-    # Central SIB server (where Grafana/Loki/Prometheus run)
-    sib_server:
-      hosts:
-        central:
-          ansible_host: "{{ sib_server }}"
-    
     # Fleet hosts to monitor
     fleet:
+      vars:
+        # Fleet hosts need sudo for installing/managing services
+        ansible_become: true
       hosts:
         # Example hosts - customize for your environment
         webserver:
@@ -42,21 +37,7 @@ all:
         #     role: app
         #     environment: staging
 
-      vars:
-        # Fleet-specific variables
-        falco_priority: notice
-        
-    # Docker hosts (have Docker installed, run Falco in container)
-    docker_hosts:
-      hosts:
-        webserver:
-        # database:
-      vars:
-        falco_deployment: docker
-    
-    # Bare metal hosts (install Falco natively)
-    bare_metal_hosts:
-      hosts:
-        database:
-      vars:
-        falco_deployment: native
+      # vars:
+        # Fleet-specific variables (override group_vars/all.yml)
+        # falco_priority: notice
+        # deployment_strategy: docker
