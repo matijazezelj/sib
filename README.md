@@ -14,7 +14,7 @@ SIB provides a complete, self-hosted security monitoring stack for detecting thr
 - **Alert Forwarding**: Falcosidekick routes alerts to 50+ destinations (Slack, PagerDuty, Loki, etc.)
 - **Log Aggregation**: VictoriaLogs (default) or Loki stores security events with efficient querying
 - **Pre-built Dashboards**: Grafana dashboards for security overview and event exploration
-- **MITRE ATT&CK Coverage**: 65 detection rules mapped across all 12 ATT&CK tactics
+- **MITRE ATT&CK Coverage**: Dashboard mapping detections to the ATT&CK framework
 - **Demo Mode**: Generate realistic security events to see dashboards in action
 - **Sigma Rules**: Convert Sigma rules to Falco/LogsQL format
 - **Threat Intel**: IP blocklists from Abuse.ch, Spamhaus, and more
@@ -239,8 +239,8 @@ make open                 # Open Grafana in browser
 make info                 # Show all endpoints
 
 # Backup & Restore
-make backup               # Create timestamped backup of storage volumes, configs, rules, and Grafana data
-make restore BACKUP=path  # Restore from a backup directory (see backups/ for available backups)
+make backup               # Create timestamped backup of configs, rules, and Grafana dashboards
+make restore              # Restore from a backup file
 ```
 
 ## 📚 Documentation
@@ -403,7 +403,7 @@ The analyzer auto-detects the storage backend from the `STACK` env var — it qu
 make install-analysis
 ```
 
-You'll be prompted for your server's IP/hostname. Then open Grafana and use the Events Explorer dashboard to analyze any event with AI.
+Your server's IP is auto-detected. Then open Grafana and use the Events Explorer dashboard to analyze any event with AI.
 
 ### Grafana Integration
 
@@ -414,6 +414,8 @@ Once installed, the **Events Explorer** dashboard includes a table where you can
 3. Click on any log line to see the **"🤖 Analyze with AI"** link
 4. View the analysis with attack vectors, MITRE mapping, and mitigations
 
+![AI Analysis Result](docs/assets/images/ai-analysis-obfuscation-and-alert.png)
+
 The analysis page shows:
 - **Original Alert** - The raw event
 - **What Was Sent to AI** - The obfuscated version (your sensitive data stays private)
@@ -421,6 +423,10 @@ The analysis page shows:
 - **Risk Assessment** with severity and confidence
 - **Mitigations** (immediate, short-term, long-term)
 - **False Positive Assessment**
+
+Browse past analyses from the API history page:
+
+![Analysis History](docs/assets/images/ai-api-history.png)
 
 ### LLM Providers
 
@@ -809,22 +815,7 @@ curl -s 'http://localhost:9428/select/logsql/query?query=source:syscall&limit=5'
 
 ## 📜 License
 
-SIB is licensed under the [Apache 2.0 License](LICENSE). You are free to use, modify, and distribute it — including for commercial purposes.
-
-SIB bundles and orchestrates the following third-party components, each under its own license:
-
-| Component | License | Notes |
-|---|---|---|
-| [Falco](https://falco.org/) | Apache 2.0 | |
-| [Falcosidekick](https://github.com/falcosecurity/falcosidekick) | Apache 2.0 | |
-| [Grafana](https://grafana.com/) | AGPL v3 | Unmodified; on-prem use is unrestricted |
-| [Loki](https://grafana.com/oss/loki/) | AGPL v3 | Unmodified; on-prem use is unrestricted |
-| [Grafana Alloy](https://github.com/grafana/alloy) | Apache 2.0 | |
-| [Prometheus](https://prometheus.io/) | Apache 2.0 | |
-| [VictoriaMetrics](https://victoriametrics.com/) | Apache 2.0 | |
-| [VictoriaLogs](https://victoriametrics.com/) | Apache 2.0 | |
-
-**AGPL v3 note:** Grafana and Loki are used as unmodified Docker images. Deploying them on your own infrastructure (on-prem or cloud) does not trigger AGPL v3 obligations. The AGPL v3 copyleft clause only applies if you distribute or host a *modified* version of these components as a service to others. For the typical SIB use case, this is a non-issue.
+Apache 2.0 License - See [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 

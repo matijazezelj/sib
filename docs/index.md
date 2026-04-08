@@ -25,10 +25,9 @@ title: SIEM in a Box
 | [Sigma Rules](sigma-rules.md) | Convert community detection rules |
 | [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
 | [Security Hardening](security-hardening.md) | Production hardening checklist |
-| [Upgrade Guide](upgrade.md) | Upgrade notes and version history |
-| [Kubernetes](kubernetes.md) | Security monitoring for K8s clusters (EKS, GKE, AKS) |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [FAQ](faq.md) | Common questions and answers |
+| [Kubernetes Deployment](https://github.com/matijazezelj/sib-k8s) | Run SIB on Kubernetes |
 | [VictoriaMetrics Stack](victorialogs.md) | Default storage backend (VictoriaLogs + VictoriaMetrics) |
 
 ---
@@ -350,15 +349,19 @@ curl "http://localhost:5000/analyze?rule=SomeRule&output=test&dry_run=true"
 
 ### Integrated Dashboard Experience
 
-After installing analysis, the **Events Explorer** dashboard gets an AI analysis panel:
+After installing analysis, the **Events Explorer** dashboard gets a dedicated AI analysis tab:
 
 ![Events Explorer with AI](assets/images/ai-analysis-dashboard.png)
+
+Click any event to get a full AI-powered analysis with privacy-preserving obfuscation:
+
+![AI Analysis with Obfuscation](assets/images/ai-analysis-obfuscation-and-alert.png)
 
 **Workflow:**
 1. Browse events in the Events Explorer
 2. Click a row to select an event
-3. The bottom panel shows event details and an "Analyze with AI" link
-4. Click to get instant AI-powered analysis in a new tab
+3. Click the "🤖 Analyze with AI" link to open analysis in a new tab
+4. View results with original vs. obfuscated alert comparison
 
 Analysis results include:
 - **Attack explanation** with MITRE ATT&CK mapping

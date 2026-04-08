@@ -1,11 +1,10 @@
 services:
   sib-analysis:
-    image: ghcr.io/matijazezelj/sib-analysis:latest
     build: .
     container_name: sib-analysis
     restart: unless-stopped
     ports:
-      - "${ANALYSIS_BIND:-127.0.0.1}:5000:5000"
+      - "5000:5000"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - analysis-cache:/app/cache
@@ -13,9 +12,8 @@ services:
       - sib-network
     environment:
       - PYTHONUNBUFFERED=1
+      - STACK=${STACK:-vm}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
-      # API keys via env var (default) or Docker Secrets file:
-      #   ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key  (recommended for production)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

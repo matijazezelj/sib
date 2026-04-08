@@ -84,57 +84,59 @@ ollama list
 
 ### OpenAI Setup
 
-Set in `.env`:
+Set your API key in `analysis/config.yaml`:
+```yaml
+llm:
+  provider: openai
+  model: gpt-4
+  api_key: sk-your-key-here
+```
+
+Or via environment variable:
 ```bash
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4o  # optional, defaults to gpt-4o
+export OPENAI_API_KEY=sk-your-key-here
 ```
 
 ### Anthropic Setup
 
-Set in `.env`:
-```bash
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your-key-here
-ANTHROPIC_MODEL=claude-sonnet-4-20250514  # optional
+```yaml
+llm:
+  provider: anthropic
+  model: claude-3-sonnet-20240229
+  api_key: your-key-here
 ```
 
 ---
 
 ## Configuration
 
-Edit `analysis/config.yaml` (or use environment variables — env vars take precedence):
+Edit `analysis/config.yaml`:
 
 ```yaml
-analysis:
+# LLM Provider settings
+llm:
+  provider: ollama  # ollama, openai, or anthropic
+  model: llama3.1:8b
+  base_url: http://host.docker.internal:11434  # For Ollama
+
+# Obfuscation settings
+obfuscation:
   enabled: true
-  obfuscation_level: standard  # standard or aggressive
-  provider: ${LLM_PROVIDER:-anthropic}  # ollama, openai, or anthropic
+  preserve_structure: true
 
-  ollama:
-    url: ${OLLAMA_URL:-http://localhost:11434}
-    model: ${OLLAMA_MODEL:-qwen2.5:14b}
-
-  anthropic:
-    api_key: ${ANTHROPIC_API_KEY}
-    model: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
-
-  openai:
-    api_key: ${OPENAI_API_KEY}
-    model: ${OPENAI_MODEL:-gpt-4o}
+# Cache settings
+cache:
+  enabled: true
+  ttl: 3600  # seconds
 
 # Storage backend (auto-detected from STACK env var)
 # STACK=vm → queries VictoriaLogs
 # STACK=grafana (or unset) → queries Loki
-storage:
-  backend: ${STACK:-loki}
 
-loki:
-  url: ${LOKI_URL:-http://sib-loki:3100}
-
-victorialogs:
-  url: ${VICTORIALOGS_URL:-http://sib-victorialogs:9428}
+# Server settings
+server:
+  host: 0.0.0.0
+  port: 5000
 ```
 
 ### Cache Deduplication
@@ -169,7 +171,7 @@ When a `_FILE` variant is set, the service reads the key from that file at start
 
 ## Grafana Integration
 
-After installation, the **Events Explorer** dashboard gets an AI analysis panel:
+After installation, the **Events Explorer** dashboard gets a dedicated AI analysis tab:
 
 ![AI Analysis Dashboard](assets/images/ai-analysis-dashboard.png)
 
@@ -179,6 +181,22 @@ After installation, the **Events Explorer** dashboard gets an AI analysis panel:
 2. Click a row to select an event
 3. The bottom panel shows event details and an "Analyze with AI" link
 4. Click to get instant AI-powered analysis in a new tab
+
+### Analysis Results
+
+Each analysis shows the original alert alongside the obfuscated version sent to the AI, with full attack context:
+
+![AI Analysis with Obfuscation](assets/images/ai-analysis-obfuscation-and-alert.png)
+
+### Analysis API
+
+The API home page lists all endpoints and shows cached analysis count:
+
+![API Home Page](assets/images/ai-api-page.png)
+
+Browse all past analyses from the history view:
+
+![Analysis History](assets/images/ai-api-history.png)
 
 ### Supported Dashboards
 
