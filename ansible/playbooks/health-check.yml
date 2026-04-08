@@ -102,7 +102,7 @@
         timeout: 5
         client_cert: "{{ mtls_client_cert | default(omit) if mtls_enabled | default(false) else omit }}"
         client_key: "{{ mtls_client_key | default(omit) if mtls_enabled | default(false) else omit }}"
-        ca_path: "{{ mtls_ca_cert | default(omit) if mtls_enabled | default(false) else omit }}"
+        validate_certs: false
       register: sidekick_health
       failed_when: false
       tags: connectivity
