@@ -5,7 +5,7 @@
 # SIB Central Server Configuration
 # =============================================================================
 
-sib_server: "192.168.1.100"
+sib_server: "192.168.1.116"
 
 # Stack selection for fleet collectors: vm or grafana
 # vm = VictoriaLogs + VictoriaMetrics (default, uses vmagent + node_exporter)
@@ -106,6 +106,9 @@ collector_deployment: auto
 # =============================================================================
 # Common Settings
 # =============================================================================
+
+# Docker network name (must match the SIB server's network)
+docker_network: sib-network
 
 # Package manager (auto-detected, but can override)
 # package_manager: apt  # or yum, dnf
