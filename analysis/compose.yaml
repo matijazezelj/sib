@@ -1,5 +1,6 @@
 services:
   sib-analysis:
+    image: ghcr.io/matijazezelj/sib-analysis:latest
     build: .
     container_name: sib-analysis
     restart: unless-stopped

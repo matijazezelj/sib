@@ -10,9 +10,9 @@ This is a living roadmap. Priorities may shift based on feedback and community c
 - AI-powered alert analysis with obfuscation (Anthropic, OpenAI, Ollama)
 - mTLS support for encrypted fleet communication
 - Built-in backup/restore for storage volumes and config
+- Container images published to GHCR (`ghcr.io/matijazezelj/sib-analysis`, `sib-ansible`)
 
 ## Next
-- Publish container images for optional components
 - Add upgrade notes and versioned releases
 - Rule packs for common environments (cloud, K8s, web servers)
 
