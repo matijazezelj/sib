@@ -1,0 +1,166 @@
+# ==============================================
+# SIB Web Server Rule Pack
+# ==============================================
+# Detection rules for web server environments (Nginx, Apache, PHP-FPM).
+# These rules complement the baseline rules in custom_rules.yaml.
+#
+# To enable: add to rules_files in detection/config/falco.yaml:
+#   - /etc/falco/rules/webserver_rules.yaml
+# ==============================================
+
+# Macro: processes that should never spawn shells in production
+- macro: web_server_process
+  condition: >
+    proc.name in (nginx, apache2, httpd, apache, lighttpd,
+                  php, php-fpm, php7.4-fpm, php8.0-fpm, php8.1-fpm, php8.2-fpm,
+                  php8.3-fpm, uwsgi, gunicorn, unicorn, puma, passenger)
+
+# ---------------------------------------------
+# Webshell — Shell Spawned by Web Process (T1505.003)
+# ---------------------------------------------
+
+- rule: Shell Spawned by Web Server
+  desc: >
+    Detects a shell process spawned directly by a web server or PHP-FPM worker.
+    This is the primary webshell execution pattern: attacker uploads a file,
+    web server executes it, file spawns a shell.
+  condition: >
+    spawned_process and
+    web_server_process and
+    proc.pname in (nginx, apache2, httpd, apache, lighttpd,
+                   php, php-fpm, php7.4-fpm, php8.0-fpm, php8.1-fpm,
+                   php8.2-fpm, php8.3-fpm, uwsgi, gunicorn) and
+    proc.name in (sh, bash, dash, zsh, ash, ksh)
+  output: >
+    Shell spawned by web server process (webshell indicator)
+    (shell=%proc.name parent=%proc.pname command=%proc.cmdline
+     user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [webserver, mitre_persistence, T1505.003]
+
+# ---------------------------------------------
+# Web Process Spawning Reverse Shell Tools (T1059)
+# ---------------------------------------------
+
+- rule: Reverse Shell Tool Launched by Web Process
+  desc: >
+    Detects web server processes launching common reverse shell tools such as
+    netcat, ncat, socat, or Python network shells.
+  condition: >
+    spawned_process and
+    proc.pname in (nginx, apache2, httpd, apache, lighttpd,
+                   php, php-fpm, php7.4-fpm, php8.0-fpm, php8.1-fpm,
+                   php8.2-fpm, php8.3-fpm, uwsgi, gunicorn, sh, bash, dash) and
+    proc.name in (nc, ncat, netcat, socat, python, python3, perl, ruby, lua)
+  output: >
+    Reverse shell tool launched by web process
+    (tool=%proc.name parent=%proc.pname command=%proc.cmdline
+     user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [webserver, mitre_execution, T1059]
+
+# ---------------------------------------------
+# Web Process Writing Outside Webroot (T1505.003)
+# ---------------------------------------------
+
+- rule: Web Server Writing to Non-Webroot Path
+  desc: >
+    Detects a web server process writing files outside of typical webroot
+    directories. Legitimate web servers do not write to /tmp, /var/tmp,
+    /dev/shm, or system directories.
+  condition: >
+    open_write and
+    web_server_process and
+    (fd.name startswith "/tmp/" or
+     fd.name startswith "/var/tmp/" or
+     fd.name startswith "/dev/shm/" or
+     fd.name startswith "/run/" or
+     fd.name startswith "/etc/" or
+     fd.name startswith "/usr/bin/" or
+     fd.name startswith "/usr/sbin/" or
+     fd.name startswith "/bin/" or
+     fd.name startswith "/sbin/")
+  output: >
+    Web server process writing outside webroot
+    (command=%proc.cmdline file=%fd.name user=%user.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository)
+  priority: HIGH
+  tags: [webserver, mitre_persistence, T1505.003]
+
+# ---------------------------------------------
+# Web Process Downloading Payloads (T1105)
+# ---------------------------------------------
+
+- rule: Web Server Process Downloading File
+  desc: >
+    Detects a web server or its child processes using curl or wget to download
+    files — a common post-exploitation step to fetch additional payloads.
+  condition: >
+    spawned_process and
+    proc.pname in (nginx, apache2, httpd, apache, lighttpd,
+                   php, php-fpm, php7.4-fpm, php8.0-fpm, php8.1-fpm,
+                   php8.2-fpm, php8.3-fpm, uwsgi, gunicorn, sh, bash, dash) and
+    proc.name in (curl, wget, fetch, lwp-download)
+  output: >
+    Web process downloading payload
+    (command=%proc.cmdline parent=%proc.pname user=%user.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository)
+  priority: HIGH
+  tags: [webserver, mitre_command_and_control, T1105]
+
+# ---------------------------------------------
+# Sensitive File Read by Web Process (T1552)
+# ---------------------------------------------
+
+- rule: Web Process Reading Sensitive System File
+  desc: >
+    Detects a web server process reading system credential or configuration
+    files. Legitimate web processes should not access /etc/shadow, SSH keys,
+    or database configuration files outside their webroot.
+  condition: >
+    open_read and
+    web_server_process and
+    (fd.name = "/etc/shadow" or
+     fd.name = "/etc/passwd" or
+     fd.name contains "/.ssh/id_rsa" or
+     fd.name contains "/.ssh/id_ed25519" or
+     fd.name contains "/.aws/credentials" or
+     fd.name contains "/.kube/config" or
+     fd.name = "/etc/mysql/debian.cnf" or
+     fd.name contains "/mysql/my.cnf" or
+     fd.name contains "wp-config.php" or
+     fd.name contains ".env")
+  output: >
+    Web process accessing sensitive system file
+    (command=%proc.cmdline file=%fd.name user=%user.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository)
+  priority: HIGH
+  tags: [webserver, mitre_credential_access, T1552]
+
+# ---------------------------------------------
+# Log Tampering by Web Process (T1070.002)
+# ---------------------------------------------
+
+- rule: Web Server Log File Cleared
+  desc: >
+    Detects a process truncating or overwriting web server access logs, a
+    common anti-forensics technique after exploitation.
+  condition: >
+    open_write and
+    (fd.name contains "/var/log/nginx/" or
+     fd.name contains "/var/log/apache2/" or
+     fd.name contains "/var/log/httpd/" or
+     fd.name contains "/var/log/lighttpd/") and
+    proc.name not in (nginx, apache2, httpd, logrotate, rsyslog, syslog-ng)
+  output: >
+    Web server log file modified by unexpected process
+    (command=%proc.cmdline file=%fd.name user=%user.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository)
+  priority: HIGH
+  tags: [webserver, mitre_defense_evasion, T1070.002]

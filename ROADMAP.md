@@ -11,10 +11,8 @@ This is a living roadmap. Priorities may shift based on feedback and community c
 - mTLS support for encrypted fleet communication
 - Built-in backup/restore for storage volumes and config
 - Container images published to GHCR (`ghcr.io/matijazezelj/sib-analysis`, `sib-ansible`)
-
-## Next
-- Add upgrade notes and versioned releases
-- Rule packs for common environments (cloud, K8s, web servers)
+- Upgrade notes and CHANGELOG
+- Rule packs for cloud, Kubernetes, and web server environments
 
 ## 3–6 months
 - Dashboards for compliance views (e.g., CIS focus)

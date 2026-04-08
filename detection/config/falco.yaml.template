@@ -60,6 +60,10 @@ rules_files:
   - /etc/falco/rules/falco-incubating_rules.yaml
   - /etc/falco/rules/falco-sandbox_rules.yaml
   - /etc/falco/rules/custom_rules.yaml
+  # Optional rule packs — uncomment to enable:
+  # - /etc/falco/rules/cloud_rules.yaml      # AWS/GCP/Azure environments
+  # - /etc/falco/rules/k8s_rules.yaml        # Kubernetes environments
+  # - /etc/falco/rules/webserver_rules.yaml  # Nginx/Apache/PHP-FPM
 
 # Watch rules files for changes
 watch_config_files: true

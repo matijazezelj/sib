@@ -25,6 +25,7 @@ title: SIEM in a Box
 | [Sigma Rules](sigma-rules.md) | Convert community detection rules |
 | [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
 | [Security Hardening](security-hardening.md) | Production hardening checklist |
+| [Upgrade Guide](upgrade.md) | Upgrade notes and version history |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [FAQ](faq.md) | Common questions and answers |
 | [Kubernetes Deployment](https://github.com/matijazezelj/sib-k8s) | Run SIB on Kubernetes |

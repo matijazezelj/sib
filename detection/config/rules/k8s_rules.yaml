@@ -1,0 +1,146 @@
+# ==============================================
+# SIB Kubernetes Rule Pack
+# ==============================================
+# Detection rules for Kubernetes environments.
+# These rules complement the baseline rules in custom_rules.yaml.
+#
+# To enable: add to rules_files in detection/config/falco.yaml:
+#   - /etc/falco/rules/k8s_rules.yaml
+# ==============================================
+
+# ---------------------------------------------
+# Service Account Token Theft (T1552.001)
+# ---------------------------------------------
+
+- rule: Kubernetes Service Account Token Read
+  desc: >
+    Detects a process reading the Kubernetes service account token, which
+    grants API server access. An attacker who reads this token can impersonate
+    the pod's service account.
+  condition: >
+    open_read and
+    (fd.name = "/var/run/secrets/kubernetes.io/serviceaccount/token" or
+     fd.name contains "/secrets/kubernetes.io/serviceaccount/token")
+  output: >
+    Kubernetes service account token accessed
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository
+     file=%fd.name)
+  priority: WARNING
+  tags: [k8s, mitre_credential_access, T1552.001]
+
+# ---------------------------------------------
+# kubectl exec / Shell in Pod (T1609)
+# ---------------------------------------------
+
+- rule: Shell Spawned via kubectl exec
+  desc: >
+    Detects an interactive shell launched inside a container where the parent
+    chain includes kubectl or the container entrypoint is an interactive shell
+    (typical of 'kubectl exec -it ... -- sh/bash').
+  condition: >
+    spawned_process and
+    container.id != host and
+    proc.name in (sh, bash, zsh, ash, dash) and
+    proc.tty != 0 and
+    proc.pname in (sh, bash, zsh, ash, dash, runc, containerd-shim, pause)
+  output: >
+    Interactive shell opened inside container (possible kubectl exec)
+    (shell=%proc.name parent=%proc.pname user=%user.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository tty=%proc.tty)
+  priority: WARNING
+  tags: [k8s, mitre_execution, T1609]
+
+# ---------------------------------------------
+# Kubernetes API Direct Access (T1613)
+# ---------------------------------------------
+
+- rule: Direct Kubernetes API Server Access
+  desc: >
+    Detects processes making direct HTTP calls to the Kubernetes API server.
+    Legitimate access uses kubectl or client libraries; raw curl to the API
+    is unusual and may indicate lateral movement or privilege escalation.
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "kubernetes.default.svc" or
+     proc.cmdline contains "kubernetes.default" or
+     proc.cmdline contains ":6443" or
+     proc.cmdline contains ":8443") and
+    proc.name in (curl, wget, python, python3, ruby, perl)
+  output: >
+    Direct Kubernetes API access detected
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: HIGH
+  tags: [k8s, mitre_discovery, T1613]
+
+# ---------------------------------------------
+# Privileged Operations in K8s Pod (T1611)
+# ---------------------------------------------
+
+- rule: Sensitive Host Path Accessed from Pod
+  desc: >
+    Detects a container reading sensitive host-level paths that should not be
+    accessible from inside a pod. Indicates a hostPath volume misconfiguration
+    or container escape.
+  condition: >
+    open_read and
+    container.id != host and
+    (fd.name = "/etc/kubernetes/admin.conf" or
+     fd.name contains "/etc/kubernetes/pki/" or
+     fd.name = "/var/lib/kubelet/config.yaml" or
+     fd.name contains "/var/lib/kubelet/pki/" or
+     fd.name = "/run/containerd/containerd.sock" or
+     fd.name = "/run/crio/crio.sock")
+  output: >
+    Sensitive Kubernetes host path accessed from container
+    (command=%proc.cmdline user=%user.name file=%fd.name
+     container_id=%container.id container_name=%container.name
+     image=%container.image.repository)
+  priority: CRITICAL
+  tags: [k8s, mitre_privilege_escalation, T1611]
+
+# ---------------------------------------------
+# Crypto Wallet / K8s Resource Abuse (T1496)
+# ---------------------------------------------
+
+- rule: Kubernetes Namespace or Resource Enumeration
+  desc: >
+    Detects enumeration of Kubernetes namespaces, pods, secrets, or RBAC
+    resources — common during post-exploitation discovery in K8s environments.
+  condition: >
+    spawned_process and
+    proc.name = "kubectl" and
+    (proc.cmdline contains "get secrets" or
+     proc.cmdline contains "get serviceaccounts" or
+     proc.cmdline contains "get clusterrolebindings" or
+     proc.cmdline contains "get rolebindings" or
+     proc.cmdline contains "auth can-i" or
+     proc.cmdline contains "get nodes" or
+     proc.cmdline contains "get namespaces")
+  output: >
+    Kubernetes resource enumeration via kubectl
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: WARNING
+  tags: [k8s, mitre_discovery, T1613]
+
+# ---------------------------------------------
+# Escape via nsenter / chroot (T1611)
+# ---------------------------------------------
+
+- rule: Container Namespace Escape Attempt
+  desc: >
+    Detects use of nsenter, chroot, or unshare from within a container,
+    which are common techniques for breaking out of container namespaces.
+  condition: >
+    spawned_process and
+    container.id != host and
+    proc.name in (nsenter, chroot, unshare)
+  output: >
+    Container namespace escape tool executed
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: CRITICAL
+  tags: [k8s, container, mitre_privilege_escalation, T1611]

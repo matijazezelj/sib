@@ -1,0 +1,150 @@
+# ==============================================
+# SIB Cloud Rule Pack
+# ==============================================
+# Detection rules for cloud environments (AWS, GCP, Azure).
+# These rules complement the baseline rules in custom_rules.yaml.
+#
+# To enable: add to rules_files in detection/config/falco.yaml:
+#   - /etc/falco/rules/cloud_rules.yaml
+# ==============================================
+
+# ---------------------------------------------
+# AWS IMDS Network Detection (T1552.005)
+# ---------------------------------------------
+
+- rule: AWS IMDS Network Access
+  desc: >
+    Detects a process making a network connection to the AWS Instance Metadata
+    Service (169.254.169.254). Attackers use IMDS to steal IAM credentials.
+    Complements the cmdline-based Cloud Metadata Access rule.
+  condition: >
+    outbound and
+    fd.rip = "169.254.169.254"
+  output: >
+    AWS IMDS network access detected
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository
+     fd.name=%fd.name)
+  priority: WARNING
+  tags: [cloud, aws, mitre_credential_access, T1552.005]
+
+# ---------------------------------------------
+# AWS Credential Exfiltration (T1552.001)
+# ---------------------------------------------
+
+- rule: AWS Credentials Copied or Exfiltrated
+  desc: >
+    Detects commands that read AWS credentials and pipe or redirect them —
+    a common exfiltration pattern after IMDS or file-based credential theft.
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "aws sts" or
+     proc.cmdline contains "aws iam" or
+     proc.cmdline contains "aws configure" or
+     proc.cmdline contains "aws s3 cp" or
+     proc.cmdline contains "aws s3 sync") and
+    (proc.cmdline contains "curl" or
+     proc.cmdline contains "wget" or
+     proc.cmdline contains ">>" or
+     proc.cmdline contains "| nc" or
+     proc.cmdline contains "| ncat")
+  output: >
+    Potential AWS credential exfiltration
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: HIGH
+  tags: [cloud, aws, mitre_exfiltration, T1552.001]
+
+# ---------------------------------------------
+# Cloud Storage Data Exfiltration (T1537)
+# ---------------------------------------------
+
+- rule: Cloud Storage Bulk Download
+  desc: >
+    Detects bulk data downloads from cloud storage — a common data exfiltration
+    technique after credential compromise.
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "aws s3 sync" or
+     proc.cmdline contains "aws s3 cp --recursive" or
+     proc.cmdline contains "gsutil -m cp" or
+     proc.cmdline contains "gsutil rsync" or
+     proc.cmdline contains "azcopy sync" or
+     proc.cmdline contains "az storage blob download-batch")
+  output: >
+    Cloud storage bulk download detected
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: WARNING
+  tags: [cloud, mitre_exfiltration, T1537]
+
+# ---------------------------------------------
+# Cloud CLI Reconnaissance (T1526)
+# ---------------------------------------------
+
+- rule: Cloud Service Enumeration
+  desc: >
+    Detects cloud CLI enumeration of IAM roles, EC2 instances, secrets, or
+    resource policies — commonly used during post-exploitation discovery.
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "aws iam list" or
+     proc.cmdline contains "aws iam get-" or
+     proc.cmdline contains "aws ec2 describe" or
+     proc.cmdline contains "aws secretsmanager list" or
+     proc.cmdline contains "aws secretsmanager get-secret" or
+     proc.cmdline contains "gcloud iam list" or
+     proc.cmdline contains "gcloud projects list" or
+     proc.cmdline contains "az role assignment list" or
+     proc.cmdline contains "az keyvault secret list")
+  output: >
+    Cloud service enumeration detected
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: WARNING
+  tags: [cloud, mitre_discovery, T1526]
+
+# ---------------------------------------------
+# Secrets Manager Access (T1552.001)
+# ---------------------------------------------
+
+- rule: Cloud Secrets Manager Access
+  desc: >
+    Detects direct access to cloud secrets management services. While legitimate
+    in CI/CD, this is also a key target after credential compromise.
+  condition: >
+    spawned_process and
+    (proc.cmdline contains "aws secretsmanager get-secret-value" or
+     proc.cmdline contains "aws ssm get-parameter" or
+     proc.cmdline contains "gcloud secrets versions access" or
+     proc.cmdline contains "az keyvault secret show" or
+     proc.cmdline contains "vault kv get" or
+     proc.cmdline contains "vault read secret")
+  output: >
+    Cloud secrets manager accessed
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: WARNING
+  tags: [cloud, mitre_credential_access, T1552.001]
+
+# ---------------------------------------------
+# Container Image Tampering (T1525)
+# ---------------------------------------------
+
+- rule: Container Registry Login from Running Container
+  desc: >
+    Detects a running container authenticating to a container registry, which
+    may indicate an attacker attempting to pull tools or push backdoored images.
+  condition: >
+    spawned_process and
+    container.id != host and
+    (proc.cmdline contains "docker login" or
+     proc.cmdline contains "crane auth login" or
+     proc.cmdline contains "skopeo login" or
+     proc.cmdline contains "podman login")
+  output: >
+    Container registry login from within container
+    (command=%proc.cmdline user=%user.name container_id=%container.id
+     container_name=%container.name image=%container.image.repository)
+  priority: HIGH
+  tags: [cloud, container, mitre_persistence, T1525]
