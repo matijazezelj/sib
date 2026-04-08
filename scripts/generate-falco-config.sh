@@ -38,35 +38,20 @@ detect_driver() {
         return
     fi
 
-    # modern_ebpf uses CO-RE and is embedded in Falco — no kernel headers needed.
-    # It works on bare metal with kernel >= 5.8, but some hypervisors (KVM, Xen, etc.)
-    # restrict BPF program loading, causing scap_init failures at runtime.
-    # For VMs we fall back to the legacy ebpf driver (pre-compiled probe).
-    local virt="none"
-    if command -v systemd-detect-virt >/dev/null 2>&1; then
-        virt=$(systemd-detect-virt 2>/dev/null || echo "none")
-    elif grep -qi "hypervisor" /proc/cpuinfo 2>/dev/null; then
-        virt="hypervisor"
+    # modern_ebpf uses CO-RE (Compile Once, Run Everywhere) and is embedded in
+    # Falco — no kernel headers or pre-compiled probes needed. Works on kernel
+    # >= 5.8 including VMs (KVM, VMware, etc.). The legacy ebpf driver requires
+    # a pre-compiled probe file that may not be available in the container.
+    local kernel_version
+    kernel_version=$(uname -r 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+' || echo "0.0")
+    local major minor
+    major=$(echo "$kernel_version" | cut -d. -f1)
+    minor=$(echo "$kernel_version" | cut -d. -f2)
+    if [ "$major" -gt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -ge 8 ]; }; then
+        echo "modern_ebpf"
+    else
+        echo "ebpf"
     fi
-
-    case "$virt" in
-        kvm|vmware|xen|microsoft|oracle|parallels|bhyve|qemu|hypervisor)
-            echo "ebpf"
-            ;;
-        *)
-            # Bare metal: use modern_ebpf on kernel >= 5.8
-            local kernel_version
-            kernel_version=$(uname -r 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+' || echo "0.0")
-            local major minor
-            major=$(echo "$kernel_version" | cut -d. -f1)
-            minor=$(echo "$kernel_version" | cut -d. -f2)
-            if [ "$major" -gt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -ge 8 ]; }; then
-                echo "modern_ebpf"
-            else
-                echo "ebpf"
-            fi
-            ;;
-    esac
 }
 
 # -----------------------------------------------

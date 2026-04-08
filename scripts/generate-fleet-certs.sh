@@ -54,44 +54,58 @@ get_fleet_hosts() {
     fi
 
     # Parse YAML to get hostnames under fleet.hosts
-    # Using grep/sed as a lightweight alternative to requiring yq
+    # Supports both flat (fleet: at root) and nested (all.children.fleet:) inventory formats
     local IN_FLEET=false
     local IN_HOSTS=false
-    local found_hosts=()
+    local FLEET_INDENT=""
+    local HOSTS=()
 
     while IFS= read -r line; do
-        # Check if we're in the fleet section
-        if echo "$line" | grep -q "^fleet:"; then
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # Detect fleet section at any indentation level
+        if echo "$line" | grep -qE '^[[:space:]]*fleet:'; then
             IN_FLEET=true
+            FLEET_INDENT=$(echo "$line" | sed 's/fleet:.*//' )
             continue
         fi
 
-        # Check if we've left fleet section (another top-level key)
-        if $IN_FLEET && echo "$line" | grep -qE "^[a-z]+:" && ! echo "$line" | grep -q "^  "; then
-            IN_FLEET=false
+        if ! $IN_FLEET; then
+            continue
         fi
 
-        # Check if we're in hosts subsection
-        if $IN_FLEET && echo "$line" | grep -q "^  hosts:"; then
+        # Check if we've left fleet section (same or lesser indentation, non-empty)
+        local line_indent=$(echo "$line" | sed 's/[^ ].*//')
+        if [ ${#line_indent} -le ${#FLEET_INDENT} ] && echo "$line" | grep -qE '[a-zA-Z]'; then
+            IN_FLEET=false
+            IN_HOSTS=false
+            continue
+        fi
+
+        # Detect hosts: subsection within fleet
+        if echo "$line" | grep -qE '^[[:space:]]*hosts:'; then
             IN_HOSTS=true
             continue
         fi
 
-        # Check if we've left hosts section
-        if $IN_HOSTS && echo "$line" | grep -qE "^  [a-z]+:" && ! echo "$line" | grep -q "^    "; then
+        # Detect leaving hosts section (sibling key like vars:)
+        if $IN_HOSTS && echo "$line" | grep -qE "^${FLEET_INDENT}  [a-z]+:" && ! echo "$line" | grep -qE "^${FLEET_INDENT}    "; then
             IN_HOSTS=false
+            continue
         fi
 
-        # Extract hostname (lines like "    hostname:")
-        if $IN_FLEET && $IN_HOSTS; then
-            local hostname; hostname=$(echo "$line" | grep -oP "^    [a-zA-Z0-9_-]+(?=:)" | sed 's/^    //')
-            if [ -n "$hostname" ]; then
-                found_hosts+=("$hostname")
+        # Extract hostname (first key under hosts with expected indentation)
+        if $IN_HOSTS; then
+            local hostname=$(echo "$line" | grep -oP '^\s+\K[a-zA-Z0-9_-]+(?=:)' | head -1)
+            # Skip known sub-keys (ansible_host, host_labels, etc.)
+            if [ -n "$hostname" ] && ! echo "$hostname" | grep -qE '^(ansible_|host_labels|role|environment)'; then
+                HOSTS+=("$hostname")
             fi
         fi
     done < "${INVENTORY_FILE}"
 
-    echo "${found_hosts[@]}"
+    echo "${HOSTS[@]}"
 }
 
 main() {
