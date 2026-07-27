@@ -81,7 +81,7 @@
           "links": [
             {
               "title": "🤖 Analyze with AI",
-              "url": "http://ANALYSIS_HOST:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+              "url": "http://ANALYSIS_HOST:ANALYSIS_PORT/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}&token=ANALYSIS_TOKEN",
               "targetBlank": true
             }
           ]
@@ -95,7 +95,7 @@
                 "value": [
                   {
                     "title": "🤖 Analyze with AI",
-                    "url": "http://ANALYSIS_HOST:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+                    "url": "http://ANALYSIS_HOST:ANALYSIS_PORT/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}&token=ANALYSIS_TOKEN",
                     "targetBlank": true
                   }
                 ]
@@ -167,7 +167,7 @@
                 "value": [
                   {
                     "title": "🤖 Analyze with AI",
-                    "url": "http://ANALYSIS_HOST:5000/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}",
+                    "url": "http://ANALYSIS_HOST:ANALYSIS_PORT/analyze?output=${__value.raw}&rule=${__data.fields.rule}&priority=${__data.fields.priority}&hostname=${__data.fields.hostname}&token=ANALYSIS_TOKEN",
                     "targetBlank": true
                   }
                 ]

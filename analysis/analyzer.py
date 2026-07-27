@@ -581,8 +581,23 @@ def load_config(config_path: Optional[str] = None) -> dict:
 
 def print_analysis(result: dict, verbose: bool = False):
     """Pretty print analysis results."""
+    # A dry run has no 'analysis' key — show the obfuscated prompt instead, which
+    # is the whole point of the mode.
+    if 'obfuscated_prompt' in result:
+        print("\n" + "="*70)
+        print("🔐 DRY RUN - EXACTLY WHAT WOULD BE SENT TO THE LLM")
+        print("="*70)
+        print(result['obfuscated_prompt'])
+        mapping = result.get('obfuscation_mapping', {})
+        if any(v for v in mapping.values()):
+            print("\n" + "-"*70)
+            print("Obfuscation mapping (stays local, never sent):")
+            print(json.dumps(mapping, indent=2))
+        print("\n" + "="*70)
+        return
+
     analysis = result.get('analysis', {})
-    
+
     if 'error' in analysis:
         print(f"\n❌ Analysis Error: {analysis['error']}")
         if 'fallback_mitre' in analysis and analysis['fallback_mitre']:

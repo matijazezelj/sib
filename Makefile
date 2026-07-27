@@ -72,7 +72,9 @@ install: network ## Install all security stacks
 		echo "$(YELLOW)! No .env file found. Creating from .env.example...$(RESET)"; \
 		cp .env.example .env; \
 	fi
-	@if grep -q "CHANGE_ME" .env 2>/dev/null || grep -q "GRAFANA_ADMIN_PASSWORD=$$" .env 2>/dev/null; then \
+	@# Anchor to the assignment: an unanchored CHANGE_ME match also hits comment
+	@# lines, which silently rotated the admin password on every install.
+	@if grep -q "^GRAFANA_ADMIN_PASSWORD=\(CHANGE_ME\)\?$$" .env 2>/dev/null; then \
 		GRAFANA_PASS=$$(openssl rand -base64 16 | tr -d '/+='); \
 		if [ "$$(uname)" = "Darwin" ]; then \
 			sed -i '' "s/GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=$$GRAFANA_PASS/" .env; \
@@ -125,6 +127,8 @@ install-detection: network ## Install Falco detection stack
 		./scripts/generate-falco-config.sh; \
 	fi
 	@cd detection && $(DOCKER_COMPOSE) up -d
+	@# falco.yaml is a bind mount; same reload caveat as Falcosidekick above.
+	@cd detection && $(DOCKER_COMPOSE) restart falco >/dev/null 2>&1 || true
 	@echo "$(GREEN)✓ Detection stack installed$(RESET)"
 
 install-alerting: network ## Install Falcosidekick alerting stack
@@ -136,6 +140,9 @@ install-alerting: network ## Install Falcosidekick alerting stack
 	fi; \
 	STACK=$${STACK:-vm} MTLS_ENABLED=$${MTLS_ENABLED:-false} ./scripts/generate-sidekick-config.sh
 	@cd alerting && $(DOCKER_COMPOSE) up -d
+	@# config.yaml is a bind mount, so 'up -d' does not notice content changes.
+	@# Falcosidekick reads it once at startup — restart or new outputs never load.
+	@cd alerting && $(DOCKER_COMPOSE) restart sidekick >/dev/null 2>&1 || true
 	@echo "$(GREEN)✓ Alerting stack installed$(RESET)"
 
 install-storage-grafana: network ## Install Loki + Prometheus storage stack (Grafana ecosystem)
@@ -157,16 +164,37 @@ install-grafana: network ## Install Grafana dashboard
 	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		cp grafana/provisioning/datasources/templates/datasources-vm.yml grafana/provisioning/datasources/datasources.yml; \
+		cp grafana/provisioning/dashboards/templates/dashboards-vm.yml grafana/provisioning/dashboards/dashboards.yml; \
+		[ -f grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json ] || \
+			cp grafana/provisioning/dashboards/templates/events-explorer-victorialogs.json grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json; \
 		echo "$(GREEN)✓ Datasources: VictoriaLogs + VictoriaMetrics$(RESET)"; \
-		docker restart sib-grafana >/dev/null 2>&1 || true; \
+		echo "$(GREEN)✓ Dashboards: VictoriaLogs set$(RESET)"; \
 	else \
 		cp grafana/provisioning/datasources/templates/datasources-grafana.yml grafana/provisioning/datasources/datasources.yml; \
+		cp grafana/provisioning/dashboards/templates/dashboards-grafana.yml grafana/provisioning/dashboards/dashboards.yml; \
+		[ -f grafana/provisioning/dashboards/loki/events-explorer.json ] || \
+			cp grafana/provisioning/dashboards/templates/events-explorer-loki.json grafana/provisioning/dashboards/loki/events-explorer.json; \
 		echo "$(GREEN)✓ Datasources: Loki + Prometheus$(RESET)"; \
-		docker restart sib-grafana >/dev/null 2>&1 || true; \
-	fi
+		echo "$(GREEN)✓ Dashboards: Loki set$(RESET)"; \
+	fi; \
+	docker restart sib-grafana >/dev/null 2>&1 || true
 
 install-analysis: network ## Install AI Analysis API service
 	@echo "$(CYAN)🤖 Installing AI Analysis API...$(RESET)"
+	@# Generate an API token if unset — the API triggers billed LLM calls
+	@if [ ! -f .env ]; then cp .env.example .env; fi
+	@if ! grep -q "^ANALYSIS_API_TOKEN=" .env 2>/dev/null; then \
+		echo "ANALYSIS_API_TOKEN=CHANGE_ME" >> .env; \
+	fi
+	@if grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env 2>/dev/null; then \
+		TOKEN=$$(openssl rand -hex 24); \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			sed -i '' "s|^ANALYSIS_API_TOKEN=.*|ANALYSIS_API_TOKEN=$$TOKEN|" .env; \
+		else \
+			sed -i "s|^ANALYSIS_API_TOKEN=.*|ANALYSIS_API_TOKEN=$$TOKEN|" .env; \
+		fi; \
+		echo "$(GREEN)🔐 Generated Analysis API token (saved in .env)$(RESET)"; \
+	fi
 	@# Auto-detect server IP (override with ANALYSIS_HOST= or in .env)
 	@if [ -n "$(ANALYSIS_HOST)" ]; then \
 		host="$(ANALYSIS_HOST)"; \
@@ -184,10 +212,10 @@ install-analysis: network ## Install AI Analysis API service
 	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		echo "$(CYAN)Using VictoriaLogs Events Explorer dashboard...$(RESET)"; \
-		sed "s|ANALYSIS_HOST|$$host|g" analysis/events-explorer-ai-victorialogs.json > grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json; \
+		sed -e "s|ANALYSIS_HOST|$$host|g" -e "s|ANALYSIS_PORT|$${ANALYSIS_PORT:-5000}|g" -e "s|ANALYSIS_TOKEN|$$ANALYSIS_API_TOKEN|g" analysis/events-explorer-ai-victorialogs.json > grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json; \
 	else \
 		echo "$(CYAN)Using Loki Events Explorer dashboard...$(RESET)"; \
-		sed "s|ANALYSIS_HOST|$$host|g" analysis/events-explorer-ai.json > grafana/provisioning/dashboards/loki/events-explorer.json; \
+		sed -e "s|ANALYSIS_HOST|$$host|g" -e "s|ANALYSIS_PORT|$${ANALYSIS_PORT:-5000}|g" -e "s|ANALYSIS_TOKEN|$$ANALYSIS_API_TOKEN|g" analysis/events-explorer-ai.json > grafana/provisioning/dashboards/loki/events-explorer.json; \
 	fi; \
 	cd analysis && $(DOCKER_COMPOSE) up -d --build
 	@echo "$(GREEN)✓ AI Analysis API installed$(RESET)"
@@ -198,7 +226,8 @@ install-analysis: network ## Install AI Analysis API service
 	fi
 	@echo ""
 	@echo "$(CYAN)AI Analysis is now available:$(RESET)"
-	@echo "  • API: $(YELLOW)http://localhost:5000$(RESET)"
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	echo "  • API: $(YELLOW)http://localhost:$${ANALYSIS_PORT:-5000}$(RESET)"
 	@echo "  • Dashboard: $(YELLOW)Events Explorer$(RESET) now has AI analysis links"
 
 # ==================== Start ====================
@@ -380,39 +409,50 @@ status: ## Show status of all stacks with health indicators
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-sidekick; then \
 		if [ "$${MTLS_ENABLED:-false}" = "true" ]; then \
-			health=$$(curl -sf --cacert certs/ca/ca.crt --cert certs/clients/local.crt --key certs/clients/local.key https://localhost:2801/healthz 2>/dev/null && echo "$(GREEN)✓ healthy (mTLS)$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+			health=$$(curl -sf -o /dev/null --cacert certs/ca/ca.crt --cert certs/clients/local.crt --key certs/clients/local.key https://localhost:2801/healthz 2>/dev/null && echo "$(GREEN)✓ healthy (mTLS)$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		else \
-			health=$$(curl -sf http://localhost:2801/healthz 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+			health=$$(curl -sf -o /dev/null http://localhost:2801/healthz 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		fi; \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "Falcosidekick" "running" "$$health"; \
 	else \
 		printf "  %-22s $(RED)%-12s$(RESET)\n" "Falcosidekick" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-loki; then \
-		health=$$(curl -sf http://localhost:3100/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-loki; then \
+		health=$$(curl -sf -o /dev/null http://localhost:3100/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "Loki" "running" "$$health"; \
+	elif [ "$${STACK:-vm}" = "vm" ]; then \
+		printf "  %-22s $(CYAN)%-12s$(RESET) %s\n" "Loki" "n/a" "(STACK=vm)"; \
 	else \
 		printf "  %-22s $(RED)%-12s$(RESET)\n" "Loki" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-victorialogs; then \
-		printf "  %-22s $(GREEN)%-12s$(RESET) %s\n" "VictoriaLogs" "running" "(optional)"; \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-victorialogs; then \
+		health=$$(curl -sf -o /dev/null http://localhost:$${VICTORIALOGS_PORT:-9428}/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "VictoriaLogs" "running" "$$health"; \
+	elif [ "$${STACK:-vm}" = "vm" ]; then \
+		printf "  %-22s $(RED)%-12s$(RESET)\n" "VictoriaLogs" "stopped"; \
 	else \
-		printf "  %-22s $(CYAN)%-12s$(RESET) %s\n" "VictoriaLogs" "not installed" "(optional)"; \
+		printf "  %-22s $(CYAN)%-12s$(RESET) %s\n" "VictoriaLogs" "n/a" "(STACK=grafana)"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-prometheus; then \
-		health=$$(curl -sf http://localhost:9090/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-prometheus; then \
+		health=$$(curl -sf -o /dev/null http://localhost:9090/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "Prometheus" "running" "$$health"; \
+	elif [ "$${STACK:-vm}" = "vm" ]; then \
+		printf "  %-22s $(CYAN)%-12s$(RESET) %s\n" "Prometheus" "n/a" "(STACK=vm)"; \
 	else \
 		printf "  %-22s $(RED)%-12s$(RESET)\n" "Prometheus" "stopped"; \
 	fi
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-grafana; then \
-		health=$$(curl -sf http://localhost:3000/api/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		health=$$(curl -sf -o /dev/null http://localhost:3000/api/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "Grafana" "running" "$$health"; \
 	else \
 		printf "  %-22s $(RED)%-12s$(RESET)\n" "Grafana" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
-		health=$$(curl -sf http://localhost:5000/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
+		health=$$(curl -sf -o /dev/null http://localhost:$${ANALYSIS_PORT:-5000}/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-22s $(GREEN)%-12s$(RESET) %b\n" "AI Analysis" "running" "$$health"; \
 	else \
 		printf "  %-22s $(CYAN)%-12s$(RESET) %s\n" "AI Analysis" "not installed" "(optional)"; \
@@ -454,8 +494,9 @@ health: ## Quick health check of all services
 	@curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Grafana is healthy" || echo "  $(RED)✗$(RESET) Grafana is not responding"
 	@echo ""
 	@echo "$(CYAN)AI Analysis (optional):$(RESET)"
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
-		curl -sf http://localhost:5000/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Analysis API is healthy" || echo "  $(RED)✗$(RESET) Analysis API is not responding"; \
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
+		curl -sf http://localhost:$${ANALYSIS_PORT:-5000}/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Analysis API is healthy" || echo "  $(RED)✗$(RESET) Analysis API is not responding"; \
 	else \
 		echo "  $(CYAN)-$(RESET) Not installed (run 'make install-analysis')"; \
 	fi
@@ -472,7 +513,8 @@ doctor: ## Diagnose common issues
 	@echo "$(CYAN)Checking configuration...$(RESET)"
 	@test -f .env && echo "  $(GREEN)✓$(RESET) .env file exists" || echo "  $(YELLOW)!$(RESET) .env file missing (copy from .env.example)"
 	@if [ -f .env ]; then \
-		grep -q "CHANGE_ME" .env && echo "  $(YELLOW)!$(RESET) Default password in use - please change" || echo "  $(GREEN)✓$(RESET) Password has been changed"; \
+		grep -q "^GRAFANA_ADMIN_PASSWORD=\(CHANGE_ME\)\?$$" .env && echo "  $(YELLOW)!$(RESET) Default password in use - please change" || echo "  $(GREEN)✓$(RESET) Password has been changed"; \
+		grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env && echo "  $(YELLOW)!$(RESET) Analysis API token not set - API is unauthenticated" || echo "  $(GREEN)✓$(RESET) Analysis API token is set"; \
 	fi
 	@echo ""
 	@echo "$(CYAN)Checking network...$(RESET)"
@@ -617,7 +659,7 @@ info: ## Show all endpoints and ports
 	echo "$(CYAN)Web Interfaces:$(RESET)"; \
 	echo "  Grafana:            $(YELLOW)http://localhost:3000$(RESET)"; \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q sib-analysis; then \
-		echo "  AI Analysis API:    $(YELLOW)http://localhost:5000$(RESET)"; \
+		echo "  AI Analysis API:    $(YELLOW)http://localhost:$${ANALYSIS_PORT:-5000}$(RESET)"; \
 	fi; \
 	echo ""; \
 	echo "$(CYAN)APIs:$(RESET)"; \

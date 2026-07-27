@@ -9,8 +9,11 @@ import os
 import re
 import sys
 import json
+import hmac
 import logging
 import hashlib
+from functools import wraps
+from urllib.parse import urlencode
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template_string
@@ -22,17 +25,80 @@ from typing import Optional
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from analyzer import AlertAnalyzer, load_config
+from analyzer import AlertAnalyzer, load_config, read_secret
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Allow Grafana to call API
+
+# Cross-origin access is off unless explicitly configured. The Grafana data link
+# is a plain navigation, not an XHR, so it needs no CORS grant.
+_cors_origins = [o.strip() for o in os.environ.get('ANALYSIS_CORS_ORIGINS', '').split(',') if o.strip()]
+if _cors_origins:
+    CORS(app, origins=_cors_origins)
 
 # Load config once at startup
 config = load_config()
+
+# ==================== Authentication ====================
+
+# Shared secret guarding every endpoint except /health. Analysis triggers billed
+# LLM calls, so an open endpoint is a way to drain someone's API budget.
+API_TOKEN = read_secret('ANALYSIS_API_TOKEN') or ''
+
+if not API_TOKEN:
+    logger.warning(
+        "ANALYSIS_API_TOKEN is not set — the analysis API is UNAUTHENTICATED. "
+        "Anyone who can reach this port can trigger billed LLM calls. "
+        "Set ANALYSIS_API_TOKEN in .env and re-run 'make install-analysis'."
+    )
+
+
+def _request_token() -> str:
+    """Extract the caller's token from the Authorization header or query string.
+
+    The query string is supported because Grafana data links open a plain browser
+    tab and cannot set headers.
+    """
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Bearer '):
+        return auth[7:].strip()
+    return request.args.get('token', '')
+
+
+def require_token(view):
+    """Reject requests without a valid token. No-op when no token is configured."""
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not API_TOKEN:
+            return view(*args, **kwargs)
+        if hmac.compare_digest(_request_token(), API_TOKEN):
+            return view(*args, **kwargs)
+        wants_html = 'text/html' in request.headers.get('Accept', '')
+        if wants_html:
+            body = (
+                "<h1>401 Unauthorized</h1><p>Missing or invalid API token. "
+                "Grafana data links must include <code>&amp;token=...</code>; "
+                "re-run <code>make install-analysis</code> to refresh them.</p>"
+            )
+            return body, 401
+        return jsonify({'error': 'Missing or invalid API token'}), 401
+    return wrapper
+
+
+def token_qs(prefix: str = '?') -> str:
+    """Query-string fragment that propagates the token to in-page links."""
+    if not API_TOKEN:
+        return ''
+    return prefix + urlencode({'token': API_TOKEN})
+
+
+@app.context_processor
+def inject_token_qs():
+    """Make {{ token_qs }} available to every rendered template."""
+    return {'token_qs': token_qs()}
 
 # Analysis cache directory
 CACHE_DIR = Path(os.environ.get('ANALYSIS_CACHE_DIR', '/app/cache'))
@@ -213,8 +279,8 @@ ANALYSIS_TEMPLATE = """
 <body>
     <div class="container">
         <div class="nav">
-            <a href="/" class="nav-link">← API Home</a>
-            <a href="/history" class="nav-link">📜 History</a>
+            <a href="/{{ token_qs }}" class="nav-link">← API Home</a>
+            <a href="/history{{ token_qs }}" class="nav-link">📜 History</a>
         </div>
         <h1>🛡️ SIB Alert Analysis {% if cached %}<span class="cached-badge">📋 Cached</span>{% endif %}</h1>
         
@@ -545,6 +611,7 @@ def health():
 
 
 @app.route('/api/health/all', methods=['GET'])
+@require_token
 def health_all():
     """Aggregate health check for all SIB services.
 
@@ -617,6 +684,7 @@ def health_all():
 
 
 @app.route('/api/analyze', methods=['POST'])
+@require_token
 def analyze_api():
     """
     API endpoint for analyzing an alert.
@@ -669,6 +737,7 @@ def analyze_api():
 
 
 @app.route('/analyze', methods=['GET'])
+@require_token
 def analyze_page():
     """
     Web page for analyzing an alert (called from Grafana data link).
@@ -791,16 +860,18 @@ def analyze_page():
 
 
 @app.route('/history', methods=['GET'])
+@require_token
 def history_page():
     """List all cached analyses."""
     analyses = list_cached_analyses(limit=100)
-    
+    tq = token_qs()
+
     rows = ""
     for a in analyses:
         severity = escape(a.get('severity', 'unknown'))
         severity_color = {'critical': '#f2495c', 'high': '#ff9830', 'medium': '#fade2a', 'low': '#73bf69'}.get(str(severity), '#8e8e8e')
         rows += f"""
-        <tr onclick="window.location='/history/{escape(a['cache_key'])}'" style="cursor: pointer;">
+        <tr onclick="window.location='/history/{escape(a['cache_key'])}{tq}'" style="cursor: pointer;">
             <td>{escape(a.get('timestamp', '')[:19])}</td>
             <td>{escape(a.get('rule', ''))}</td>
             <td>{escape(a.get('priority', ''))}</td>
@@ -826,7 +897,7 @@ def history_page():
         </style>
     </head>
     <body>
-        <div class="back"><a href="/">← Back to API</a></div>
+        <div class="back"><a href="/{tq}">← Back to API</a></div>
         <h1>📜 Analysis History</h1>
         <p>{len(analyses)} cached analyses</p>
         <table>
@@ -839,6 +910,7 @@ def history_page():
 
 
 @app.route('/history/<cache_key>', methods=['GET'])
+@require_token
 def history_detail(cache_key: str):
     """View a cached analysis."""
     cached = get_cached_analysis(cache_key)
@@ -865,6 +937,7 @@ def history_detail(cache_key: str):
 
 
 @app.route('/api/history', methods=['GET'])
+@require_token
 def api_history():
     """API endpoint to list cached analyses."""
     limit = request.args.get('limit', 50, type=int)
@@ -872,9 +945,19 @@ def api_history():
 
 
 @app.route('/', methods=['GET'])
+@require_token
 def index():
     """Home page with API documentation."""
     cached_count = len(list(CACHE_DIR.glob("*.json")))
+    tq = token_qs()
+    auth_note = (
+        "<p>🔐 All endpoints except <code>/health</code> require a token, passed as "
+        "<code>Authorization: Bearer &lt;token&gt;</code> or <code>?token=&lt;token&gt;</code>. "
+        "Find it in <code>ANALYSIS_API_TOKEN</code> in your <code>.env</code>.</p>"
+        if API_TOKEN else
+        "<p>⚠️ <strong>This API is unauthenticated.</strong> Set <code>ANALYSIS_API_TOKEN</code> "
+        "in <code>.env</code> and re-run <code>make install-analysis</code>.</p>"
+    )
     return f"""
     <!DOCTYPE html>
     <html>
@@ -895,13 +978,14 @@ def index():
     <body>
         <h1>🛡️ SIB Analysis API</h1>
         <p>AI-powered security alert analysis with privacy protection.</p>
-        
+        {auth_note}
+
         <div style="margin: 30px 0;">
             <div class="stat">
                 <div class="stat-value">{cached_count}</div>
                 <div class="stat-label">Cached Analyses</div>
             </div>
-            <a href="/history" style="background: #3274d9; color: white; padding: 15px 25px; border-radius: 8px; text-decoration: none;">📜 View History</a>
+            <a href="/history{tq}" style="background: #3274d9; color: white; padding: 15px 25px; border-radius: 8px; text-decoration: none;">📜 View History</a>
         </div>
         
         <h2>Endpoints</h2>
@@ -931,7 +1015,7 @@ def index():
         
         <h2>Grafana Integration</h2>
         <p>Add a data link to your log panels:</p>
-        <pre>http://{request.host}/analyze?output=${{__value.raw}}&amp;rule=${{__data.fields.rule}}&amp;priority=${{__data.fields.priority}}&amp;hostname=${{__data.fields.hostname}}</pre>
+        <pre>http://{request.host}/analyze?output=${{__value.raw}}&amp;rule=${{__data.fields.rule}}&amp;priority=${{__data.fields.priority}}&amp;hostname=${{__data.fields.hostname}}{escape(tq.replace('?', '&'))}</pre>
     </body>
     </html>
     """

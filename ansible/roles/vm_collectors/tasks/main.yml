@@ -93,7 +93,7 @@
 
     - name: Pull Vector image
       community.docker.docker_image:
-        name: "{{ vector_image | default('timberio/vector:latest-alpine') }}"
+        name: "{{ vector_image | default('timberio/vector:0.55.0-alpine') }}"
         source: pull
 
     - name: Run node_exporter container
@@ -135,7 +135,7 @@
     - name: Run Vector container
       community.docker.docker_container:
         name: sib-vector
-        image: "{{ vector_image | default('timberio/vector:latest-alpine') }}"
+        image: "{{ vector_image | default('timberio/vector:0.55.0-alpine') }}"
         state: started
         restart_policy: unless-stopped
         network_mode: host

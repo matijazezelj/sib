@@ -157,17 +157,24 @@ analysis:
 
 ### Via API
 
+All endpoints except `/health` require the token from `ANALYSIS_API_TOKEN` in `.env`,
+passed either as an `Authorization: Bearer` header or a `token=` query parameter.
+
 ```bash
+TOKEN=$(grep '^ANALYSIS_API_TOKEN=' ../.env | cut -d= -f2)
+
 # Analyze a specific event
-curl "http://localhost:5000/analyze?rule=Read%20sensitive%20file&output=user%3Droot%20file%3D/etc/shadow"
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5000/analyze?rule=Read%20sensitive%20file&output=user%3Droot%20file%3D/etc/shadow"
 
-# Dry run - see obfuscated data without calling LLM
-curl "http://localhost:5000/analyze?rule=Test&output=test&dry_run=true"
+# Dry run - see obfuscated data without calling the LLM (CLI only)
+docker exec sib-analysis python analyzer.py --dry-run --limit 1
 
-# JSON API
+# JSON API - note the alert text goes in "alert", not "output"
 curl -X POST http://localhost:5000/api/analyze \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"rule": "Read sensitive file", "output": "user=root file=/etc/shadow"}'
+  -d '{"rule": "Read sensitive file", "alert": "user=root file=/etc/shadow"}'
 ```
 
 ### Caching

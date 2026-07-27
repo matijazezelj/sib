@@ -24,7 +24,7 @@ json_include_output_property: true
 json_include_tags_property: true
 
 # Time format: iso8601 or rfc2822
-time_format_iso_8601: true
+time_format_iso_8601: __TIME_FORMAT_ISO_8601__
 
 # ---------------------------------------------
 # HTTP Output (to Falcosidekick)
@@ -43,7 +43,7 @@ http_output:
 
 # Minimum priority to output
 # Values: debug, info, informational, notice, warning, error, critical, alert, emergency
-priority: notice
+priority: __FALCO_PRIORITY__
 
 # ---------------------------------------------
 # Rules Configuration
@@ -68,7 +68,7 @@ watch_config_files: true
 # ---------------------------------------------
 
 # Buffer outputs for better performance
-buffered_outputs: true
+buffered_outputs: __FALCO_BUFFERED_OUTPUTS__
 
 # Output timeout in ms
 output_timeout: 2000

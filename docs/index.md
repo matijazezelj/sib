@@ -224,15 +224,15 @@ Got more than one server? SIB includes Ansible-based fleet management to deploy 
 
 ### Deployment Strategy
 
-SIB supports both **native packages** (default) and **Docker containers**:
+SIB supports both **Docker containers** and **native packages**:
 
 | Strategy | Description |
 |----------|-------------|
-| `native` (default) | Falco from repo + Alloy as systemd service. **Recommended for best visibility.** |
-| `docker` | Run agents as containers |
-| `auto` | Use Docker if available, otherwise native |
+| `auto` (default) | Use Docker if available, otherwise native |
+| `docker` | Run agents as containers. **Recommended for simplicity.** |
+| `native` | Falco from repo as a systemd service |
 
-**Why native is recommended:** Native deployment sees all host processes, while Docker-based Falco may miss events from processes outside its container namespace.
+> **Note:** VM stack collectors (Vector, vmagent, node_exporter) always run as Docker containers. The strategy setting primarily affects Falco deployment.
 
 > ⚠️ **LXC Limitation:** Falco cannot run in LXC containers due to kernel access restrictions. Use VMs or run Falco on the LXC host itself.
 
@@ -246,7 +246,7 @@ cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
 # Test connectivity
 make fleet-ping
 
-# Deploy agents to all hosts (native by default)
+# Deploy agents to all hosts (auto-detects Docker, falls back to native)
 make deploy-fleet
 
 # Or target specific hosts
@@ -302,13 +302,21 @@ Your sensitive data never leaves your network (unless you want it to). Before se
 
 | Provider | Where data goes | Best for |
 |----------|----------------|----------|
-| **Ollama** (default) | Your machine | Privacy-conscious users |
-| OpenAI | OpenAI API | Better quality |
-| Anthropic | Anthropic API | Claude fans |
+| **Anthropic** (default) | Anthropic API | Best analysis quality |
+| OpenAI | OpenAI API | Alternative hosted model |
+| Ollama | Your machine | Fully local, nothing leaves your network |
 
-The API also supports dry-run mode to preview obfuscated data:
+Set `LLM_PROVIDER` in `.env` to switch.
+
+The API requires a token (auto-generated into `.env` as `ANALYSIS_API_TOKEN`):
 ```bash
-curl "http://localhost:5000/analyze?rule=SomeRule&output=test&dry_run=true"
+curl -H "Authorization: Bearer $ANALYSIS_API_TOKEN" \
+  "http://localhost:5000/analyze?rule=SomeRule&output=test"
+```
+
+To preview what obfuscation sends to the LLM without spending tokens, use the CLI:
+```bash
+docker exec sib-analysis python analyzer.py --dry-run --limit 1
 ```
 
 ### Example Output

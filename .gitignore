@@ -48,6 +48,9 @@ grafana/provisioning/datasources/datasources.yml
 alerting/config/config.yaml
 detection/config/falco.yaml
 
+# User-managed Falcosidekick outputs (may contain webhook URLs/credentials)
+alerting/config/custom-outputs.yaml
+
 # Ansible inventory (contains real host IPs)
 ansible/inventory/hosts.yml
 
@@ -57,3 +60,8 @@ coverage/
 .ansible/
 analysis/__pycache__/
 **/__pycache__/
+grafana/provisioning/dashboards/dashboards.yml
+
+# Events Explorer is rendered at install time (embeds host + ANALYSIS_API_TOKEN)
+grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json
+grafana/provisioning/dashboards/loki/events-explorer.json
