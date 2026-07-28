@@ -1,8 +1,7 @@
 """Tests for the SIB obfuscator module."""
 
 import pytest
-from obfuscator import Obfuscator, ObfuscationLevel, ObfuscationMap, obfuscate_alert
-
+from obfuscator import ObfuscationLevel, ObfuscationMap, Obfuscator, obfuscate_alert
 
 # ---------------------------------------------------------------------------
 # ObfuscationMap
@@ -231,7 +230,7 @@ class TestEdgeCases:
 class TestObfuscateAlert:
     def test_output_field_obfuscated(self):
         alert = {"output": "user=attacker read /etc/shadow from 10.0.0.1", "rule": "Read sensitive file"}
-        obfuscated, mapping = obfuscate_alert(alert)
+        obfuscated, _mapping = obfuscate_alert(alert)
         assert "attacker" not in obfuscated["output"]
         assert "10.0.0.1" not in obfuscated["output"]
         assert obfuscated["rule"] == "Read sensitive file"
@@ -322,5 +321,5 @@ class TestFalcoAlertPatterns:
             "output": "Critical Mass file deletion detected (user=root command=rm -rf -- /var/lib/dpkg/tmp.ci container_id=host)",
             "rule": "Mass file deletion"
         }
-        obfuscated, mapping = obfuscate_alert(alert)
+        obfuscated, _mapping = obfuscate_alert(alert)
         assert obfuscated["output"] == alert["output"]

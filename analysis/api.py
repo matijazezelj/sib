@@ -5,22 +5,21 @@ SIB Analysis API - REST API for AI-powered alert analysis
 Provides endpoints for Grafana to trigger alert analysis via data links.
 """
 
+import hashlib
+import hmac
+import json
+import logging
 import os
 import re
 import sys
-import json
-import hmac
-import logging
-import hashlib
-from functools import wraps
-from urllib.parse import urlencode
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template_string
+from urllib.parse import urlencode
+
+from flask import Flask, jsonify, render_template_string, request
 from flask_cors import CORS
 from markupsafe import escape
-
-from typing import Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -105,7 +104,7 @@ CACHE_DIR = Path(os.environ.get('ANALYSIS_CACHE_DIR', '/app/cache'))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Cache TTL in seconds (default 24h). Entries older than this are re-analyzed.
-CACHE_TTL = int(os.environ.get('ANALYSIS_CACHE_TTL', 86400))
+CACHE_TTL = int(os.environ.get('ANALYSIS_CACHE_TTL', '86400'))
 
 # HTML template for analysis results page
 ANALYSIS_TEMPLATE = """
@@ -523,7 +522,7 @@ def get_cache_key(output: str, rule: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
-def get_cached_analysis(cache_key: str) -> Optional[dict]:
+def get_cached_analysis(cache_key: str) -> dict | None:
     """Retrieve cached analysis if it exists and hasn't expired.
     
     Returns None if cache entry is missing or older than CACHE_TTL.
@@ -532,7 +531,7 @@ def get_cached_analysis(cache_key: str) -> Optional[dict]:
     cache_file = CACHE_DIR / f"{cache_key}.json"
     if cache_file.exists():
         try:
-            with open(cache_file, 'r') as f:
+            with open(cache_file) as f:
                 data = json.load(f)
             # Check TTL
             cached_time = data.get('timestamp', '')
@@ -587,7 +586,7 @@ def list_cached_analyses(limit: int = 50) -> list:
     results = []
     for cache_file in cache_files[:limit]:
         try:
-            with open(cache_file, 'r') as f:
+            with open(cache_file) as f:
                 data = json.load(f)
                 results.append({
                     'cache_key': data.get('cache_key', cache_file.stem),
@@ -599,8 +598,8 @@ def list_cached_analyses(limit: int = 50) -> list:
                     'dedup_count': data.get('dedup_count', 1),
                     'last_seen': data.get('last_seen'),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Skipping unreadable cache file %s: %s", cache_file.name, e)
     return results
 
 

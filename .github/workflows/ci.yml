@@ -53,7 +53,9 @@ jobs:
 
       - name: Python lint (ruff)
         run: |
-          pip install ruff
+          # Pinned: an unpinned ruff means any upstream release can turn CI red
+          # without a code change. Bump deliberately, alongside ruff.toml.
+          pip install ruff==0.16.0
           ruff check analysis/
 
   test:

@@ -1,0 +1,46 @@
+# Ruff configuration for the analysis service.
+#
+# The rule set is pinned explicitly on purpose. Ruff's *default* selection
+# broadened in a release, which turned a previously green `ruff check` into 75
+# errors without a single line of code changing. CI installs ruff from PyPI, so
+# without this file the lint result depends on whenever the job happened to run.
+
+target-version = "py312"
+
+[lint]
+select = [
+    "E4",   # pycodestyle: imports
+    "E7",   # pycodestyle: statements
+    "E9",   # pycodestyle: runtime errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "DTZ",  # flake8-datetimez
+    "BLE",  # flake8-blind-except
+    "EXE",  # flake8-executable
+    "RUF",  # ruff-specific
+]
+
+ignore = [
+    # Broad `except Exception` is deliberate here. The analyzer degrades
+    # gracefully by design: a corrupt cache entry, an unreachable AIB instance,
+    # or a failing LLM provider must not take down alert analysis. Each site
+    # logs the exception and continues.
+    "BLE001",
+
+    # The module consistently uses naive local-time datetimes, and compares them
+    # only against other values it wrote itself, so it is internally consistent.
+    # The containers run UTC, which is what the log backends assume.
+    #
+    # Known limitation: an operator who sets TZ inside the analysis container
+    # would see stored analysis timestamps shifted by their UTC offset, because
+    # VictoriaLogs/Loki read a naive timestamp as UTC. Making the module
+    # timezone-aware end to end is the real fix and is worth doing separately —
+    # it changes stored timestamp values, so it does not belong in a lint pass.
+    "DTZ005",
+    "DTZ006",
+]
+
+[lint.per-file-ignores]
+# Tests construct throwaway values and assert on them directly.
+"tests/*" = ["S101"]
