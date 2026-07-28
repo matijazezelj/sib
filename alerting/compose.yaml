@@ -14,12 +14,17 @@ services:
     command: ["-c", "/etc/falcosidekick/config.yaml"]
     environment:
       - DEBUG=${SIDEKICK_DEBUG:-false}
+      - MINIMUMPRIORITY=${SIDEKICK_MINIMUM_PRIORITY:-notice}
       # mTLS configuration (optional - disabled by default)
       - WEBSERVER_SSL=${MTLS_ENABLED:-false}
       - WEBSERVER_CERTFILE=/certs/server/server.crt
       - WEBSERVER_KEYFILE=/certs/server/server.key
       - WEBSERVER_MUTUALTLS=${MTLS_ENABLED:-false}
       - WEBSERVER_CACERTFILE=/certs/ca/ca.crt
+      # Alert outputs (Slack, PagerDuty, ...) are rendered into config.yaml by
+      # scripts/generate-sidekick-config.sh. They are deliberately NOT passed as
+      # env vars: Falcosidekick lets env override the config file, so a
+      # set-but-empty var here would silently disable a configured output.
     networks:
       - sib-network
     healthcheck:

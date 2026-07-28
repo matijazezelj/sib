@@ -5,28 +5,26 @@ Fetches alerts from VictoriaLogs or Loki, obfuscates sensitive data, and uses LL
 to provide attack vector analysis and mitigation strategies.
 """
 
+import argparse
 import json
 import os
 import re
 import sys
-import argparse
-import requests
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
 
+import requests
 import yaml
-
 from obfuscator import obfuscate_alert
-from prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, MITRE_MAPPING
+from prompts import MITRE_MAPPING, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
 
 class LogClient:
     """Base class for log storage clients."""
 
-    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
+    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> list[dict]:
         raise NotImplementedError
 
-    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+    def push(self, labels: dict[str, str], log_line: str, timestamp: datetime | None = None) -> bool:
         raise NotImplementedError
 
 
@@ -36,7 +34,7 @@ class LokiClient(LogClient):
     def __init__(self, url: str = "http://localhost:3100"):
         self.url = url.rstrip('/')
     
-    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
+    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> list[dict]:
         """Query Loki for logs in a time range."""
         params = {
             'query': query,
@@ -66,7 +64,7 @@ class LokiClient(LogClient):
         
         return alerts
     
-    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+    def push(self, labels: dict[str, str], log_line: str, timestamp: datetime | None = None) -> bool:
         """Push a log entry to Loki."""
         if timestamp is None:
             timestamp = datetime.now()
@@ -103,7 +101,7 @@ class VictoriaLogsClient(LogClient):
     def __init__(self, url: str = "http://localhost:9428"):
         self.url = url.rstrip('/')
 
-    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> List[dict]:
+    def query_range(self, query: str, start: datetime, end: datetime, limit: int = 100) -> list[dict]:
         """Query VictoriaLogs for logs in a time range using LogsQL."""
         params = {
             'query': query,
@@ -143,7 +141,7 @@ class VictoriaLogsClient(LogClient):
 
         return alerts
 
-    def push(self, labels: Dict[str, str], log_line: str, timestamp: Optional[datetime] = None) -> bool:
+    def push(self, labels: dict[str, str], log_line: str, timestamp: datetime | None = None) -> bool:
         """Push a log entry to VictoriaLogs via JSON line protocol."""
         if timestamp is None:
             timestamp = datetime.now()
@@ -331,8 +329,8 @@ class AlertAnalyzer:
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
     
-    def fetch_alerts(self, priority: Optional[str] = None, 
-                     last: str = "1h", limit: int = 10) -> List[dict]:
+    def fetch_alerts(self, priority: str | None = None, 
+                     last: str = "1h", limit: int = 10) -> list[dict]:
         """Fetch alerts from the configured log storage backend."""
         # Parse time duration
         duration_map = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
@@ -467,7 +465,7 @@ class AlertAnalyzer:
             original.get('_timestamp')
         )
     
-    def analyze_batch(self, alerts: List[dict], dry_run: bool = False, store: bool = False) -> List[dict]:
+    def analyze_batch(self, alerts: list[dict], dry_run: bool = False, store: bool = False) -> list[dict]:
         """Analyze multiple alerts."""
         results = []
         backend_name = 'VictoriaLogs' if self.backend == 'victorialogs' else 'Loki'
@@ -486,7 +484,7 @@ class AlertAnalyzer:
         return results
 
 
-def read_secret(env_var: str) -> Optional[str]:
+def read_secret(env_var: str) -> str | None:
     """Read a secret from env var or Docker secret file.
 
     Supports the Docker Secrets convention: if {ENV_VAR}_FILE is set,
@@ -496,7 +494,7 @@ def read_secret(env_var: str) -> Optional[str]:
     file_path = os.environ.get(f"{env_var}_FILE")
     if file_path:
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 return f.read().strip()
         except OSError:
             pass
@@ -532,7 +530,7 @@ def expand_env_vars(obj):
     return obj
 
 
-def load_config(config_path: Optional[str] = None) -> dict:
+def load_config(config_path: str | None = None) -> dict:
     """Load configuration from file with environment variable expansion."""
     config = None
     
@@ -581,11 +579,26 @@ def load_config(config_path: Optional[str] = None) -> dict:
 
 def print_analysis(result: dict, verbose: bool = False):
     """Pretty print analysis results."""
+    # A dry run has no 'analysis' key — show the obfuscated prompt instead, which
+    # is the whole point of the mode.
+    if 'obfuscated_prompt' in result:
+        print("\n" + "="*70)
+        print("🔐 DRY RUN - EXACTLY WHAT WOULD BE SENT TO THE LLM")
+        print("="*70)
+        print(result['obfuscated_prompt'])
+        mapping = result.get('obfuscation_mapping', {})
+        if any(v for v in mapping.values()):
+            print("\n" + "-"*70)
+            print("Obfuscation mapping (stays local, never sent):")
+            print(json.dumps(mapping, indent=2))
+        print("\n" + "="*70)
+        return
+
     analysis = result.get('analysis', {})
-    
+
     if 'error' in analysis:
         print(f"\n❌ Analysis Error: {analysis['error']}")
-        if 'fallback_mitre' in analysis and analysis['fallback_mitre']:
+        if analysis.get('fallback_mitre'):
             print(f"   Fallback MITRE: {analysis['fallback_mitre']}")
         return
     

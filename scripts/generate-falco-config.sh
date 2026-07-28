@@ -17,6 +17,15 @@ ENV_FILE="${PROJECT_ROOT}/.env"
 MTLS_ENABLED="${MTLS_ENABLED:-false}"
 DRIVER_OVERRIDE=""
 
+# Output tunables from .env (exported by the Makefile before this runs)
+FALCO_PRIORITY="${FALCO_PRIORITY:-notice}"
+FALCO_BUFFERED_OUTPUTS="${FALCO_BUFFERED_OUTPUTS:-true}"
+# Falco takes a boolean, not a format name
+case "${FALCO_TIME_FORMAT:-iso8601}" in
+    rfc2822) TIME_FORMAT_ISO_8601="false" ;;
+    *)       TIME_FORMAT_ISO_8601="true" ;;
+esac
+
 for arg in "$@"; do
     case "$arg" in
         --mtls)         MTLS_ENABLED="true" ;;
@@ -103,7 +112,12 @@ update_env_driver() {
         return
     fi
     if grep -q "^FALCO_DRIVER_TYPE=" "$ENV_FILE"; then
-        sed -i "s|^FALCO_DRIVER_TYPE=.*|FALCO_DRIVER_TYPE=${driver}|" "$ENV_FILE"
+        # BSD sed (macOS) requires an argument to -i; GNU sed must not have one
+        if sed --version >/dev/null 2>&1; then
+            sed -i "s|^FALCO_DRIVER_TYPE=.*|FALCO_DRIVER_TYPE=${driver}|" "$ENV_FILE"
+        else
+            sed -i '' "s|^FALCO_DRIVER_TYPE=.*|FALCO_DRIVER_TYPE=${driver}|" "$ENV_FILE"
+        fi
     else
         echo "FALCO_DRIVER_TYPE=${driver}" >> "$ENV_FILE"
     fi
@@ -133,7 +147,10 @@ build_engine_config "$DRIVER" > "$ENGINE_TMP"
 #   3. Optionally append mTLS settings after user_agent line
 if [ "$MTLS_ENABLED" = "true" ]; then
     echo "  mTLS enabled — using HTTPS to Falcosidekick"
-    awk -v engine_file="$ENGINE_TMP" '
+    awk -v engine_file="$ENGINE_TMP" \
+        -v priority="$FALCO_PRIORITY" \
+        -v buffered="$FALCO_BUFFERED_OUTPUTS" \
+        -v iso8601="$TIME_FORMAT_ISO_8601" '
     /^__ENGINE_CONFIG__$/ {
         while ((getline line < engine_file) > 0) print line
         close(engine_file)
@@ -141,6 +158,9 @@ if [ "$MTLS_ENABLED" = "true" ]; then
     }
     {
         gsub(/__SIDEKICK_URL__/, "https://sib-sidekick:2801/")
+        gsub(/__FALCO_PRIORITY__/, priority)
+        gsub(/__FALCO_BUFFERED_OUTPUTS__/, buffered)
+        gsub(/__TIME_FORMAT_ISO_8601__/, iso8601)
         print
         if (/user_agent:.*falcosidekick/) {
             print "  insecure: false"
@@ -153,7 +173,10 @@ if [ "$MTLS_ENABLED" = "true" ]; then
     ' "$TEMPLATE" > "$OUTPUT"
     echo "  Generated Falco config with mTLS enabled (driver: ${DRIVER})"
 else
-    awk -v engine_file="$ENGINE_TMP" '
+    awk -v engine_file="$ENGINE_TMP" \
+        -v priority="$FALCO_PRIORITY" \
+        -v buffered="$FALCO_BUFFERED_OUTPUTS" \
+        -v iso8601="$TIME_FORMAT_ISO_8601" '
     /^__ENGINE_CONFIG__$/ {
         while ((getline line < engine_file) > 0) print line
         close(engine_file)
@@ -161,10 +184,13 @@ else
     }
     {
         gsub(/__SIDEKICK_URL__/, "http://sib-sidekick:2801/")
+        gsub(/__FALCO_PRIORITY__/, priority)
+        gsub(/__FALCO_BUFFERED_OUTPUTS__/, buffered)
+        gsub(/__TIME_FORMAT_ISO_8601__/, iso8601)
         print
     }
     ' "$TEMPLATE" > "$OUTPUT"
-    echo "  Generated Falco config (HTTP mode, driver: ${DRIVER})"
+    echo "  Generated Falco config (HTTP mode, driver: ${DRIVER}, priority: ${FALCO_PRIORITY})"
 fi
 
 rm -f "$ENGINE_TMP"

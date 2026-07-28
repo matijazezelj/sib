@@ -1,0 +1,45 @@
+# Custom Falcosidekick outputs
+#
+# Copy to custom-outputs.yaml to use it:
+#   cp alerting/config/custom-outputs.yaml.example alerting/config/custom-outputs.yaml
+#
+# This file is appended verbatim to the generated alerting/config/config.yaml and
+# is never overwritten by 'make install-alerting'. Use it for outputs that have no
+# .env setting — the common ones (Slack, Discord, PagerDuty, Opsgenie, Teams,
+# Elasticsearch) are configured in .env instead.
+#
+# Full list of supported outputs:
+# https://github.com/falcosecurity/falcosidekick#outputs
+#
+# Do not redefine a key that the generator already writes (loki, slack, debug,
+# minimumpriority, tlsserver, ...) — the duplicate will be rejected as invalid YAML.
+
+# Generic webhook
+# webhook:
+#   address: "https://example.com/falco-hook"
+#   customHeaders:
+#     Authorization: "Bearer YOUR_TOKEN"
+#   minimumpriority: "warning"
+
+# Mattermost
+# mattermost:
+#   webhookurl: "https://mattermost.example.com/hooks/XXX"
+#   minimumpriority: "warning"
+
+# SMTP (email)
+# smtp:
+#   hostport: "smtp.example.com:587"
+#   from: "falco@example.com"
+#   to: "security@example.com"
+#   user: "falco@example.com"
+#   password: "CHANGE_ME"
+#   minimumpriority: "critical"
+
+# AWS SNS
+# aws:
+#   region: "us-east-1"
+#   accesskeyid: "YOUR_KEY"
+#   secretaccesskey: "YOUR_SECRET"
+#   sns:
+#     topicarn: "arn:aws:sns:us-east-1:123456789012:falco"
+#     minimumpriority: "critical"

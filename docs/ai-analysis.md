@@ -54,9 +54,9 @@ Your sensitive data never leaves your network (unless you want it to). Before se
 
 ### Preview Obfuscation
 
-Use dry-run mode to see what gets sent:
+Use the CLI's dry-run mode to see what would be sent, without calling the LLM:
 ```bash
-curl "http://localhost:5000/analyze?rule=SomeRule&output=test&dry_run=true"
+docker exec sib-analysis python analyzer.py --dry-run --limit 1
 ```
 
 ---

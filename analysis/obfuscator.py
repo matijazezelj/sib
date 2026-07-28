@@ -5,11 +5,11 @@ Replaces sensitive information with consistent tokens while preserving
 the structure and relationships needed for security analysis.
 """
 
-import re
 import math
+import re
 from dataclasses import dataclass, field
-from typing import Dict, Set
 from enum import Enum
+from typing import ClassVar
 
 
 class ObfuscationLevel(Enum):
@@ -21,13 +21,13 @@ class ObfuscationLevel(Enum):
 @dataclass
 class ObfuscationMap:
     """Tracks obfuscated values for consistent replacement and potential de-obfuscation."""
-    ips: Dict[str, str] = field(default_factory=dict)
-    hostnames: Dict[str, str] = field(default_factory=dict)
-    users: Dict[str, str] = field(default_factory=dict)
-    containers: Dict[str, str] = field(default_factory=dict)
-    paths: Dict[str, str] = field(default_factory=dict)
-    emails: Dict[str, str] = field(default_factory=dict)
-    secrets: Set[str] = field(default_factory=set)
+    ips: dict[str, str] = field(default_factory=dict)
+    hostnames: dict[str, str] = field(default_factory=dict)
+    users: dict[str, str] = field(default_factory=dict)
+    containers: dict[str, str] = field(default_factory=dict)
+    paths: dict[str, str] = field(default_factory=dict)
+    emails: dict[str, str] = field(default_factory=dict)
+    secrets: set[str] = field(default_factory=set)
     
     def to_dict(self) -> dict:
         """Export mapping for potential de-obfuscation."""
@@ -46,7 +46,7 @@ class Obfuscator:
     """Obfuscates sensitive data in security alerts while preserving analytical value."""
     
     # RFC 1918 private IP ranges
-    PRIVATE_IP_RANGES = [
+    PRIVATE_IP_RANGES: ClassVar[list[tuple[int, int]]] = [
         (0x0A000000, 0x0AFFFFFF),  # 10.0.0.0/8
         (0xAC100000, 0xAC1FFFFF),  # 172.16.0.0/12
         (0xC0A80000, 0xC0A8FFFF),  # 192.168.0.0/16
@@ -55,7 +55,7 @@ class Obfuscator:
     
     # Patterns for sensitive data - based on TruffleHog detectors
     # https://github.com/trufflesecurity/trufflehog/tree/main/pkg/detectors
-    PATTERNS = {
+    PATTERNS: ClassVar[dict[str, str]] = {
         # Network identifiers
         'ipv4': r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b',
         'ipv6': r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b',
@@ -177,7 +177,7 @@ class Obfuscator:
     }
     
     # Secret type labels for redaction messages
-    SECRET_LABELS = {
+    SECRET_LABELS: ClassVar[dict[str, str]] = {
         'aws_access_key': 'AWS-KEY',
         'aws_secret_key': 'AWS-SECRET',
         'aws_session_token': 'AWS-SESSION',
@@ -242,10 +242,10 @@ class Obfuscator:
     }
     
     # System users that are safe to show
-    SYSTEM_USERS = {'root', 'nobody', 'daemon', 'www-data', 'nginx', 'postgres', 'mysql', 'redis'}
+    SYSTEM_USERS: ClassVar[set[str]] = {'root', 'nobody', 'daemon', 'www-data', 'nginx', 'postgres', 'mysql', 'redis'}
     
     # Sensitive files to always flag
-    SENSITIVE_PATHS = {
+    SENSITIVE_PATHS: ClassVar[set[str]] = {
         '/etc/shadow', '/etc/passwd', '/etc/sudoers', '/etc/ssh/',
         '/.ssh/', '/id_rsa', '/id_ed25519', '/.aws/credentials',
         '/.kube/config', '/secrets/', '/vault/', '/.env'
@@ -273,7 +273,7 @@ class Obfuscator:
         except (ValueError, IndexError):
             return False
     
-    def _get_token(self, category: str, original: str, mapping: Dict[str, str]) -> str:
+    def _get_token(self, category: str, original: str, mapping: dict[str, str]) -> str:
         """Get or create a consistent token for a value."""
         if original in mapping:
             return mapping[original]

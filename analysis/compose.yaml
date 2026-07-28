@@ -4,7 +4,7 @@ services:
     container_name: sib-analysis
     restart: unless-stopped
     ports:
-      - "${ANALYSIS_BIND:-127.0.0.1}:5000:5000"
+      - "${ANALYSIS_BIND:-127.0.0.1}:${ANALYSIS_PORT:-5000}:5000"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - analysis-cache:/app/cache
@@ -13,6 +13,10 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - STACK=${STACK:-vm}
+      # Shared secret required by every endpoint except /health
+      - ANALYSIS_API_TOKEN=${ANALYSIS_API_TOKEN:-}
+      # Comma-separated origins allowed to call the API cross-origin (default: none)
+      - ANALYSIS_CORS_ORIGINS=${ANALYSIS_CORS_ORIGINS:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}

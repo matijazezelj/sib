@@ -12,11 +12,11 @@ Asset node ID format: source:type:identifier
   - tf:vm:hostname
 """
 
-import time
 import logging
-import requests
+import time
 from urllib.parse import quote
-from typing import Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class AIBClient:
     """Client for the AIB REST API with TTL caching."""
 
-    def __init__(self, base_url: str, api_token: Optional[str] = None,
+    def __init__(self, base_url: str, api_token: str | None = None,
                  ttl: int = 300, timeout: int = 5):
         self.base_url = base_url.rstrip('/')
         self.api_token = api_token
@@ -38,7 +38,7 @@ class AIBClient:
             h['Authorization'] = f'Bearer {self.api_token}'
         return h
 
-    def _get(self, path: str) -> Optional[dict]:
+    def _get(self, path: str) -> dict | None:
         """Cached GET. Returns None on any error (including 404)."""
         now = time.monotonic()
         if path in self._cache:
@@ -63,10 +63,10 @@ class AIBClient:
             logger.debug("AIB request failed %s: %s", path, e)
             return None
 
-    def get_node(self, node_id: str) -> Optional[dict]:
+    def get_node(self, node_id: str) -> dict | None:
         return self._get(f"/api/v1/graph/nodes/{node_id}")
 
-    def get_blast_radius(self, node_id: str) -> Optional[dict]:
+    def get_blast_radius(self, node_id: str) -> dict | None:
         return self._get(f"/api/v1/impact/{node_id}")
 
     def get_audit_findings(self, node_id: str) -> list:
@@ -77,7 +77,7 @@ class AIBClient:
             return data.get('findings') or data.get('results') or []
         return []
 
-    def resolve_node(self, hostname: str) -> Optional[dict]:
+    def resolve_node(self, hostname: str) -> dict | None:
         """Find a node by hostname, regardless of IaC source prefix.
 
         Calls GET /api/v1/graph/nodes/resolve?hostname=<hostname>, which

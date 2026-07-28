@@ -1,0 +1,21 @@
+# ==============================================
+# Grafana Dashboard Provisioning for SIB
+# ==============================================
+# AUTO-GENERATED from templates/ by 'make install-grafana' — DO NOT EDIT.
+# Only the active STACK's dashboards are provisioned; the other set references
+# a datasource that is not installed and would render as broken panels.
+# ==============================================
+
+apiVersion: 1
+
+providers:
+  - name: 'SIB Dashboards (Loki)'
+    orgId: 1
+    folder: 'SIEM in a Box / Loki'
+    folderUid: 'sib-loki'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/loki

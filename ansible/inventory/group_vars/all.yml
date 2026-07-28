@@ -61,9 +61,12 @@ falco_outputs:
 # mTLS Configuration (Fleet Security)
 # =============================================================================
 
-# Enable mutual TLS for encrypted communication between fleet and server
-# Requires certificates: run 'make generate-certs' and 'make generate-fleet-certs'
-mtls_enabled: true
+# Enable mutual TLS for encrypted communication between fleet and server.
+# Must match MTLS_ENABLED in the server's .env — fleet agents post to
+# https://<server>:2801 when true, which fails silently against a plaintext
+# Falcosidekick. Requires certificates: run 'make generate-certs' and
+# 'make generate-fleet-certs' on the server first.
+mtls_enabled: false
 
 # Certificate paths on fleet hosts (set by certs role)
 mtls_cert_dir: /etc/sib/certs
@@ -75,7 +78,7 @@ mtls_client_key: "{{ mtls_cert_dir }}/client.key"
 # Alloy Configuration (Log & Metrics Shipper)
 # =============================================================================
 
-alloy_version: "v1.5.1"
+alloy_version: "v1.16.1"
 
 # Alloy deployment method: auto (uses deployment_strategy), docker, or native
 alloy_deployment: auto
@@ -97,9 +100,10 @@ alloy_scrape_targets:
 # =============================================================================
 # Used when sib_stack: vm
 
-vmagent_image: "victoriametrics/vmagent:latest"
-node_exporter_image: "prom/node-exporter:latest"
-vector_image: "timberio/vector:latest-alpine"
+# Pinned so a fleet redeploy is reproducible. Keep in sync with .env.example.
+vmagent_image: "victoriametrics/vmagent:v1.144.0"
+node_exporter_image: "prom/node-exporter:v1.11.1"
+vector_image: "timberio/vector:0.55.0-alpine"
 
 # Collector deployment strategy (VM stack)
 # auto   - Use Docker if available, otherwise skip (VM collectors require Docker)
