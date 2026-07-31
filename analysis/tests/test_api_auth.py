@@ -71,6 +71,13 @@ def test_accepts_bearer_header(client):
     assert resp.status_code == 200
 
 
+@pytest.mark.parametrize("placeholder", ["CHANGE_ME", "change_me", "CHANGE_ME_TO_SECURE_TOKEN"])
+def test_refuses_public_placeholder_tokens(monkeypatch, tmp_path, placeholder):
+    """A documented placeholder must never become a working credential."""
+    with pytest.raises(RuntimeError, match="public placeholder"):
+        _load_api(monkeypatch, tmp_path, placeholder)
+
+
 def test_json_401_has_error_body(client):
     resp = client.post("/api/analyze", json={"alert": "x"})
     assert resp.get_json()["error"] == "Missing or invalid API token"

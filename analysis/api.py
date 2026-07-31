@@ -47,6 +47,16 @@ config = load_config()
 # LLM calls, so an open endpoint is a way to drain someone's API budget.
 API_TOKEN = read_secret('ANALYSIS_API_TOKEN') or ''
 
+# Example-file placeholders are public credentials, not secrets. Refuse to start
+# rather than presenting a publicly known token as working authentication when
+# someone launches the Compose stack without the Makefile bootstrap.
+_TOKEN_PLACEHOLDERS = {'CHANGE_ME', 'CHANGE_ME_TO_SECURE_TOKEN'}
+if API_TOKEN.strip().upper() in _TOKEN_PLACEHOLDERS:
+    raise RuntimeError(
+        "ANALYSIS_API_TOKEN still contains a public placeholder; "
+        "generate a secret token before starting the analysis API"
+    )
+
 if not API_TOKEN:
     logger.warning(
         "ANALYSIS_API_TOKEN is not set — the analysis API is UNAUTHENTICATED. "
