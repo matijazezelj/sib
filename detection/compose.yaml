@@ -4,7 +4,8 @@ services:
   falco:
     image: falcosecurity/falco:0.40.0
     container_name: sib-falco
-    hostname: sib-host
+    hostname: ${FALCO_HOSTNAME:-sib-host}
+    init: true
     privileged: true
     restart: unless-stopped
     volumes:

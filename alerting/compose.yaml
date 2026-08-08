@@ -4,6 +4,7 @@ services:
   sidekick:
     image: falcosecurity/falcosidekick:2.29.0
     container_name: sib-sidekick
+    init: true
     restart: unless-stopped
     ports:
       - "${SIDEKICK_BIND_ADDR:-127.0.0.1}:${SIDEKICK_PORT:-2801}:2801"

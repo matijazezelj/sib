@@ -349,6 +349,21 @@ For any of Falcosidekick's other outputs, copy
 `alerting/config/custom-outputs.yaml.example` to `custom-outputs.yaml` — it is
 appended to the generated config and never overwritten.
 
+Generic authenticated webhooks can also be configured without editing the
+generated YAML:
+
+```bash
+WEBHOOK_ADDRESS=http://incident-handler.example:8644/webhooks/falco
+WEBHOOK_HEADER_NAME=X-Gitlab-Token
+WEBHOOK_HEADER_VALUE=replace-with-route-secret
+WEBHOOK_MINIMUM_PRIORITY=warning
+```
+
+This is suitable for event-driven agents such as Hermes Agent: Falcosidekick
+forwards the raw Falco event, the webhook starts an incident-triage run, and
+the agent can deliver its verified result to Telegram. Use HTTPS or a trusted
+management network because a static header secret is sent with each request.
+
 > ⚠️ `alerting/config/config.yaml` is regenerated on every install. Do not hand-edit it.
 
 ### Environment Variables

@@ -51,6 +51,9 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck --severity=warning scripts/*.sh
 
+      - name: Test Falcosidekick config generation
+        run: scripts/test-sidekick-config.sh
+
       - name: Python lint (ruff)
         run: |
           # Pinned: an unpinned ruff means any upstream release can turn CI red

@@ -32,6 +32,15 @@ emit() {
     return 0
 }
 
+# Quote a scalar for the generated YAML. Output destinations are often URLs or
+# secrets, so treating their contents as YAML syntax is both fragile and unsafe.
+yaml_quote() {
+    local value="$1"
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    printf '"%s"' "$value"
+}
+
 # Generate config
 {
     echo "# Falcosidekick Configuration"
@@ -93,6 +102,25 @@ emit() {
         emit index "${ELASTICSEARCH_INDEX:-falco}"
     fi
 
+    if [ -n "${WEBHOOK_ADDRESS:-}" ]; then
+        echo ""
+        echo "webhook:"
+        printf '  address: %s\n' "$(yaml_quote "${WEBHOOK_ADDRESS}")"
+        if [ -n "${WEBHOOK_HEADER_NAME:-}" ] || [ -n "${WEBHOOK_HEADER_VALUE:-}" ]; then
+            if [ -z "${WEBHOOK_HEADER_NAME:-}" ] || [ -z "${WEBHOOK_HEADER_VALUE:-}" ]; then
+                echo "Both WEBHOOK_HEADER_NAME and WEBHOOK_HEADER_VALUE must be set" >&2
+                exit 1
+            fi
+            if [[ ! "${WEBHOOK_HEADER_NAME}" =~ ^[A-Za-z0-9-]+$ ]]; then
+                echo "WEBHOOK_HEADER_NAME contains invalid characters" >&2
+                exit 1
+            fi
+            echo "  customHeaders:"
+            printf '    %s: %s\n' "${WEBHOOK_HEADER_NAME}" "$(yaml_quote "${WEBHOOK_HEADER_VALUE}")"
+        fi
+        printf '  minimumpriority: %s\n' "$(yaml_quote "${WEBHOOK_MINIMUM_PRIORITY:-warning}")"
+    fi
+
     if [ "$MTLS_ENABLED" = "true" ]; then
         echo ""
         echo "# mTLS TLS Server Configuration"
@@ -114,7 +142,8 @@ emit() {
 CONFIGURED=""
 for pair in "SLACK_WEBHOOK_URL:Slack" "DISCORD_WEBHOOK_URL:Discord" \
             "PAGERDUTY_ROUTING_KEY:PagerDuty" "OPSGENIE_API_KEY:Opsgenie" \
-            "TEAMS_WEBHOOK_URL:Teams" "ELASTICSEARCH_HOST_PORT:Elasticsearch"; do
+            "TEAMS_WEBHOOK_URL:Teams" "ELASTICSEARCH_HOST_PORT:Elasticsearch" \
+            "WEBHOOK_ADDRESS:Webhook"; do
     var="${pair%%:*}"
     label="${pair##*:}"
     if [ -n "${!var:-}" ]; then
