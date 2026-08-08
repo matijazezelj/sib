@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.env.bak.*
 
 # OS files
 .DS_Store
@@ -42,6 +43,7 @@ secrets/
 *.pem
 *.key
 *.crt
+certs/ca/ca.srl
 
 # Generated configs (created by make install)
 grafana/provisioning/datasources/datasources.yml
