@@ -67,7 +67,7 @@ watch_config_files: true
 # Performance Tuning
 # ---------------------------------------------
 
-# Buffer outputs for better performance
+# Keep sparse security events low-latency; buffering is opt-in.
 buffered_outputs: __FALCO_BUFFERED_OUTPUTS__
 
 # Output timeout in ms

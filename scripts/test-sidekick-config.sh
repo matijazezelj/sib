@@ -19,6 +19,8 @@ from pathlib import Path
 
 text = Path(sys.argv[1]).read_text()
 expected = [
+    'hostport: "http://sib-victorialogs:9428"',
+    'endpoint: "/insert/loki/api/v1/push"',
     'webhook:',
     'address: "http://127.0.0.1:8644/webhooks/falco?source=\\"sib\\""',
     'X-Gitlab-Token: "test-\\"secret\\"-with-\\\\slash"',
@@ -26,7 +28,12 @@ expected = [
 ]
 for item in expected:
     assert item in text, item
+assert (Path(sys.argv[1]).stat().st_mode & 0o777) == 0o640
 PY
+
+STACK=grafana "$ROOT/scripts/generate-sidekick-config.sh" >/dev/null
+grep -q 'hostport: "http://sib-loki:3100"' "$OUTPUT"
+grep -q 'endpoint: "/loki/api/v1/push"' "$OUTPUT"
 
 if WEBHOOK_ADDRESS=http://127.0.0.1 \
    WEBHOOK_HEADER_NAME='Bad Header' \

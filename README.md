@@ -380,6 +380,18 @@ The bundled rules already exclude these proven-safe cases:
 - routine `env` invocations (explicit `printenv` and `/proc/*/environ` reads remain);
 - arbitrary destination ports above 60000 (known abused ports remain).
 
+Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
+separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or
+`/loki/api/v1/push` for Loki. Combining `/insert` into `hostport` makes
+Falcosidekick append its default endpoint to the wrong path and silently stops
+event retention after a restart.
+
+The generated config contains output credentials and is mode `0640`, not
+`0600`: Falcosidekick runs as uid `1234`, so Compose adds only the configured
+`SIDECAR_CONFIG_GID` as a supplementary group. Mode `0600` makes the bind mount
+unreadable inside the container, silently starts Falcosidekick with no enabled
+outputs, and still leaves its `/ping` healthcheck green.
+
 > ⚠️ `alerting/config/config.yaml` is regenerated on every install. Do not hand-edit it.
 
 ### Environment Variables

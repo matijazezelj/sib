@@ -19,7 +19,7 @@ DRIVER_OVERRIDE=""
 
 # Output tunables from .env (exported by the Makefile before this runs)
 FALCO_PRIORITY="${FALCO_PRIORITY:-notice}"
-FALCO_BUFFERED_OUTPUTS="${FALCO_BUFFERED_OUTPUTS:-true}"
+FALCO_BUFFERED_OUTPUTS="${FALCO_BUFFERED_OUTPUTS:-false}"
 # Falco takes a boolean, not a format name
 case "${FALCO_TIME_FORMAT:-iso8601}" in
     rfc2822) TIME_FORMAT_ISO_8601="false" ;;

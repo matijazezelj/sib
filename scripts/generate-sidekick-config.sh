@@ -20,9 +20,11 @@ STACK="${STACK:-vm}"
 
 # Determine Loki endpoint based on stack
 if [ "$STACK" = "vm" ]; then
-    LOKI_HOSTPORT="http://sib-victorialogs:9428/insert"
+    LOKI_HOSTPORT="http://sib-victorialogs:9428"
+    LOKI_ENDPOINT="/insert/loki/api/v1/push"
 else
     LOKI_HOSTPORT="http://sib-loki:3100"
+    LOKI_ENDPOINT="/loki/api/v1/push"
 fi
 
 # Emit "key: value" only when the value is non-empty, so unconfigured fields are
@@ -57,6 +59,7 @@ yaml_quote() {
     echo "# Loki output - VictoriaLogs is Loki-compatible for ingestion"
     echo "loki:"
     echo "  hostport: \"${LOKI_HOSTPORT}\""
+    echo "  endpoint: \"${LOKI_ENDPOINT}\""
 
     if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
         echo ""
@@ -138,7 +141,9 @@ yaml_quote() {
         cat "$OVERLAY"
     fi
 } > "$OUTPUT"
-chmod 600 "$OUTPUT"
+# The image runs as uid 1234. Keep the route secret unreadable to "other",
+# while allowing the configured supplementary host group to read the bind mount.
+chmod 640 "$OUTPUT"
 
 CONFIGURED=""
 for pair in "SLACK_WEBHOOK_URL:Slack" "DISCORD_WEBHOOK_URL:Discord" \
