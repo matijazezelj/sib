@@ -77,11 +77,12 @@
   tags: [container, escape, mitre_privilege_escalation, T1611]
 
 - rule: Container Running as Root
-  desc: Detects containers running processes as root
+  desc: Detects a container's initial process starting as root
   condition: >
-    spawned_process and 
-    container and 
+    spawned_process and
+    container and
     user.uid = 0 and
+    proc.vpid = 1 and
     not proc.name in (init, systemd, containerd, dockerd, runc)
   output: >
     Container process running as root 
@@ -97,8 +98,9 @@
 - rule: Outbound Connection to Suspicious Port
   desc: Detects outbound connections to commonly abused ports
   condition: >
-    outbound and 
-    fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337)
+    outbound and
+    fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337) and
+    not (container.name = qbittorrent and proc.name = qbittorrent-nox)
   output: >
     Suspicious outbound connection 
     (user=%user.name command=%proc.cmdline connection=%fd.name 

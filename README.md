@@ -378,7 +378,11 @@ The bundled rules already exclude these proven-safe cases:
 - Pi-hole writes below `/etc/pihole/` and its gravity update temp-file activity;
 - Falcosidekick's own `nc -z 127.0.0.1 2801` healthcheck;
 - routine `env` invocations (explicit `printenv` and `/proc/*/environ` reads remain);
-- arbitrary destination ports above 60000 (known abused ports remain).
+- arbitrary destination ports above 60000 (known abused ports remain);
+- qBittorrent peer traffic from `qbittorrent-nox`, including peers on commonly
+  abused ports—the same ports remain monitored for every other process;
+- root-container detection on the container's PID 1 only, rather than every
+  root-owned healthcheck and child process.
 
 Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
 separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or
