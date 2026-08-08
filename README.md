@@ -382,7 +382,9 @@ The bundled rules already exclude these proven-safe cases:
 - qBittorrent peer traffic from `qbittorrent-nox`, including peers on commonly
   abused ports—the same ports remain monitored for every other process;
 - root-container detection on the container's PID 1 only, rather than every
-  root-owned healthcheck and child process.
+  root-owned healthcheck and child process;
+- local read-only VictoriaLogs queries using `curl --data-urlencode` against
+  `127.0.0.1:9428`; curl POST/upload detection remains active elsewhere.
 
 Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
 separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or

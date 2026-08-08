@@ -367,7 +367,9 @@
     spawned_process and
     proc.name = "curl" and
     (proc.cmdline contains "-X POST" or proc.cmdline contains "--data" or
-     proc.cmdline contains "-d " or proc.cmdline contains "-F ")
+     proc.cmdline contains "-d " or proc.cmdline contains "-F ") and
+    not (proc.cmdline contains "http://127.0.0.1:9428/select/logsql/query" and
+         proc.cmdline contains "--data-urlencode")
   output: >
     Potential data exfiltration via curl 
     (user=%user.name command=%proc.cmdline container_id=%container.id)
