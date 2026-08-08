@@ -4,6 +4,12 @@
 # Documentation: https://falco.org/docs/reference/daemon/config-options/
 # ==============================================
 
+# Falco 0.44+ ships container metadata support as a config fragment. Loading
+# config.d is required when this file replaces the image's main falco.yaml;
+# without it, container.* output fields fail rule compilation.
+config_files:
+  - /etc/falco/config.d
+
 # ---------------------------------------------
 # Engine Configuration
 # ---------------------------------------------
@@ -74,19 +80,6 @@ buffered_outputs: __FALCO_BUFFERED_OUTPUTS__
 output_timeout: 2000
 
 # ---------------------------------------------
-# gRPC Configuration
-# ---------------------------------------------
-
-# gRPC server for streaming events
-grpc:
-  enabled: false
-  bind_address: "unix:///run/falco/falco.sock"
-  threadiness: 0
-
-grpc_output:
-  enabled: false
-
-# ---------------------------------------------
 # Webserver (for health checks)
 # ---------------------------------------------
 
@@ -148,18 +141,15 @@ container_engines:
 # Plugins (optional, for extended sources)
 # ---------------------------------------------
 
-# Uncomment to enable plugins
-# load_plugins: []
-
-# plugins:
-#   - name: cloudtrail
-#     library_path: libcloudtrail.so
-#     init_config: ""
-#     open_params: ""
-#   - name: k8saudit
-#     library_path: libk8saudit.so
-#     init_config: ""
-#     open_params: ""
+# Falco 0.44+ loads container metadata through the container plugin. The
+# image's config.d fragment enables it; this definition tells Falco where the
+# plugin lives and keeps container.name/image fields available to our outputs.
+plugins:
+  - name: container
+    library_path: libcontainer.so
+    init_config:
+      label_max_len: 100
+      with_size: false
 
 # ---------------------------------------------
 # Logging

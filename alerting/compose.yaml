@@ -31,8 +31,9 @@ services:
     networks:
       - sib-network
     healthcheck:
-      # Check if port is listening (works with both HTTP and mTLS modes)
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 2801"]
+      # Inspect the listening socket without opening a TLS connection. `nc -z`
+      # produced a certificate-less handshake error every 30 seconds in mTLS mode.
+      test: ["CMD-SHELL", "for f in /proc/net/tcp /proc/net/tcp6; do while read -r _ local _ state _; do [ \"$${state}\" = 0A ] && case \"$${local}\" in *:0AF1) exit 0;; esac; done < \"$${f}\"; done; exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

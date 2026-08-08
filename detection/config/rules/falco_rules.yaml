@@ -43,8 +43,17 @@
 
 - macro: user_known_write_below_etc_activities
   condition: >
-    (container.name = "pihole" and
-     fd.name startswith "/etc/pihole/")
+    (container.name in (pihole, pihole2) and
+     fd.name startswith "/etc/pihole/") or
+    (container.id = host and
+     proc.name = wazuh-modulesd and
+     fd.name = "/etc/.pwd.lock")
+
+- macro: user_known_read_sensitive_activities
+  condition: >
+    (container.id = host and
+     proc.name = wazuh-modulesd and
+     fd.name in (/etc/shadow, /etc/sudoers))
 
 # Sensitive file directories
 - macro: sensitive_dirs
@@ -92,7 +101,7 @@
     File below /etc opened for writing 
     (user=%user.name user_uid=%user.uid command=%proc.cmdline 
      file=%fd.name parent=%proc.pname pcmdline=%proc.pcmdline 
-     gparent=%proc.aname[2] container_id=%container.id 
+     ancestors=%proc.aname container_id=%container.id
      container_name=%container.name image=%container.image.repository)
   priority: ERROR
   tags: [filesystem, mitre_persistence, T1078]
@@ -118,7 +127,8 @@
   condition: >
     open_read and
     fd.name in (sensitive_files) and
-    not proc.name in (sudo, su, passwd, shadow)
+    not proc.name in (sudo, su, passwd, shadow) and
+    not user_known_read_sensitive_activities
   output: >
     Sensitive file opened for reading 
     (user=%user.name user_uid=%user.uid command=%proc.cmdline 
@@ -157,7 +167,7 @@
   output: >
     Shell spawned by suspicious process 
     (user=%user.name shell=%proc.name parent=%proc.pname 
-     grandparent=%proc.aname[2] cmdline=%proc.cmdline 
+     ancestors=%proc.aname cmdline=%proc.cmdline
      container_id=%container.id container_name=%container.name)
   priority: WARNING
   tags: [process, shell, mitre_execution, T1059]

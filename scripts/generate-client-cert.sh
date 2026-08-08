@@ -81,8 +81,8 @@ generate_client_cert() {
     # Generate client private key
     info "Generating private key..."
     openssl genrsa -out "${CLIENT_DIR}/${CLIENT_NAME}.key" ${KEY_SIZE} 2>/dev/null
-    # Note: 644 needed for Docker container access (runs as non-root user)
-    chmod 644 "${CLIENT_DIR}/${CLIENT_NAME}.key"
+    # Falco runs as root inside its privileged sensor container.
+    chmod 600 "${CLIENT_DIR}/${CLIENT_NAME}.key"
 
     # Generate client CSR
     info "Generating certificate signing request..."

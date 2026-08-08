@@ -138,8 +138,8 @@ EOF
 
     # Generate server private key
     openssl genrsa -out "${CERTS_DIR}/server/server.key" ${KEY_SIZE} 2>/dev/null
-    # Note: 644 needed for Docker container access (runs as non-root user)
-    chmod 644 "${CERTS_DIR}/server/server.key"
+    # Falcosidekick gets the host deployment group as a supplementary GID.
+    chmod 640 "${CERTS_DIR}/server/server.key"
 
     # Generate server CSR
     openssl req -new \
@@ -182,8 +182,8 @@ generate_local_client() {
 
     # Generate client private key
     openssl genrsa -out "${CLIENT_DIR}/${CLIENT_NAME}.key" ${KEY_SIZE} 2>/dev/null
-    # Note: 644 needed for Docker container access (runs as non-root user)
-    chmod 644 "${CLIENT_DIR}/${CLIENT_NAME}.key"
+    # Falco runs as root inside its privileged sensor container.
+    chmod 600 "${CLIENT_DIR}/${CLIENT_NAME}.key"
 
     # Generate client CSR
     openssl req -new \

@@ -100,7 +100,8 @@
   condition: >
     outbound and
     fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337) and
-    not (container.name = qbittorrent and proc.name = qbittorrent-nox)
+    not (container.name = qbittorrent and proc.name = qbittorrent-nox) and
+    not (container.name = unbound and proc.name = unbound and fd.rport = 53)
   output: >
     Suspicious outbound connection 
     (user=%user.name command=%proc.cmdline connection=%fd.name 
@@ -213,7 +214,7 @@
   condition: >
     spawned_process and
     proc.name in (wget, curl) and
-    not container.name = "pihole" and
+    not container.name in (pihole, pihole2) and
     (proc.cmdline contains "/tmp/" or
      proc.cmdline contains "/dev/shm/" or
      proc.cmdline contains "/var/tmp/")
@@ -250,9 +251,8 @@
   desc: Detects curl/wget piped directly to shell (drive-by download)
   condition: >
     spawned_process and
-    (proc.cmdline contains "curl" or proc.cmdline contains "wget") and
-    (proc.cmdline contains "| sh" or proc.cmdline contains "| bash" or
-     proc.cmdline contains "|sh" or proc.cmdline contains "|bash")
+    proc.name in (sh, bash, dash, zsh, ksh) and
+    proc.cmdline regex ".*(curl|wget)[[:space:]][^|]*[|][[:space:]]*(sh|bash|dash|zsh|ksh)([[:space:]]|$).*"
   output: >
     Remote script execution detected 
     (user=%user.name command=%proc.cmdline container_id=%container.id)
@@ -413,7 +413,9 @@
   condition: >
     spawned_process and
     proc.name = "rm" and
-    (proc.cmdline contains "-rf" or proc.cmdline contains "-r") and
+    (proc.args[0] in (-r, -R, -rf, -rF, -fr, -Rf, -fR, --recursive) or
+     proc.args[1] in (-r, -R, -rf, -rF, -fr, -Rf, -fR, --recursive) or
+     proc.args[2] in (-r, -R, -rf, -rF, -fr, -Rf, -fR, --recursive)) and
     (proc.cmdline contains "/home" or
      proc.cmdline contains "/var" or
      proc.cmdline contains "/etc" or
@@ -896,7 +898,13 @@
   desc: Detects database dump operations
   condition: >
     spawned_process and
-    proc.name in (mysqldump, pg_dump, mongodump, redis-cli, sqlite3) and
+    (proc.name in (mysqldump, pg_dump, mongodump) or
+     (proc.name = redis-cli and
+      (proc.cmdline contains " --rdb" or
+       proc.cmdline contains " BGSAVE" or
+       proc.cmdline contains " SAVE")) or
+     (proc.name = sqlite3 and
+      proc.cmdline contains ".dump")) and
     not proc.cmdline contains "backup"
   output: >
     Database dump detected 

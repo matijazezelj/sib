@@ -376,7 +376,8 @@ The bundled rules already exclude these proven-safe cases:
 
 - world-readable `/etc/passwd` from the sensitive-file list;
 - Pi-hole writes below `/etc/pihole/` and its gravity update temp-file activity;
-- Falcosidekick's own `nc -z 127.0.0.1 2801` healthcheck;
+- Falcosidekick healthchecks inspect `/proc/net/tcp{,6}` instead of opening a
+  certificate-less connection to the mTLS listener;
 - routine `env` invocations (explicit `printenv` and `/proc/*/environ` reads remain);
 - arbitrary destination ports above 60000 (known abused ports remain);
 - qBittorrent peer traffic from `qbittorrent-nox`, including peers on commonly
@@ -385,6 +386,10 @@ The bundled rules already exclude these proven-safe cases:
   root-owned healthcheck and child process;
 - local read-only VictoriaLogs queries using `curl --data-urlencode` against
   `127.0.0.1:9428`; curl POST/upload detection remains active elsewhere.
+- host-side Wazuh syscollector reads of `/etc/shadow` and `/etc/sudoers`, plus
+  its `/etc/.pwd.lock` update; other processes and sensitive paths remain;
+- Unbound DNS responses from remote port 53 that happen to land on a locally
+  suspicious-numbered ephemeral port; non-DNS use of those ports remains.
 
 Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
 separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or

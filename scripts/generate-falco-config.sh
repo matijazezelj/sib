@@ -7,9 +7,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TEMPLATE="${PROJECT_ROOT}/detection/config/falco.yaml.template"
-OUTPUT="${PROJECT_ROOT}/detection/config/falco.yaml"
-ENV_FILE="${PROJECT_ROOT}/.env"
+TEMPLATE="${FALCO_CONFIG_TEMPLATE:-${PROJECT_ROOT}/detection/config/falco.yaml.template}"
+OUTPUT="${FALCO_CONFIG_OUTPUT:-${PROJECT_ROOT}/detection/config/falco.yaml}"
+ENV_FILE="${FALCO_ENV_FILE:-${PROJECT_ROOT}/.env}"
 
 # -----------------------------------------------
 # Parse flags
@@ -20,6 +20,7 @@ DRIVER_OVERRIDE=""
 # Output tunables from .env (exported by the Makefile before this runs)
 FALCO_PRIORITY="${FALCO_PRIORITY:-notice}"
 FALCO_BUFFERED_OUTPUTS="${FALCO_BUFFERED_OUTPUTS:-false}"
+FALCO_CLIENT_CERT_NAME="${FALCO_CLIENT_CERT_NAME:-local}"
 # Falco takes a boolean, not a format name
 case "${FALCO_TIME_FORMAT:-iso8601}" in
     rfc2822) TIME_FORMAT_ISO_8601="false" ;;
@@ -147,9 +148,12 @@ build_engine_config "$DRIVER" > "$ENGINE_TMP"
 #   3. Optionally append mTLS settings after user_agent line
 if [ "$MTLS_ENABLED" = "true" ]; then
     echo "  mTLS enabled — using HTTPS to Falcosidekick"
+    SIDEKICK_URL="${SIDEKICK_URL:-https://sib-sidekick:2801/}"
     awk -v engine_file="$ENGINE_TMP" \
         -v priority="$FALCO_PRIORITY" \
         -v buffered="$FALCO_BUFFERED_OUTPUTS" \
+        -v sidekick_url="$SIDEKICK_URL" \
+        -v client_name="$FALCO_CLIENT_CERT_NAME" \
         -v iso8601="$TIME_FORMAT_ISO_8601" '
     /^__ENGINE_CONFIG__$/ {
         while ((getline line < engine_file) > 0) print line
@@ -157,7 +161,7 @@ if [ "$MTLS_ENABLED" = "true" ]; then
         next
     }
     {
-        gsub(/__SIDEKICK_URL__/, "https://sib-sidekick:2801/")
+        gsub(/__SIDEKICK_URL__/, sidekick_url)
         gsub(/__FALCO_PRIORITY__/, priority)
         gsub(/__FALCO_BUFFERED_OUTPUTS__/, buffered)
         gsub(/__TIME_FORMAT_ISO_8601__/, iso8601)
@@ -165,17 +169,19 @@ if [ "$MTLS_ENABLED" = "true" ]; then
         if (/user_agent:.*falcosidekick/) {
             print "  insecure: false"
             print "  ca_cert: /etc/falco/certs/ca/ca.crt"
-            print "  client_cert: /etc/falco/certs/clients/local.crt"
-            print "  client_key: /etc/falco/certs/clients/local.key"
+            print "  client_cert: /etc/falco/certs/clients/" client_name ".crt"
+            print "  client_key: /etc/falco/certs/clients/" client_name ".key"
             print "  mtls: true"
         }
     }
     ' "$TEMPLATE" > "$OUTPUT"
     echo "  Generated Falco config with mTLS enabled (driver: ${DRIVER})"
 else
+    SIDEKICK_URL="${SIDEKICK_URL:-http://sib-sidekick:2801/}"
     awk -v engine_file="$ENGINE_TMP" \
         -v priority="$FALCO_PRIORITY" \
         -v buffered="$FALCO_BUFFERED_OUTPUTS" \
+        -v sidekick_url="$SIDEKICK_URL" \
         -v iso8601="$TIME_FORMAT_ISO_8601" '
     /^__ENGINE_CONFIG__$/ {
         while ((getline line < engine_file) > 0) print line
@@ -183,7 +189,7 @@ else
         next
     }
     {
-        gsub(/__SIDEKICK_URL__/, "http://sib-sidekick:2801/")
+        gsub(/__SIDEKICK_URL__/, sidekick_url)
         gsub(/__FALCO_PRIORITY__/, priority)
         gsub(/__FALCO_BUFFERED_OUTPUTS__/, buffered)
         gsub(/__TIME_FORMAT_ISO_8601__/, iso8601)

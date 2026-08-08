@@ -54,6 +54,9 @@ jobs:
       - name: Test Falcosidekick config generation
         run: scripts/test-sidekick-config.sh
 
+      - name: Test Falco config generation
+        run: scripts/test-falco-config.sh
+
       - name: Python lint (ruff)
         run: |
           # Pinned: an unpinned ruff means any upstream release can turn CI red

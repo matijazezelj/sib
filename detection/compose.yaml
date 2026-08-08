@@ -2,7 +2,7 @@
 
 services:
   falco:
-    image: falcosecurity/falco:0.40.0
+    image: falcosecurity/falco:${FALCO_VERSION:-0.44.1}
     container_name: sib-falco
     hostname: ${FALCO_HOSTNAME:-sib-host}
     init: true
