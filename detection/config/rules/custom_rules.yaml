@@ -521,10 +521,17 @@
   desc: Detects loading of kernel modules (potential rootkit)
   condition: >
     spawned_process and
-    proc.name in (insmod, modprobe, rmmod)
+    proc.name in (insmod, modprobe, rmmod) and
+    not (proc.name = modprobe and
+         (proc.cmdline contains " -n " or
+          proc.cmdline endswith " -n" or
+          proc.cmdline contains " --dry-run")) and
+    not (proc.name = modprobe and
+         proc.cmdline startswith "modprobe -q -- veth")
   output: >
-    Kernel module operation detected 
-    (user=%user.name command=%proc.cmdline container_id=%container.id)
+    Kernel module operation detected
+    (user=%user.name command=%proc.cmdline parent=%proc.pname
+     container_id=%container.id)
   priority: CRITICAL
   tags: [defense_evasion, rootkit, mitre_defense_evasion, T1014]
 

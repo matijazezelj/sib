@@ -390,6 +390,9 @@ The bundled rules already exclude these proven-safe cases:
   its `/etc/.pwd.lock` update; other processes and sensitive paths remain;
 - Unbound DNS responses from remote port 53 that happen to land on a locally
   suspicious-numbered ephemeral port; non-DNS use of those ports remains.
+- read-only `modprobe -n`/`--dry-run` checks and Docker's exact
+  `modprobe -q -- veth…` network-device alias probes; actual kernel module
+  insertion/removal remains Critical.
 
 Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
 separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or
