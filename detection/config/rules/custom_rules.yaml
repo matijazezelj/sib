@@ -6,11 +6,11 @@
 # ==============================================
 
 # ---------------------------------------------
-# Critical Test Rule (for verification)
+# Critical Shadow Access
 # ---------------------------------------------
 
-- rule: Critical Test - Shadow File Read
-  desc: Triggers Critical alert when /etc/shadow is read
+- rule: Critical Shadow File Read
+  desc: Detects direct reads of /etc/shadow at critical priority
   condition: >
     open_read and 
     fd.name = "/etc/shadow"
@@ -20,7 +20,7 @@
      parent=%proc.pname container_id=%container.id 
      container_name=%container.name image=%container.image.repository)
   priority: CRITICAL
-  tags: [test, critical, shadow]
+  tags: [credential_access, critical, shadow, mitre_credential_access, T1003]
 
 # ---------------------------------------------
 # Cryptocurrency Mining Detection
@@ -98,8 +98,7 @@
   desc: Detects outbound connections to commonly abused ports
   condition: >
     outbound and 
-    (fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337) or
-     fd.sport > 60000)
+    fd.sport in (4444, 5555, 6666, 7777, 8888, 9999, 1337, 31337)
   output: >
     Suspicious outbound connection 
     (user=%user.name command=%proc.cmdline connection=%fd.name 
@@ -212,6 +211,7 @@
   condition: >
     spawned_process and
     proc.name in (wget, curl) and
+    not container.name = "pihole" and
     (proc.cmdline contains "/tmp/" or
      proc.cmdline contains "/dev/shm/" or
      proc.cmdline contains "/var/tmp/")
@@ -345,7 +345,10 @@
   desc: Detects network scanning tools often used before lateral movement
   condition: >
     spawned_process and
-    proc.name in (nmap, masscan, zmap, nc, netcat, ncat)
+    proc.name in (nmap, masscan, zmap, nc, netcat, ncat) and
+    not (container.name = "sib-sidekick" and
+         proc.name = "nc" and
+         proc.cmdline contains "127.0.0.1 2801")
   output: >
     Network scanning detected 
     (user=%user.name command=%proc.cmdline container_id=%container.id)
@@ -732,8 +735,7 @@
   desc: Detects enumeration of environment variables (often contain secrets)
   condition: >
     spawned_process and
-    (proc.name = "env" or
-     proc.name = "printenv" or
+    (proc.name = "printenv" or
      (proc.name = "cat" and proc.cmdline contains "/proc/" and proc.cmdline contains "/environ"))
   output: >
     Environment enumeration detected 
@@ -843,11 +845,9 @@
 - rule: Tor Connection Attempt
   desc: Detects attempts to connect to Tor network
   condition: >
-    spawned_process and
-    (proc.name = "tor" or
-     proc.cmdline contains ".onion" or
-     proc.cmdline contains "torproject.org" or
-     proc.cmdline contains "9050" or proc.cmdline contains "9051")
+    ((spawned_process and
+      (proc.name = "tor" or proc.cmdline contains ".onion")) or
+     (outbound and fd.sport in (9050, 9051)))
   output: >
     Tor connection attempt detected 
     (user=%user.name command=%proc.cmdline container_id=%container.id)
@@ -874,6 +874,7 @@
   condition: >
     spawned_process and
     proc.name in (cp, mv, tar, zip) and
+    not container.name = "pihole" and
     (proc.cmdline contains "/tmp/" or proc.cmdline contains "/var/tmp/") and
     (proc.cmdline contains "/etc" or
      proc.cmdline contains "/home" or

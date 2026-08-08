@@ -364,6 +364,22 @@ forwards the raw Falco event, the webhook starts an incident-triage run, and
 the agent can deliver its verified result to Telegram. Use HTTPS or a trusted
 management network because a static header secret is sent with each request.
 
+For an agent-backed output, start at `critical` and retain lower-priority events
+in VictoriaLogs for periodic tuning. Do not invoke an LLM for every warning:
+normal NSS reads of `/etc/passwd`, healthcheck probes, package-maintenance
+traffic, and arbitrary high destination ports are high-volume telemetry rather
+than useful incident triggers. Add exclusions only after correlating the exact
+rule, process, container, and command over multiple occurrences; never suppress
+an entire detection class merely because remediation requires a human.
+
+The bundled rules already exclude these proven-safe cases:
+
+- world-readable `/etc/passwd` from the sensitive-file list;
+- Pi-hole writes below `/etc/pihole/` and its gravity update temp-file activity;
+- Falcosidekick's own `nc -z 127.0.0.1 2801` healthcheck;
+- routine `env` invocations (explicit `printenv` and `/proc/*/environ` reads remain);
+- arbitrary destination ports above 60000 (known abused ports remain).
+
 > ⚠️ `alerting/config/config.yaml` is regenerated on every install. Do not hand-edit it.
 
 ### Environment Variables

@@ -42,7 +42,9 @@
   condition: (evt.num=0)
 
 - macro: user_known_write_below_etc_activities
-  condition: (never_true)
+  condition: >
+    (container.name = "pihole" and
+     fd.name startswith "/etc/pihole/")
 
 # Sensitive file directories
 - macro: sensitive_dirs
@@ -71,7 +73,10 @@
 
 # Sensitive files
 - list: sensitive_files
-  items: [/etc/shadow, /etc/passwd, /etc/sudoers, /etc/ssh/sshd_config]
+  # /etc/passwd is intentionally omitted: it is world-readable and routine
+  # NSS/account lookup activity made it the dominant event by several orders
+  # of magnitude. Shadow, sudoers, and sshd configuration remain monitored.
+  items: [/etc/shadow, /etc/sudoers, /etc/ssh/sshd_config]
 
 # ---------------------------------------------
 # File Integrity Rules
