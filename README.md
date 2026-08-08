@@ -140,11 +140,22 @@ Default Grafana credentials: `admin` / `admin`
 
 > 🔒 **Safe defaults:** Grafana, Falcosidekick, storage APIs, and AI analysis bind to `127.0.0.1` by default. To expose them on a LAN, set `GRAFANA_BIND_ADDR=0.0.0.0`, `SIDEKICK_BIND_ADDR=0.0.0.0`, `STORAGE_BIND=0.0.0.0`, or `ANALYSIS_BIND=0.0.0.0` intentionally.
 
-> ⚠️ **Fleet Security Note:** If fleet hosts need to send events to Sidekick (2801), expose it deliberately and use firewall rules to restrict access to your fleet nodes only:
+> ⚠️ **Fleet Security Note:** If fleet hosts send events to Sidekick on `2801`,
+> require mTLS with a distinct client certificate per sensor and restrict the
+> listener to each approved source address. Do not expose plain HTTP or allow an
+> entire subnet merely because it is convenient:
 > ```bash
-> # UFW example: allow only from fleet subnet
-> ufw allow from 192.168.1.0/24 to any port 2801
+> SIB_SERVER_IP=192.168.1.25 ./scripts/generate-certs.sh
+> ./scripts/generate-client-cert.sh docker-vm
+> # UFW example: one approved sensor, not the whole LAN
+> ufw allow from 192.168.1.212 to any port 2801 proto tcp
 > ```
+>
+> On each remote sensor set `SIDEKICK_URL=https://<central-host>:2801/`,
+> `FALCO_CLIENT_CERT_NAME=<sensor-name>`, and `MTLS_ENABLED=true`. Copy only the
+> CA certificate and that sensor's certificate/private key to its protected
+> `certs/` tree. Keep central storage and Falcosidekick deployed once; run one
+> Falco sensor per independent kernel.
 
 ## 🎯 What Gets Detected?
 
