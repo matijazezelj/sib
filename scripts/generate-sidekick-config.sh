@@ -138,6 +138,7 @@ yaml_quote() {
         cat "$OVERLAY"
     fi
 } > "$OUTPUT"
+chmod 600 "$OUTPUT"
 
 CONFIGURED=""
 for pair in "SLACK_WEBHOOK_URL:Slack" "DISCORD_WEBHOOK_URL:Discord" \
