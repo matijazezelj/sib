@@ -6,8 +6,8 @@
 *.cnf
 *.srl
 
-# But allow CA certificate (public part is safe to distribute)
-!ca/ca.crt
+# Public certificates are generated per deployment too; distribute them out of
+# band with the matching private material rather than committing host identity.
 
 # Allow this .gitignore and README
 !.gitignore
