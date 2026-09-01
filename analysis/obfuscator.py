@@ -517,18 +517,26 @@ class Obfuscator:
         return self.map.to_dict()
 
 
-def obfuscate_alert(alert: dict, level: str = "standard") -> tuple[dict, dict]:
+def obfuscate_alert(
+    alert: dict, level: str = "standard", obfuscator: "Obfuscator | None" = None
+) -> tuple[dict, dict]:
     """
     Convenience function to obfuscate an alert dictionary.
-    
+
     Args:
         alert: Alert dictionary with 'output', 'rule', etc.
         level: Obfuscation level (minimal, standard, paranoid)
-        
+        obfuscator: Reuse an existing Obfuscator so that text obfuscated
+            outside this call — enrichment appended to the same prompt, for
+            instance — gets the same token for the same value. A fresh
+            Obfuscator would number its tokens independently, so one host
+            would appear as two different identifiers to the model.
+
     Returns:
         Tuple of (obfuscated_alert, obfuscation_mapping)
     """
-    obfuscator = Obfuscator(ObfuscationLevel(level))
+    if obfuscator is None:
+        obfuscator = Obfuscator(ObfuscationLevel(level))
     
     obfuscated = alert.copy()
     

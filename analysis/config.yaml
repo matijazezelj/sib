@@ -14,7 +14,7 @@ analysis:
   # Anthropic Claude - requires API key
   anthropic:
     api_key: ${ANTHROPIC_API_KEY}
-    model: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+    model: ${ANTHROPIC_MODEL:-claude-sonnet-5}
   
   # OpenAI - requires API key
   openai:

@@ -323,3 +323,48 @@ class TestFalcoAlertPatterns:
         }
         obfuscated, _mapping = obfuscate_alert(alert)
         assert obfuscated["output"] == alert["output"]
+
+
+# ============================================================================
+# Shared obfuscator across an alert and text obfuscated alongside it
+# ============================================================================
+
+class TestSharedObfuscator:
+    """A caller may obfuscate enrichment text that is appended to the same
+    prompt as the alert. Both must go through one obfuscator, or the
+    enrichment reaches the model raw and tokens stop lining up."""
+
+    def test_reused_obfuscator_gives_one_token_per_value(self):
+        """The same host in the alert and in appended text gets one token."""
+        shared = Obfuscator(ObfuscationLevel.PARANOID)
+        alert = {"output": "Shell spawned on prod-db-01.internal.corp by root"}
+
+        obfuscated, _ = obfuscate_alert(alert, "paranoid", obfuscator=shared)
+        appended = shared.obfuscate("finding on prod-db-01.internal.corp")
+
+        assert "prod-db-01.internal.corp" not in obfuscated["output"]
+        assert "prod-db-01.internal.corp" not in appended
+        # Same host, same token — the relationship survives obfuscation.
+        token = obfuscated["output"].split("on ")[1].split(" by")[0]
+        assert token in appended
+
+    def test_separate_obfuscators_collide_on_tokens(self):
+        """Why the parameter exists: independent obfuscators both number from
+        1, so two different hosts end up sharing a token and the model is told
+        they are the same machine."""
+        first = Obfuscator(ObfuscationLevel.PARANOID)
+        second = Obfuscator(ObfuscationLevel.PARANOID)
+
+        from_alert = first.obfuscate("shell on host-a.corp")
+        from_enrichment = second.obfuscate("finding on host-b.corp")
+
+        token = from_alert.split("on ")[1]
+        assert token in from_enrichment  # same token, different hosts
+        assert first.map.hostnames != second.map.hostnames
+
+    def test_defaults_to_a_fresh_obfuscator(self):
+        """Omitting the parameter keeps the previous behaviour."""
+        alert = {"output": "Connection from 203.0.113.50"}
+        obfuscated, mapping = obfuscate_alert(alert, "standard")
+        assert "203.0.113.50" not in obfuscated["output"]
+        assert mapping["ips"]

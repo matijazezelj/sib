@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 import requests
 import yaml
-from obfuscator import obfuscate_alert
+from obfuscator import ObfuscationLevel, Obfuscator, obfuscate_alert
 from prompts import MITRE_MAPPING, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
 
@@ -233,7 +233,7 @@ class OpenAIProvider(LLMProvider):
 class AnthropicProvider(LLMProvider):
     """Anthropic Claude API provider."""
     
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-5"):
         self.api_key = api_key
         self.model = model
     
@@ -324,7 +324,7 @@ class AlertAnalyzer:
             api_key = os.path.expandvars(anthropic_config.get('api_key', ''))
             return AnthropicProvider(
                 api_key=api_key,
-                model=anthropic_config.get('model', 'claude-3-haiku-20240307')
+                model=anthropic_config.get('model', 'claude-sonnet-5')
             )
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
@@ -358,8 +358,13 @@ class AlertAnalyzer:
     
     def analyze_alert(self, alert: dict, dry_run: bool = False) -> dict:
         """Analyze a single alert."""
-        # Obfuscate the alert
-        obfuscated, mapping = obfuscate_alert(alert, self.obfuscation_level)
+        # One obfuscator for the whole prompt: the alert body and every
+        # enrichment appended below must resolve the same value to the same
+        # token, and nothing may reach the model unobfuscated.
+        obfuscator = Obfuscator(ObfuscationLevel(self.obfuscation_level))
+        obfuscated, _ = obfuscate_alert(
+            alert, self.obfuscation_level, obfuscator=obfuscator
+        )
 
         # Enrich with AIB asset context (graceful — alert still analyzed without it)
         aib_context: dict = {}
@@ -377,7 +382,7 @@ class AlertAnalyzer:
             priority=labels.get('priority', alert.get('priority', 'Unknown')),
             timestamp=alert.get('_timestamp', 'Unknown'),
             source=labels.get('source', 'syscall'),
-            obfuscated_output=obfuscated.get('output', str(obfuscated)),
+            obfuscated_output=obfuscated.get('output') or obfuscator.obfuscate(str(obfuscated)),
             container_image=obfuscated.get('output_fields', {}).get('container.image.repository', 'N/A'),
             syscall=obfuscated.get('output_fields', {}).get('syscall.type', 'N/A'),
             process=obfuscated.get('output_fields', {}).get('proc.name', 'N/A'),
@@ -389,12 +394,12 @@ class AlertAnalyzer:
             from aib_bridge import format_aib_context
             aib_section = format_aib_context(aib_context)
             if aib_section:
-                user_prompt += aib_section
+                user_prompt += obfuscator.obfuscate(aib_section)
 
         if dry_run:
             return {
                 'obfuscated_prompt': user_prompt,
-                'obfuscation_mapping': mapping,
+                'obfuscation_mapping': obfuscator.get_mapping(),
                 'aib_context': aib_context,
                 'note': 'Dry run - no LLM call made'
             }
@@ -415,7 +420,7 @@ class AlertAnalyzer:
         return {
             'original_alert': alert,
             'obfuscated_alert': obfuscated,
-            'obfuscation_mapping': mapping,
+            'obfuscation_mapping': obfuscator.get_mapping(),
             'aib_context': aib_context,
             'analysis': analysis
         }
