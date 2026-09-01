@@ -348,14 +348,19 @@ class TestSharedObfuscator:
         token = obfuscated["output"].split("on ")[1].split(" by")[0]
         assert token in appended
 
-    def test_separate_obfuscators_would_not_share_tokens(self):
-        """Guards the reason the parameter exists rather than its mechanics."""
-        alert = {"output": "Shell spawned on host-a.corp by root"}
-        obfuscated, _ = obfuscate_alert(alert, "paranoid")
-        # A second, independent obfuscator numbers its own tokens from 1, so a
-        # different host would collide with the first one's token.
-        other = Obfuscator(ObfuscationLevel.PARANOID)
-        assert "host-b.corp" not in other.obfuscate("finding on host-b.corp")
+    def test_separate_obfuscators_collide_on_tokens(self):
+        """Why the parameter exists: independent obfuscators both number from
+        1, so two different hosts end up sharing a token and the model is told
+        they are the same machine."""
+        first = Obfuscator(ObfuscationLevel.PARANOID)
+        second = Obfuscator(ObfuscationLevel.PARANOID)
+
+        from_alert = first.obfuscate("shell on host-a.corp")
+        from_enrichment = second.obfuscate("finding on host-b.corp")
+
+        token = from_alert.split("on ")[1]
+        assert token in from_enrichment  # same token, different hosts
+        assert first.map.hostnames != second.map.hostnames
 
     def test_defaults_to_a_fresh_obfuscator(self):
         """Omitting the parameter keeps the previous behaviour."""
