@@ -1,0 +1,127 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "blue", "mode": "fixed"}, "unit": "short"}},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Total UniFi Logs",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "green", "mode": "fixed"}, "unit": "short"}},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats by (hostname) count() | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Devices Reporting",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "red", "mode": "fixed"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short"}},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" level:~\"error|critical|alert|emergency\" | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Errors / Critical",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "yellow", "mode": "fixed"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}]}, "unit": "short"}},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" level:=warning | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Warnings",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisBorderShow": false, "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 65, "gradientMode": "none", "lineWidth": 1, "pointSize": 5, "showPoints": "never", "stacking": {"group": "A", "mode": "normal"}}, "unit": "short"}},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 4},
+      "id": 5,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats by (level) count()", "legendFormat": "{{level}}", "queryType": "statsRange", "refId": "A"}],
+      "title": "Log Volume by Severity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 4},
+      "id": 6,
+      "options": {"displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": true}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats by (hostname) count()", "legendFormat": "{{hostname}}", "queryType": "stats", "refId": "A"}],
+      "title": "Logs by Device",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 12},
+      "id": 7,
+      "options": {"dedupStrategy": "signature", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"(?i)(uplink|link.*down|disconnect|reconnect|vlan|stp|topology|timeout|dns|dhcp|reconfig|provision|fail|error)\"", "queryType": "instant", "refId": "A"}],
+      "title": "Network Disruption Signals",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 21},
+      "id": 8,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\"", "queryType": "instant", "refId": "A"}],
+      "title": "UniFi Logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["sib", "unifi", "network", "syslog", "victorialogs"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+        "definition": "UniFi syslog hostnames",
+        "includeAll": true,
+        "multi": true,
+        "name": "device",
+        "label": "Device",
+        "query": {"field": "hostname", "limit": 100, "query": "source:=unifi_syslog", "refId": "VictoriaLogsVariableQueryEditor-VariableQuery", "type": "fieldValue"},
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {"selected": true, "text": ".*", "value": ".*"},
+        "hide": 0,
+        "label": "Message regex",
+        "name": "search",
+        "options": [],
+        "query": ".*",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]},
+  "timezone": "browser",
+  "title": "UniFi Logs",
+  "uid": "sib-unifi-logs-victorialogs",
+  "version": 1
+}

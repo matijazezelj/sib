@@ -128,6 +128,12 @@ curl -G -s http://192.168.1.25:9428/select/logsql/query \
 UDP syslog has no delivery acknowledgement or encryption. Bind it only on a
 trusted management address and use host firewall policy to limit senders.
 
+The provisioned **UniFi Logs** Grafana dashboard
+(`uid: sib-unifi-logs-victorialogs`) is dedicated to `source=unifi_syslog`. It
+shows reporting devices, severity volume, per-device volume, a
+disruption-focused log stream, and the complete searchable UniFi stream.
+Device and message-regex variables apply across the dashboard.
+
 ## Prometheus
 
 Prometheus collects metrics from Falcosidekick and other SIB components.
