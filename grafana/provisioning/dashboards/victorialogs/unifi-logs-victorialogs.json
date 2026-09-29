@@ -22,8 +22,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "id": 2,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats by (hostname) count() | stats count()", "queryType": "stats", "refId": "A"}],
-      "title": "Devices Reporting",
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" | stats by (remote_ip) count() | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Unique Senders",
       "type": "stat"
     },
     {
