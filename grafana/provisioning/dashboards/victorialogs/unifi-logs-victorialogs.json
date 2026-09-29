@@ -32,8 +32,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "id": 3,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" level:~\"error|critical|alert|emergency\" | stats count()", "queryType": "stats", "refId": "A"}],
-      "title": "Errors / Critical",
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" level:~\"error|critical|alert|emergency\" AND NOT (_msg:\"uplink-monitor.get_link_info\") | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Actionable Errors / Critical",
       "type": "stat"
     },
     {
@@ -42,8 +42,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
       "id": 4,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["sum"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" level:=warning | stats count()", "queryType": "stats", "refId": "A"}],
-      "title": "Warnings",
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"$search\" _msg:\"uplink-monitor.get_link_info\" | stats count()", "queryType": "stats", "refId": "A"}],
+      "title": "Known AP Uplink-Monitor Noise",
       "type": "stat"
     },
     {
@@ -72,8 +72,8 @@
       "gridPos": {"h": 9, "w": 24, "x": 0, "y": 12},
       "id": 7,
       "options": {"dedupStrategy": "signature", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
-      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"(?i)(uplink|link.*down|disconnect|reconnect|vlan|stp|topology|timeout|dns|dhcp|reconfig|provision|fail|error)\"", "queryType": "instant", "refId": "A"}],
-      "title": "Network Disruption Signals",
+      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "source:=unifi_syslog hostname:~\"$device\" _msg:~\"(?i)(link.*(down|up)|uplink.*(down|lost|change)|disconnect|reconnect|vlan|stp|topology|timeout|no route|unreachable|reconfig|provision)\" AND NOT (_msg:\"uplink-monitor.get_link_info\")", "queryType": "instant", "refId": "A"}],
+      "title": "Network Disruption Signals (Noise Excluded)",
       "type": "logs"
     },
     {

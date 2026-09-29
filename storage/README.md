@@ -132,7 +132,10 @@ The provisioned **UniFi Logs** Grafana dashboard
 (`uid: sib-unifi-logs-victorialogs`) is dedicated to `source=unifi_syslog`. It
 shows reporting devices, severity volume, per-device volume, a
 disruption-focused log stream, and the complete searchable UniFi stream.
-Device and message-regex variables apply across the dashboard.
+Device and message-regex variables apply across the dashboard. Repeated
+`uplink-monitor.get_link_info` errors are counted separately and excluded from
+the actionable-error and disruption panels so known firmware noise does not
+bury real link transitions.
 
 ## Prometheus
 
