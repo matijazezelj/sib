@@ -35,6 +35,7 @@ Then run `make install` - it automatically deploys the correct stack.
 | Service | Port | Description |
 |---------|------|-------------|
 | **VictoriaLogs** | 9428 | Log storage (fast full-text search) |
+| **VictoriaLogs syslog** | 5514/UDP | Direct RFC3164/RFC5424 appliance log ingestion |
 | **VictoriaMetrics** | 8428 | Metrics storage (10x less RAM than Prometheus) |
 | **node_exporter** | 9100 | Host metrics (CPU, memory, disk, network) |
 
@@ -92,7 +93,40 @@ _stream:{job="falco"} AND rule:~".*shell.*"
 
 # Events from specific host
 _stream:{job="falco"} hostname:production-server-01
+
+# UniFi syslog received in the last five minutes
+_time:5m source:=unifi_syslog
 ```
+
+### UniFi and appliance syslog
+
+VictoriaLogs can ingest RFC3164/RFC5424 syslog directly. This is the log path;
+SNMP exporters are separate polling tools for interface and device metrics.
+
+Configure the SIB host `.env` with a specific LAN address rather than a wildcard:
+
+```dotenv
+SYSLOG_BIND_ADDR=192.168.1.25
+SYSLOG_PORT=5514
+SYSLOG_TIMEZONE=Europe/Zagreb
+```
+
+Then recreate only VictoriaLogs and configure the appliance to send UDP syslog
+to that address and port. The receiver adds `source=unifi_syslog`, keeps the
+sender address, and uses `source`, `hostname`, and `app_name` as stream fields.
+
+Verify end to end rather than trusting an open socket:
+
+```bash
+docker compose --env-file .env -f storage/compose-vm.yaml up -d victorialogs
+ss -lun | grep ':5514 '
+curl -G -s http://192.168.1.25:9428/select/logsql/query \
+  --data-urlencode 'query=_time:5m source:=unifi_syslog' \
+  --data-urlencode 'limit=5'
+```
+
+UDP syslog has no delivery acknowledgement or encryption. Bind it only on a
+trusted management address and use host firewall policy to limit senders.
 
 ## Prometheus
 

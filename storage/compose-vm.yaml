@@ -2,6 +2,8 @@
 # VictoriaLogs + VictoriaMetrics + node_exporter
 # Lightweight, high-performance alternative to Grafana stack
 # Remote mode: Set STORAGE_BIND=0.0.0.0 to accept connections from collectors
+# UniFi syslog: Set SYSLOG_BIND_ADDR to the SIB LAN address and configure
+# UniFi to send UDP syslog to SYSLOG_PORT (default 5514).
 
 services:
   victorialogs:
@@ -10,9 +12,17 @@ services:
     restart: unless-stopped
     ports:
       - "${STORAGE_BIND:-127.0.0.1}:${VICTORIALOGS_PORT:-9428}:9428"
+      - "${SYSLOG_BIND_ADDR:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"
     command:
       - "-storageDataPath=/vlogs"
       - "-retentionPeriod=${VICTORIALOGS_RETENTION_PERIOD:-168h}"
+      - "-syslog.listenAddr.udp=:5514"
+      - "-syslog.timezone=${SYSLOG_TIMEZONE:-UTC}"
+      - "-syslog.useRemoteIP.udp=true"
+      - >-
+        -syslog.extraFields.udp={"source":"unifi_syslog"}
+      - >-
+        -syslog.streamFields.udp=["source","hostname","app_name"]
     volumes:
       - victorialogs-data:/vlogs
     networks:
