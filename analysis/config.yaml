@@ -14,7 +14,17 @@ analysis:
   # Anthropic Claude - requires API key
   anthropic:
     api_key: ${ANTHROPIC_API_KEY}
-    model: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+    # Leave model empty to use the escalation ladder below. Setting it (or
+    # ANTHROPIC_MODEL) pins one model at ANTHROPIC_EFFORT and skips the ladder.
+    model: ${ANTHROPIC_MODEL:-}
+    effort: ${ANTHROPIC_EFFORT:-medium}
+    # Each alert starts on the first tier. An answer that is not valid
+    # analysis JSON, is refused, or is cut off goes to the next tier: same
+    # model one effort level up, then the next model up at a lower effort.
+    tiers:
+      - {model: claude-haiku-5-5, effort: medium}
+      - {model: claude-haiku-5-5, effort: high}
+      - {model: claude-sonnet-5-5, effort: medium}
   
   # OpenAI - requires API key
   openai:

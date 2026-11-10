@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
+from typing import ClassVar
 
 import requests
 import yaml
@@ -230,43 +231,160 @@ class OpenAIProvider(LLMProvider):
         return json.loads(content)
 
 
+class AnalysisRejected(Exception):
+    """A model answered, but the answer can't be used (bad JSON, refusal, cut off)."""
+
+
+_SEVERITIES = {'critical', 'high', 'medium', 'low'}
+
+
+def validate_analysis(analysis: object) -> None:
+    """Cheap check that an LLM answer is a usable alert analysis.
+
+    Raises AnalysisRejected naming the first problem. This is the "test" that
+    decides whether a cheaper tier's answer is kept or the alert is escalated.
+    """
+    if not isinstance(analysis, dict):
+        raise AnalysisRejected("answer is not a JSON object")
+    for key in ('attack_vector', 'summary'):
+        if not isinstance(analysis.get(key), str) or not analysis[key].strip():
+            raise AnalysisRejected(f"missing '{key}'")
+    mitre = analysis.get('mitre_attack')
+    if not isinstance(mitre, dict) or not re.fullmatch(r'T\d{4}(\.\d{3})?', str(mitre.get('technique_id', ''))):
+        raise AnalysisRejected("missing or malformed mitre_attack.technique_id")
+    risk = analysis.get('risk')
+    if not isinstance(risk, dict) or str(risk.get('severity', '')).lower() not in _SEVERITIES:
+        raise AnalysisRejected("missing or invalid risk.severity")
+    if not isinstance(analysis.get('mitigations'), dict):
+        raise AnalysisRejected("missing 'mitigations'")
+
+
 class AnthropicProvider(LLMProvider):
-    """Anthropic Claude API provider."""
-    
-    def __init__(self, api_key: str, model: str = "claude-sonnet-5"):
+    """Anthropic Claude API provider with a cheap-first escalation ladder.
+
+    Alert triage is high-volume structured extraction, so it starts on the
+    smallest model and only escalates the alerts whose answer fails
+    validate_analysis(): first the same model one effort level up, then the
+    next model up at a lower effort. Each tier is {"model", "effort"}.
+    """
+
+    API_URL = "https://api.anthropic.com/v1/messages"
+
+    DEFAULT_TIERS: ClassVar[list[dict]] = [
+        {"model": "claude-haiku-5-5", "effort": "medium"},
+        {"model": "claude-haiku-5-5", "effort": "high"},
+        {"model": "claude-sonnet-5-5", "effort": "medium"},
+    ]
+
+    # USD per million tokens: (input, output, cache read). Haiku 5.5 prices are
+    # for prompts up to 100K tokens, which alert prompts stay well under.
+    PRICES: ClassVar[dict[str, tuple[float, float, float]]] = {
+        "claude-haiku-5-5": (0.10, 0.50, 0.01),
+        "claude-sonnet-5-5": (2.00, 10.00, 0.10),
+        "claude-opus-5-5": (4.00, 20.00, 0.20),
+        "claude-fable-5-2": (8.00, 40.00, 0.20),
+    }
+
+    def __init__(self, api_key: str, model: str = "", effort: str = "medium",
+                 tiers: list[dict] | None = None):
         self.api_key = api_key
-        self.model = model
-    
-    def analyze(self, system_prompt: str, user_prompt: str) -> dict:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": self.model,
-                "max_tokens": 4096,
-                "system": system_prompt,
-                "messages": [
-                    {"role": "user", "content": user_prompt}
-                ]
-            },
-            timeout=60
-        )
+        if tiers:
+            self.tiers = [{"model": t["model"], "effort": t.get("effort", "medium")} for t in tiers]
+        elif model:
+            # A pinned model means no ladder: one tier, as before.
+            self.tiers = [{"model": model, "effort": effort or "medium"}]
+        else:
+            self.tiers = [dict(t) for t in self.DEFAULT_TIERS]
+        self.model = self.tiers[0]["model"]
+        # Per-call record of tiers tried, tokens and estimated cost.
+        self.last_run: dict = {}
+
+    def _request(self, tier: dict, system_prompt: str, user_prompt: str) -> dict:
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "model": tier["model"],
+            "max_tokens": 16000,
+            "system": system_prompt,
+            "output_config": {"effort": tier["effort"]},
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        # Security alerts can trip the cyber safety classifier. Above Haiku,
+        # let the API re-run a declined request on a fallback model itself.
+        if not tier["model"].startswith("claude-haiku"):
+            headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
+            body["fallbacks"] = "default"
+        response = requests.post(self.API_URL, headers=headers, json=body, timeout=120)
         response.raise_for_status()
-        
-        content = response.json()['content'][0]['text']
-        # Extract JSON from response
+        return response.json()
+
+    def _cost(self, model: str, usage: dict) -> float:
+        price_in, price_out, price_cache = self.PRICES.get(model, (0.0, 0.0, 0.0))
+        return (usage.get('input_tokens', 0) * price_in
+                + usage.get('cache_creation_input_tokens', 0) * price_in * 1.25
+                + usage.get('cache_read_input_tokens', 0) * price_cache
+                + usage.get('output_tokens', 0) * price_out) / 1_000_000
+
+    @staticmethod
+    def _parse(data: dict) -> dict:
+        stop = data.get('stop_reason')
+        if stop == 'refusal':
+            category = (data.get('stop_details') or {}).get('category')
+            raise AnalysisRejected(f"model declined (category: {category})")
+        if stop == 'max_tokens':
+            raise AnalysisRejected("answer cut off at max_tokens")
+        # Responses can open with thinking blocks: read text blocks by type.
+        content = "".join(b.get('text', '') for b in data.get('content', []) if b.get('type') == 'text')
         try:
-            return json.loads(content)
+            analysis = json.loads(content)
         except json.JSONDecodeError:
-            # Try to find JSON in the response
             match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match:
-                return json.loads(match.group())
-            raise
+            if not match:
+                raise AnalysisRejected("no JSON object in answer") from None
+            try:
+                analysis = json.loads(match.group())
+            except json.JSONDecodeError as e:
+                raise AnalysisRejected(f"invalid JSON: {e}") from None
+        validate_analysis(analysis)
+        return analysis
+
+    def analyze(self, system_prompt: str, user_prompt: str) -> dict:
+        attempts = []
+        self.last_run = {'attempts': attempts}
+        for tier in self.tiers:
+            data = self._request(tier, system_prompt, user_prompt)
+            usage = data.get('usage') or {}
+            served_by = data.get('model', tier['model'])
+            attempt = {
+                'model': served_by,
+                'effort': tier['effort'],
+                'input_tokens': usage.get('input_tokens', 0),
+                'output_tokens': usage.get('output_tokens', 0),
+                'cost_usd': round(self._cost(served_by, usage), 6),
+            }
+            attempts.append(attempt)
+            try:
+                analysis = self._parse(data)
+            except AnalysisRejected as e:
+                attempt['rejected'] = str(e)
+                print(f"{tier['model']} @ {tier['effort']}: {e}; escalating", file=sys.stderr)
+                continue
+            self.last_run.update(model=served_by, effort=tier['effort'])
+            return analysis
+        reasons = "; ".join(f"{a['model']}@{a['effort']}: {a['rejected']}" for a in attempts)
+        raise AnalysisRejected(f"every tier failed ({reasons})")
+
+    def run_summary(self) -> dict:
+        """Tiers tried for the last alert, with total tokens and estimated cost."""
+        attempts = self.last_run.get('attempts', [])
+        return {
+            **self.last_run,
+            'total_cost_usd': round(sum(a['cost_usd'] for a in attempts), 6),
+            'escalations': max(len(attempts) - 1, 0),
+        }
 
 
 class AlertAnalyzer:
@@ -324,7 +442,9 @@ class AlertAnalyzer:
             api_key = os.path.expandvars(anthropic_config.get('api_key', ''))
             return AnthropicProvider(
                 api_key=api_key,
-                model=anthropic_config.get('model', 'claude-sonnet-5')
+                model=anthropic_config.get('model') or '',
+                effort=anthropic_config.get('effort') or 'medium',
+                tiers=anthropic_config.get('tiers') or None,
             )
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
@@ -417,13 +537,16 @@ class AlertAnalyzer:
                 'fallback_mitre': quick_mitre
             }
 
-        return {
+        result = {
             'original_alert': alert,
             'obfuscated_alert': obfuscated,
             'obfuscation_mapping': obfuscator.get_mapping(),
             'aib_context': aib_context,
             'analysis': analysis
         }
+        if hasattr(self.provider, 'run_summary'):
+            result['llm'] = self.provider.run_summary()
+        return result
     
     def store_analysis(self, result: dict) -> bool:
         """Store analysis result in Loki."""
@@ -660,10 +783,15 @@ def print_analysis(result: dict, verbose: bool = False):
     print("\n📝 Summary:")
     print(f"   {analysis.get('summary', 'N/A')}")
     
+    llm = result.get('llm')
+    if llm and llm.get('attempts'):
+        tiers = " → ".join(f"{a['model']}@{a['effort']}" for a in llm['attempts'])
+        print(f"\n💰 Model: {tiers}  (~${llm.get('total_cost_usd', 0):.4f})")
+
     if verbose:
         print("\n🔐 Obfuscation Mapping:")
         print(json.dumps(result.get('obfuscation_mapping', {}), indent=2))
-    
+
     print("\n" + "="*70)
 
 

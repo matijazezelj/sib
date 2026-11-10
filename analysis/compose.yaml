@@ -19,7 +19,9 @@ services:
       - ANALYSIS_CORS_ORIGINS=${ANALYSIS_CORS_ORIGINS:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      # Empty = cheap-first ladder (Haiku 5.5 -> Sonnet 5.5); set to pin one model
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      - ANTHROPIC_EFFORT=${ANTHROPIC_EFFORT:-medium}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
