@@ -143,8 +143,22 @@ analysis:
   provider: anthropic
   anthropic:
     api_key: ${ANTHROPIC_API_KEY}
-    model: claude-3-haiku-20240307
+    tiers:                                   # cheap first, escalate failures
+      - {model: claude-haiku-5-5, effort: medium}
+      - {model: claude-haiku-5-5, effort: high}
+      - {model: claude-sonnet-5-5, effort: medium}
 ```
+
+Alert triage is high-volume structured extraction with an answer that can be
+checked, so each alert starts on Claude Haiku 5.5. The analyzer validates the
+JSON it gets back (MITRE technique ID, severity, summary, mitigations). Only an
+answer that fails that check, is refused, or is cut off goes to the next tier:
+the same model one effort level up first, then the next model up at a lower
+effort. Server-side refusal fallbacks are turned on for tiers above Haiku.
+
+Each result carries an `llm` block with the tiers tried, tokens and estimated
+cost, so you can see what alerts actually cost. To pin one model instead, set
+`ANTHROPIC_MODEL` (and optionally `ANTHROPIC_EFFORT`).
 
 ## Usage
 

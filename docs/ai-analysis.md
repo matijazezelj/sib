@@ -100,11 +100,21 @@ export OPENAI_API_KEY=sk-your-key-here
 ### Anthropic Setup
 
 ```yaml
-llm:
+analysis:
   provider: anthropic
-  model: claude-3-sonnet-20240229
-  api_key: your-key-here
+  anthropic:
+    api_key: ${ANTHROPIC_API_KEY}
+    # model: claude-sonnet-5-5   # set to pin one model; leave out for the ladder
+    tiers:
+      - {model: claude-haiku-5-5, effort: medium}
+      - {model: claude-haiku-5-5, effort: high}
+      - {model: claude-sonnet-5-5, effort: medium}
 ```
+
+Each alert starts on Claude Haiku 5.5 at `medium` effort. The answer is checked
+(valid JSON, MITRE technique ID, severity, summary, mitigations), and only
+alerts whose answer fails the check, is refused, or is cut off move up a tier.
+The CLI prints the tiers used and the estimated cost per alert.
 
 ---
 
