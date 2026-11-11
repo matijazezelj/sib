@@ -8,6 +8,8 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - analysis-cache:/app/cache
+      # File-based secrets: point *_FILE at /app/secrets/<name> (see secrets/README.md)
+      - ../secrets:/app/secrets:ro
     networks:
       - sib-network
     environment:
@@ -15,17 +17,23 @@ services:
       - STACK=${STACK:-vm}
       # Shared secret required by every endpoint except /health
       - ANALYSIS_API_TOKEN=${ANALYSIS_API_TOKEN:-}
+      - ANALYSIS_API_TOKEN_FILE=${ANALYSIS_API_TOKEN_FILE:-}
       # Comma-separated origins allowed to call the API cross-origin (default: none)
       - ANALYSIS_CORS_ORIGINS=${ANALYSIS_CORS_ORIGINS:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_API_KEY_FILE=${ANTHROPIC_API_KEY_FILE:-}
       # Empty = cheap-first ladder (Haiku 5.5 -> Sonnet 5.5); set to pin one model
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
       - ANTHROPIC_EFFORT=${ANTHROPIC_EFFORT:-medium}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY_FILE=${OPENAI_API_KEY_FILE:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      # AIB (Assets in a Box) enrichment - empty disables it
+      - AIB_BASE_URL=${AIB_BASE_URL:-}
+      - AIB_API_TOKEN=${AIB_API_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')"]
       interval: 30s

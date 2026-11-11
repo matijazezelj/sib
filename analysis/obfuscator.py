@@ -347,13 +347,24 @@ class Obfuscator:
             # Password fields
             'password_field',
             
-            # Note: aws_secret_key, datadog_*, twilio_auth_token, azure_client_secret
-            # and base64_secret are too generic (match many false positives)
-            # Only use them in paranoid mode
         ]
-        
-        # Apply each pattern
-        for pattern_name in secret_patterns:
+        return self._redact(text, secret_patterns)
+
+    # Shapes too generic to apply at every level (any 32/40-char hex or base64
+    # run matches), so only paranoid mode uses them, where over-redaction is
+    # the point.
+    GENERIC_SECRET_PATTERNS = (
+        'ssh_public_key', 'aws_secret_key', 'datadog_app_key', 'datadog_api_key',
+        'twilio_auth_token', 'azure_client_secret', 'base64_secret',
+    )
+
+    def _obfuscate_generic_secrets(self, text: str) -> str:
+        """Redact secrets that only have a generic shape (paranoid mode only)."""
+        return self._redact(text, self.GENERIC_SECRET_PATTERNS)
+
+    def _redact(self, text: str, pattern_names) -> str:
+        """Replace every match of the named PATTERNS with a [REDACTED-<label>] token."""
+        for pattern_name in pattern_names:
             if pattern_name not in self.PATTERNS:
                 continue
             pattern = self.PATTERNS[pattern_name]
@@ -508,6 +519,8 @@ class Obfuscator:
         if self.level == ObfuscationLevel.PARANOID:
             result = self._obfuscate_paths(result)
             result = self._obfuscate_hostnames(result)
+            # After paths and hostnames, so path segments aren't read as keys.
+            result = self._obfuscate_generic_secrets(result)
             result = self._obfuscate_high_entropy(result)
         
         return result
