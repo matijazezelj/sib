@@ -97,7 +97,7 @@ tags:
 
 ## Converter Output
 
-Running `make convert-sigma` generates:
+Running `make convert-sigma` generates Falco rules only (`sigma/rules/converted_falco_rules.yaml`). To also generate LogQL or LogsQL alerts, run the converter directly, e.g. `./sigma/sigma2sib.py sigma/rules/ -o all`, which writes `converted_logql_alerts.yaml` and `converted_logsql_alerts.yaml` next to the input rules. Output formats:
 
 ### Falco Rules
 
@@ -142,21 +142,25 @@ groups:
 
 ```bash
 # Append to custom rules
-cat sigma/output/falco_rules.yaml >> detection/config/rules/custom_rules.yaml
+cat sigma/rules/converted_falco_rules.yaml >> detection/config/rules/custom_rules.yaml
 
 # Restart to apply
 make restart
 ```
 
+Alternatively, copy the file into `detection/config/rules/`, add its path to `rules_files` in `detection/config/falco.yaml.template`, and re-run `make install-detection`. Files copied there are not loaded automatically.
+
 ### Add to Loki Alerting (Grafana Stack)
 
 ```bash
-# Copy to Loki config
-cp sigma/output/logql_alerts.yaml storage/config/rules/
+# Copy into the running Loki container's ruler directory (/loki/rules)
+docker cp sigma/rules/converted_logql_alerts.yaml sib-loki:/loki/rules/
 
 # Restart Loki
 docker compose -f storage/compose-grafana.yaml restart loki
 ```
+
+> **Note:** SIB does not ship a host mount for `/loki/rules`, so a file copied this way is lost if the container is recreated. Add your own volume mount for `/loki/rules` in `storage/compose-grafana.yaml` to persist it.
 
 > **Note:** This applies to the Grafana stack (`STACK=grafana`). For VictoriaLogs, use LogsQL alerts with `-o logsql`.
 

@@ -110,7 +110,7 @@ make fleet-ping
 ### 4. Deploy to Fleet
 
 ```bash
-# Deploy to all hosts (native by default)
+# Deploy to all hosts (auto: Docker if available)
 make deploy-fleet
 
 # Or target specific hosts

@@ -21,17 +21,18 @@ Datasources are provisioned based on the `STACK` setting in `.env`:
 
 ## Dashboards
 
-SIB ships 10 dashboards — 5 for each storage backend (Loki and VictoriaLogs variants):
+SIB ships 11 dashboards — 5 for the Loki backend and 6 for VictoriaLogs (only the active `STACK`'s set is provisioned):
 
 | Dashboard | Description |
 |-----------|-------------|
 | **Security Overview** | High-level security posture: event counts by severity, events over time, top rules, recent alerts |
-| **Events Explorer** | Search and filter security events with query builder, severity filter dropdown, and AI analysis links |
+| **Events Explorer** | Search and filter security events with query builder and AI analysis links (filter dropdowns in the Loki and AI-analysis variants) |
 | **MITRE ATT&CK Coverage** | Detection events mapped to ATT&CK tactics with coverage matrix and technique breakdown |
 | **Fleet Overview** | Multi-host monitoring: CPU, memory, disk, network, and log volume per host |
 | **Risk Scores** | Host risk assessment based on event severity and frequency |
+| **UniFi Logs** | UniFi syslog events and senders (VictoriaLogs only) |
 
-> **Note:** The Events Explorer includes a **severity filter dropdown** to quickly filter events by priority level (Critical, Error, Warning, Notice).
+> **Note:** The Loki Events Explorer (and the AI-analysis variants installed by `make install-analysis`) has hostname, priority and rule dropdowns. The base VictoriaLogs Events Explorer has none.
 
 ## Access
 
@@ -45,7 +46,7 @@ Default credentials:
 
 1. Create dashboard in Grafana UI
 2. Export as JSON (Share > Export > Save to file)
-3. Place in `provisioning/dashboards/json/`
+3. Place in `provisioning/dashboards/victorialogs/` (`vm` stack) or `provisioning/dashboards/loki/` (`grafana` stack)
 4. Restart Grafana
 
 ## LogQL Examples

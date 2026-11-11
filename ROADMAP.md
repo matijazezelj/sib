@@ -5,7 +5,7 @@ This is a living roadmap. Priorities may shift based on feedback and community c
 ## Recently shipped
 - CI pipeline with shellcheck, Python linting, and Docker Compose validation
 - Onboarding docs: minimal install, FAQ, hardening guide, troubleshooting
-- 65 detection rules mapped across all 12 MITRE ATT&CK tactics
+- 60 custom detection rules (plus optional cloud and web server packs) mapped across all 12 MITRE ATT&CK tactics
 - Fleet deployment via Ansible (Dockerized, no local install needed)
 - AI-powered alert analysis with obfuscation (Anthropic, OpenAI, Ollama)
 - mTLS support for encrypted fleet communication

@@ -147,7 +147,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 
 **VM stack (default, `sib_stack: vm`)**
 - vmagent + node_exporter for metrics → VictoriaMetrics
-- No log shipping (Falco events go via Sidekick)
+- Vector for host logs → VictoriaLogs (Falco events still go via Sidekick)
 
 **Grafana stack (`sib_stack: grafana`)**
 - Alloy (Grafana Agent)
@@ -210,26 +210,27 @@ This approach works on any Linux distribution without requiring apt/yum/dnf acce
 
 ### Deployment Strategy
 
-SIB supports both native package installation and Docker containers. **Native is recommended** for Falco visibility.
+SIB supports both native package installation and Docker containers. **Docker is recommended** for simplicity; `native` gives Falco direct process visibility.
 
 | Strategy | Description |
 |----------|-------------|
-| `native` (default) | Install Falco from repo. VM collectors always use Docker. |
+| `auto` (default) | Use Docker if available, otherwise native |
 | `docker` | Run Falco as container |
-| `auto` | Use Docker if available, otherwise native |
+| `native` | Install Falco from repo. VM collectors always use Docker. |
 
 Configure in `inventory/group_vars/all.yml`:
 
 ```yaml
 # Deployment Strategy (for Falco)
-# native - Native packages (recommended, better process visibility)
+# auto   - Use Docker if available, otherwise native (default)
 # docker - Docker containers (requires Docker)
-# auto   - Use Docker if available, otherwise native
-deployment_strategy: native
+# native - Native packages (better process visibility)
+deployment_strategy: auto
 
-# Collector deployment (VM stack: vmagent + node_exporter)
-# docker - Always use Docker (recommended, only option for VM collectors)
-collector_deployment: docker
+# Collector deployment (VM stack: vector + vmagent + node_exporter)
+# auto   - Use Docker if available, otherwise skip (VM collectors require Docker)
+# docker - Force Docker containers
+collector_deployment: auto
 
 # Install Docker if not present? (only applies when strategy is 'auto' or 'docker')
 install_docker_if_missing: true
@@ -385,19 +386,23 @@ See [Security Hardening](../docs/security-hardening.md) for complete mTLS docume
 3. **Network**: Fleet hosts need outbound access to SIB server ports:
    - 2801 (Falcosidekick) - for Falco events (supports mTLS)
    - 8428 (VictoriaMetrics) - for metrics (VM stack)
+   - 9428 (VictoriaLogs) - for Vector logs (VM stack)
    - 3100 (Loki) + 9090 (Prometheus) - for logs/metrics (Grafana stack)
 
 4. **Firewall**: Restrict access to fleet nodes only:
    ```bash
-   # UFW example
-   ufw allow from 192.168.1.0/24 to any port 2801
-   ufw allow from 192.168.1.0/24 to any port 8428
+   # UFW example: one rule per approved fleet host, not a whole subnet
+   ufw allow from 192.168.1.212 to any port 2801 proto tcp
+   ufw allow from 192.168.1.212 to any port 8428 proto tcp
+   ufw allow from 192.168.1.212 to any port 9428 proto tcp
    
-   # iptables example
-   iptables -A INPUT -p tcp --dport 2801 -s 192.168.1.0/24 -j ACCEPT
-   iptables -A INPUT -p tcp --dport 8428 -s 192.168.1.0/24 -j ACCEPT
+   # iptables example (repeat per host)
+   iptables -A INPUT -p tcp --dport 2801 -s 192.168.1.212 -j ACCEPT
+   iptables -A INPUT -p tcp --dport 8428 -s 192.168.1.212 -j ACCEPT
+   iptables -A INPUT -p tcp --dport 9428 -s 192.168.1.212 -j ACCEPT
    iptables -A INPUT -p tcp --dport 2801 -j DROP
    iptables -A INPUT -p tcp --dport 8428 -j DROP
+   iptables -A INPUT -p tcp --dport 9428 -j DROP
    ```
 
 ## File Structure

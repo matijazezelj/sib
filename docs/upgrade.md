@@ -20,7 +20,7 @@ nav_order: 9
 
 3. Regenerate configs (picks up any template changes):
    ```bash
-   make generate-configs
+   make install-alerting install-detection
    ```
 
 4. Restart all services:
@@ -42,15 +42,12 @@ nav_order: 9
 **New container images on GHCR**
 
 `sib-analysis` and `sib-ansible` are now published to GHCR. If you previously
-built these locally, you can now pull pre-built images instead:
+built these locally, the pre-built images are available at
+`ghcr.io/matijazezelj/sib-analysis` and `ghcr.io/matijazezelj/sib-ansible`.
 
-```bash
-docker compose -f analysis/compose.yaml pull
-docker compose -f ansible/compose.yaml pull
-```
-
-Your existing local builds still work — `build:` is kept in the compose files
-as a fallback.
+The compose files in this repo still use `build:` (they do not reference the
+GHCR images), so `docker compose pull` fetches nothing. Your local builds keep
+working as before; rebuild them after upgrading with `make install-analysis`.
 
 **New detection rules**
 
@@ -98,8 +95,8 @@ it, set `STACK=grafana` in your `.env` before upgrading. The `vm` stack
 To migrate from Loki to VictoriaLogs:
 ```bash
 make backup                   # save existing data
-STACK=vm make install-storage # start new storage
-make restore                  # restore data (Loki → VictoriaLogs migration is manual)
+make install-storage-vm       # start new storage
+make restore BACKUP=backups/<name> # restore data (Loki → VictoriaLogs migration is manual)
 ```
 
 > **Note:** Log data is not automatically migrated between storage backends.
@@ -114,9 +111,9 @@ If something goes wrong after upgrading, restore from backup and check out the
 previous version:
 
 ```bash
-make restore                       # restore storage volumes
+make restore BACKUP=backups/<name> # restore storage volumes
 git checkout <previous-tag>        # revert code
-make generate-configs && make restart
+make install-alerting install-detection && make restart
 ```
 
 ## Getting help

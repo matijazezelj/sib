@@ -98,7 +98,7 @@ uname -r  # Need 5.8+
 
 **Solutions**:
 1. Disable unused rules in `detection/config/rules/`
-2. Increase rule buffer size in `detection/config/falco.yaml`
+2. Increase rule buffer size in `detection/config/falco.yaml` (generated from `falco.yaml.template` by `make install-detection`; edit the template)
 3. Use output rate limiting
 
 ### No Falco Events
@@ -176,22 +176,23 @@ curl -G http://localhost:3100/loki/api/v1/query --data-urlencode 'query={job=~".
 
 ### Sidekick Not Forwarding
 
-Check configuration in `alerting/config/config.yaml`:
+Check the generated `alerting/config/config.yaml` (it is rewritten on every `make install-alerting`, so do not edit it; change `.env` or `alerting/config/custom-outputs.yaml` instead). The `loki:` output points at the storage backend for your stack:
 
 **VictoriaLogs (default):**
 ```yaml
-victorialogs:
-  hostport: http://victorialogs:9428
+loki:
+  hostport: "http://sib-victorialogs:9428"
 ```
 
 **Loki (Grafana stack):**
 ```yaml
 loki:
-  hostport: http://loki:3100
+  hostport: "http://sib-loki:3100"
 ```
 
-Restart after changes:
+Regenerate and restart after changes:
 ```bash
+make install-alerting
 docker compose -f alerting/compose.yaml restart
 ```
 
@@ -227,7 +228,7 @@ docker logs sib-grafana
 # - Permission issues on data directory
 
 # Try with fresh data
-docker volume rm sib_grafana_data
+docker volume rm grafana_grafana-data
 make install-grafana
 ```
 
@@ -308,8 +309,9 @@ Ensure Ollama is accessible from Docker:
 ```bash
 # Check analysis/config.yaml
 # Use host.docker.internal for Ollama on host machine
-llm:
-  base_url: http://host.docker.internal:11434
+analysis:
+  ollama:
+    url: http://host.docker.internal:11434
 ```
 
 ### Slow Analysis
@@ -426,7 +428,7 @@ docker pull alpine
   echo "=== Recent Logs ==="
   docker logs sib-falco --tail 20 2>&1
   docker logs sib-sidekick --tail 20 2>&1
-  docker logs sib-loki --tail 20 2>&1
+  docker logs sib-victorialogs --tail 20 2>&1   # sib-loki on the grafana stack
   
   echo "=== Disk Usage ==="
   df -h

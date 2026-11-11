@@ -90,9 +90,9 @@ docker run --rm alpine apk add curl
 
 ## Adding Your Own Rules
 
-1. Create a YAML file in `detection/config/rules/`
+1. Append your rule to `detection/config/rules/custom_rules.yaml`, or create a new YAML file in `detection/config/rules/` and add its path to `rules_files` in `detection/config/falco.yaml.template` (files not listed there are not loaded)
 2. Follow the Falco rule format
-3. Restart Falco: `make restart-detection`
+3. Restart Falco (`make restart-detection`; after editing the template, re-run `make install-detection`)
 4. Validate: `make test-rules`
 
 ## Rule Writing Tips

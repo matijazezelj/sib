@@ -127,14 +127,23 @@ This script:
 
 Expected output:
 ```
-[✓] Falco is running
-[✓] Falcosidekick is running
-[✓] VictoriaLogs is running
-[✓] Grafana is running
-[✓] Test event generated
-[✓] Event found in VictoriaLogs
-[✓] Pipeline is working correctly!
+[1/7] Service Health Check
+---
+✓ sib-falco: healthy
+✓ sib-sidekick: healthy
+✓ sib-victorialogs: healthy
+✓ sib-victoriametrics: healthy
+✓ sib-grafana: healthy
+
+[2/7] Network Connectivity
+---
+✓ Falco -> Sidekick: OK
+✓ VictoriaLogs API: Ready
+✓ Grafana API: Ready
+...
 ```
+
+The script continues through metrics targets, test events, log data verification and triggered rules, then prints access URLs.
 
 > **Note:** If you're using the Grafana stack (`STACK=grafana`), the output will show "Loki" instead of "VictoriaLogs".
 
@@ -178,7 +187,7 @@ make info
 
 # Backup & Restore
 make backup               # Create timestamped backup of configs, rules, and dashboards
-make restore              # Restore from a backup file
+make restore BACKUP=backups/<name>  # Restore from a backup directory
 ```
 
 ---
@@ -233,21 +242,23 @@ After adding rules:
 make restart
 ```
 
+Rules in other files copied into `detection/config/rules/` are not loaded automatically: either append them to `custom_rules.yaml`, or add the file path to `rules_files` in `detection/config/falco.yaml.template` and re-run `make install-detection`.
+
 ---
 
 ## Configuring Alert Outputs
 
-Send alerts to Slack, PagerDuty, and more. Edit `alerting/config/config.yaml`:
+Send alerts to Slack, PagerDuty, and more. Do not edit `alerting/config/config.yaml`: it is regenerated from `.env` on every `make install-alerting`. Set the output variables in `.env`, or put advanced outputs in `alerting/config/custom-outputs.yaml` (copy from `custom-outputs.yaml.example`; it is appended to the generated config and never overwritten):
 
-```yaml
-slack:
-  webhookurl: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
-  minimumpriority: "warning"
-
-pagerduty:
-  routingkey: "your-routing-key"
-  minimumpriority: "critical"
+```bash
+# .env
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+SLACK_MINIMUM_PRIORITY=warning
+PAGERDUTY_ROUTING_KEY=your-routing-key
+PAGERDUTY_MINIMUM_PRIORITY=critical
 ```
+
+Then run `make install-alerting` to regenerate the config.
 
 Falcosidekick supports 50+ outputs. See the [Falcosidekick documentation](https://github.com/falcosecurity/falcosidekick) for all options.
 

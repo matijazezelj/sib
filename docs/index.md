@@ -173,14 +173,14 @@ I built a converter that transforms Sigma rules into:
 3. **LogsQL alerts** — For log-based detection in VictoriaLogs (VM stack)
 
 ```bash
-# Convert to Falco + LogQL (default)
+# Convert to Falco rules (what make convert-sigma runs)
 make convert-sigma
 
 # Convert to LogsQL for VictoriaLogs
-./sigma/sigma2sib.py rules/ -o logsql
+./sigma/sigma2sib.py sigma/rules/ -o logsql
 
 # Convert to all formats
-./sigma/sigma2sib.py rules/ -o all
+./sigma/sigma2sib.py sigma/rules/ -o all
 ```
 
 This means you're not locked into my detection logic. The entire Sigma rule ecosystem is available to you.
@@ -258,7 +258,7 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 
 Each fleet host gets:
 - **Falco** — Runtime security detection
-- **Alloy** — Ships logs and metrics to central SIB
+- **Collectors** — Ship logs and metrics to central SIB (Vector, vmagent and node_exporter on the VM stack; Alloy on the Grafana stack)
 
 All events from all hosts appear in your central Grafana dashboards.
 
@@ -273,7 +273,7 @@ Got an alert but not sure what it means? SIB can analyze your security events us
 make install-analysis
 ```
 
-You'll be prompted for your server's IP/hostname (so Grafana can link to the API). Then:
+The installer auto-detects your server's IP/hostname (so Grafana can link to the API); override it with `ANALYSIS_HOST` in `.env`. Then:
 
 1. Open **Events Explorer** dashboard in Grafana
 2. Click any event row to select it
@@ -408,7 +408,8 @@ You'll see credential access attempts, container escapes, persistence mechanisms
 ```bash
 # Installation
 make install               # Install all stacks (uses STACK setting)
-make install-detection     # Install Falco + Falcosidekick
+make install-detection     # Install Falco
+make install-alerting      # Install Falcosidekick
 make install-storage-vm    # Install VictoriaLogs + VictoriaMetrics (default)
 make install-storage-grafana # Install Loki + Prometheus (alternative)
 make install-grafana       # Install unified Grafana

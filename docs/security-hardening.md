@@ -14,8 +14,8 @@ Practical steps to secure a production SIB deployment.
 ## 1) Lock Down External Ports
 
 Only expose what you need. By default:
-- **Grafana** (3000) is public-facing
-- **Sidekick API** (2801) is public-facing (required for fleet)
+- **Grafana** (3000) is bound to loopback (`GRAFANA_BIND_ADDR=127.0.0.1`); set `0.0.0.0` only to expose it
+- **Sidekick API** (2801) is bound to loopback (`SIDEKICK_BIND_ADDR=127.0.0.1`); set `0.0.0.0` only for fleet collectors
 - Storage backends should remain internal:
   - **VictoriaMetrics stack** (default): VictoriaLogs (9428), VictoriaMetrics (8428)
   - **Grafana stack**: Loki (3100), Prometheus (9090)
@@ -149,10 +149,11 @@ VICTORIAMETRICS_RETENTION_PERIOD=15d  # 15 days
 
 **Grafana stack:**
 ```bash
-LOKI_RETENTION_PERIOD=168h            # 7 days
 PROMETHEUS_RETENTION_TIME=15d         # 15 days
 PROMETHEUS_RETENTION_SIZE=5GB         # Disk-based limit
 ```
+
+Loki retention is not an `.env` setting; set `retention_period` in `storage/config/loki-config.yml` (default `168h`) and restart Loki.
 
 Or edit config files directly:
 - Loki: `storage/config/loki-config.yml`
@@ -211,14 +212,14 @@ Track disk and memory growth. Tune retention and sampling as needed.
 
 ## 10) Docker Secrets for API Keys
 
-SIB supports Docker Secrets for sensitive environment variables. Append `_FILE` to any env var and point it to a secrets file:
+SIB supports Docker Secrets for sensitive environment variables. The analysis service reads `_FILE` variants of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN`; `./secrets` is mounted at `/app/secrets` in the container (see `secrets/README.md`). Append `_FILE` to one of these and point it to a secrets file:
 
 ```bash
 # Instead of:
 OPENAI_API_KEY=sk-...
 
 # Use:
-OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
+OPENAI_API_KEY_FILE=/app/secrets/openai_api_key
 ```
 
 This avoids storing secrets in `.env` or shell history.

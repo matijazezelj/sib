@@ -30,7 +30,7 @@ pip install pyyaml
 ### Output Formats
 
 #### Falco Rules
-Converted rules are saved to `converted_falco_rules.yaml` and can be copied to `detection/config/rules/`.
+Converted rules are saved to `converted_falco_rules.yaml`. Append them to `detection/config/rules/custom_rules.yaml` to load them (see [Adding to Falco](#adding-to-falco)).
 
 ```yaml
 - rule: Crypto Mining Process Detection
@@ -97,18 +97,20 @@ The converter handles basic Sigma rule patterns. Complex rules may require manua
 
 ## Adding to Falco
 
-Copy converted rules to the Falco rules directory:
+Append converted rules to the custom rules file Falco loads:
 
 ```bash
 # Convert rules
 ./sigma/sigma2sib.py sigma/rules/ -o falco
 
-# Copy to Falco
-cp sigma/rules/converted_falco_rules.yaml detection/config/rules/
+# Append to custom rules
+cat sigma/rules/converted_falco_rules.yaml >> detection/config/rules/custom_rules.yaml
 
 # Restart Falco to load new rules
 make restart-detection
 ```
+
+Copying the file into `detection/config/rules/` is not enough: Falco only loads the files listed under `rules_files` in `detection/config/falco.yaml.template`. Alternatively, add the file's path there and re-run `make install-detection`.
 
 ## MITRE ATT&CK Tags
 

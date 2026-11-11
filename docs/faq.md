@@ -27,7 +27,7 @@ Yes. The default setup is a single‑host stack.
 Yes. Use **Fleet Management** or **Remote Collectors** to ship logs/metrics to your central SIB server.
 
 ## Is there a cloud dependency?
-No. The stack is self‑hosted. AI analysis is optional and can be local (Ollama).
+No. The stack is self‑hosted. AI analysis is optional. It defaults to Anthropic (cloud); set `LLM_PROVIDER=ollama` to run it fully local.
 
 ## How do I update it?
 Pull the latest changes and restart:
@@ -37,10 +37,10 @@ make restart
 ```
 
 ## Does it support custom rules?
-Yes. Add rules in detection/config/rules/custom_rules.yaml.
+Yes. Add rules in detection/config/rules/custom_rules.yaml. Other rule files copied into detection/config/rules/ are not loaded automatically: add the file's path to `rules_files` in detection/config/falco.yaml.template and re-run `make install-detection`.
 
 ## What about retention and disk usage?
-Tune Loki and Prometheus retention in storage/config/ and monitor disk usage.
+On the default VM stack, set `VICTORIALOGS_RETENTION_PERIOD` and `VICTORIAMETRICS_RETENTION_PERIOD` in `.env`. On the Grafana stack, Loki retention is in storage/config/loki-config.yml and Prometheus retention is in `.env`. Monitor disk usage.
 
 ---
 
