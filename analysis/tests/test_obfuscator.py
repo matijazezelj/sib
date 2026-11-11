@@ -368,3 +368,33 @@ class TestSharedObfuscator:
         obfuscated, mapping = obfuscate_alert(alert, "standard")
         assert "203.0.113.50" not in obfuscated["output"]
         assert mapping["ips"]
+
+
+# ---------------------------------------------------------------------------
+# Generic-shape secrets (paranoid only)
+# ---------------------------------------------------------------------------
+
+AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+SSH_PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+
+class TestGenericSecrets:
+    def test_paranoid_redacts_aws_secret_key(self):
+        result = Obfuscator(ObfuscationLevel.PARANOID).obfuscate(f"key={AWS_SECRET} used")
+        assert AWS_SECRET not in result
+        assert "[REDACTED-AWS-SECRET]" in result
+
+    def test_paranoid_redacts_ssh_public_key(self):
+        result = Obfuscator(ObfuscationLevel.PARANOID).obfuscate(f"added {SSH_PUB} to authorized_keys")
+        assert "[REDACTED-SSH-PUBLIC-KEY]" in result
+        assert "AAAAC3NzaC1lZDI1NTE5" not in result
+
+    def test_standard_leaves_generic_shapes(self):
+        o = Obfuscator(ObfuscationLevel.STANDARD)
+        assert SSH_PUB in o.obfuscate(f"added {SSH_PUB} to authorized_keys")
+        assert "[REDACTED-AWS-SECRET]" not in o.obfuscate(f"key={AWS_SECRET} used")
+
+    def test_paranoid_paths_are_not_read_as_keys(self):
+        path = "/var/lib/docker/overlay2/abcdefghijklmnopqrstuvwxyz0123456789ab/merged"
+        result = Obfuscator(ObfuscationLevel.PARANOID).obfuscate(f"open {path}")
+        assert "[REDACTED-AWS-SECRET]" not in result
