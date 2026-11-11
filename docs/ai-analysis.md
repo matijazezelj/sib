@@ -32,7 +32,7 @@ Got an alert but not sure what it means? SIB can analyze your security events us
 make install-analysis
 ```
 
-You'll be prompted for your server's IP/hostname (so Grafana can link to the API). Then:
+The installer auto-detects your server's IP/hostname (so Grafana can link to the API); override it with `ANALYSIS_HOST` in `.env`. It also generates an `ANALYSIS_API_TOKEN` in `.env`. Then:
 
 1. Open **Events Explorer** dashboard in Grafana
 2. Click any event row to select it
@@ -65,18 +65,18 @@ docker exec sib-analysis python analyzer.py --dry-run --limit 1
 
 | Provider | Where data goes | Best for |
 |----------|----------------|----------|
-| **Ollama** (default) | Your machine | Privacy-conscious users |
+| **Anthropic** (default) | Anthropic API | Quality and cost (tier ladder) |
 | OpenAI | OpenAI API | Better quality |
-| Anthropic | Anthropic API | Claude fans |
+| Ollama | Your machine | Fully local, privacy-conscious users |
 
-### Ollama Setup (Recommended)
+### Ollama Setup (fully local)
 
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull a model
-ollama pull llama3.1:8b
+ollama pull qwen2.5:14b
 
 # Verify it's running
 ollama list
@@ -86,10 +86,11 @@ ollama list
 
 Set your API key in `analysis/config.yaml`:
 ```yaml
-llm:
+analysis:
   provider: openai
-  model: gpt-4
-  api_key: sk-your-key-here
+  openai:
+    api_key: sk-your-key-here
+    model: gpt-4o
 ```
 
 Or via environment variable:
@@ -123,31 +124,20 @@ The CLI prints the tiers used and the estimated cost per alert.
 Edit `analysis/config.yaml`:
 
 ```yaml
-# LLM Provider settings
-llm:
-  provider: ollama  # ollama, openai, or anthropic
-  model: llama3.1:8b
-  base_url: http://host.docker.internal:11434  # For Ollama
+analysis:
+  provider: ${LLM_PROVIDER:-anthropic}   # anthropic, openai, or ollama
+  obfuscation_level: standard            # minimal, standard, or paranoid
 
-# Obfuscation settings
-obfuscation:
-  enabled: true
-  preserve_structure: true
-
-# Cache settings
-cache:
-  enabled: true
-  ttl: 3600  # seconds
+  ollama:
+    url: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    model: ${OLLAMA_MODEL:-qwen2.5:14b}
 
 # Storage backend (auto-detected from STACK env var)
-# STACK=vm → queries VictoriaLogs
-# STACK=grafana (or unset) → queries Loki
-
-# Server settings
-server:
-  host: 0.0.0.0
-  port: 5000
+# STACK=vm (default) → queries VictoriaLogs
+# STACK=grafana → queries Loki
 ```
+
+See `analysis/config.yaml.example` for the full set of keys (OpenAI, Anthropic tiers, storage URLs). The cache TTL is set with the `ANALYSIS_CACHE_TTL` environment variable.
 
 ### Cache Deduplication
 
@@ -162,17 +152,18 @@ The analyzer auto-detects the storage backend from the `STACK` environment varia
 | `STACK` value | Backend |
 |---------------|-------------------|
 | `vm` | VictoriaLogs |
-| `grafana` (or unset) | Loki |
+| `grafana` | Loki |
 
-No additional configuration is needed — set `STACK` in your `.env` file and the analysis service will query the correct backend.
+The compose default is `vm`. No additional configuration is needed — set `STACK` in your `.env` file and the analysis service will query the correct backend.
 
 ### Docker Secrets
 
-API keys can be loaded from Docker secrets instead of environment variables. Use the `_FILE` suffix to point to a secret file:
+API keys can be loaded from Docker secrets instead of environment variables. Use the `_FILE` suffix to point to a secret file (supported for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN`; see `secrets/README.md`):
 
 ```bash
-ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key
-OPENAI_API_KEY_FILE=/run/secrets/openai_key
+# In .env; ./secrets is mounted at /app/secrets in the container
+ANTHROPIC_API_KEY_FILE=/app/secrets/anthropic_api_key
+OPENAI_API_KEY_FILE=/app/secrets/openai_api_key
 ```
 
 When a `_FILE` variant is set, the service reads the key from that file at startup. This avoids storing secrets in `.env` or `config.yaml`.
@@ -271,6 +262,7 @@ Returns a beautiful HTML page with analysis results.
 
 ```bash
 curl -X POST http://localhost:5000/api/analyze \
+  -H "Authorization: Bearer $ANALYSIS_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "rule": "Write below etc",
@@ -381,8 +373,8 @@ docker exec sib-analysis env | grep API_KEY
 
 1. **Local LLM (Ollama)**: All data stays on your infrastructure
 2. **Cloud LLMs**: Data is obfuscated before sending, but some context may still be inferred
-3. **API Exposure**: The analysis API is bound to 0.0.0.0 by default. Use firewall rules to restrict access
-4. **Caching**: Cached results are stored in memory. Restart the container to clear cache
+3. **API Exposure**: The analysis API is bound to loopback (`127.0.0.1`) by default. Set `ANALYSIS_BIND` to expose it, and then use firewall rules to restrict access
+4. **Caching**: Cached results are stored on disk in the `analysis-cache` volume and survive restarts. Remove the volume to clear the cache
 
 ---
 

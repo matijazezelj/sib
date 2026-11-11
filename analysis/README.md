@@ -31,11 +31,7 @@ make logs-analysis
 
 ### Grafana Integration
 
-Once installed, all log panels show a "🤖 Analyze with AI" link when you click on a log entry:
-
-- **Security Overview** - Critical Events, Recent Events panels
-- **Events Explorer** - All log entries
-- **MITRE ATT&CK** - Critical & Error Events, MITRE-Tagged Events
+Once installed, the **Events Explorer** dashboard shows a "🤖 Analyze with AI" link when you click on a log entry. Other dashboards do not have it.
 
 ### API Endpoints
 
@@ -54,16 +50,17 @@ Configure in `analysis/compose.yaml`:
 
 ```yaml
 environment:
-  - OLLAMA_HOST=http://192.168.101.226:11434  # Your Ollama server
+  - OLLAMA_URL=http://<ollama-host>:11434       # Your Ollama server (when LLM_PROVIDER=ollama)
   - OLLAMA_MODEL=qwen2.5:14b                    # Model to use
   - LOKI_URL=http://loki:3100                   # Loki for storing results
-  - OBFUSCATION_LEVEL=standard                  # minimal, standard, paranoid
   - STACK=vm                                     # Storage backend: vm or grafana (auto-detected)
   - VICTORIALOGS_URL=http://sib-victorialogs:9428  # VictoriaLogs URL (when STACK=vm)
   - ANALYSIS_CACHE_TTL=86400                     # Cache TTL in seconds (default: 24h)
 ```
 
-> **Docker Secrets:** Any environment variable can be loaded from a Docker secret by appending a `_FILE` suffix. For example, `ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key` will read the key from the secret file instead of the environment variable.
+The obfuscation level is not an environment variable; set `obfuscation_level` in `config.yaml` (see [Obfuscation Levels](#obfuscation-levels)).
+
+> **Docker Secrets:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN` can be loaded from a file by setting the matching `_FILE` variable in `.env`. `./secrets` is mounted read-only at `/app/secrets`, so use e.g. `ANTHROPIC_API_KEY_FILE=/app/secrets/anthropic_api_key`. See `secrets/README.md`.
 
 ## Privacy & Security
 
@@ -77,7 +74,6 @@ environment:
 | Usernames | `jsmith` | `[USER-1]` |
 | File Paths | `/home/jsmith/secrets.txt` | `/home/[USER-1]/[FILE-1].txt` |
 | Container IDs | `a1b2c3d4e5f6` | `[CONTAINER-1]` |
-| Process IDs | `12345` | `[PID-1]` |
 | Secrets/Keys | `AKIA...` | `[REDACTED-SECRET]` |
 | Email Addresses | `user@company.com` | `[EMAIL-1]` |
 
@@ -112,16 +108,16 @@ The analyzer auto-detects the storage backend from the `STACK` environment varia
 
 ## LLM Providers
 
-### Option 1: Local (Ollama) - Recommended for Privacy
+### Option 1: Local (Ollama) - Fully Local, Best for Privacy
 
-No data leaves your network. Requires ~8GB RAM for good models.
+No data leaves your network. Select it with `LLM_PROVIDER=ollama` (Anthropic is the default provider). Requires ~8GB RAM for good models.
 
 ```yaml
 analysis:
   provider: ollama
   ollama:
     url: http://localhost:11434
-    model: llama3.1:8b  # or mistral, mixtral
+    model: qwen2.5:14b  # default; or mistral, mixtral
 ```
 
 ### Option 2: OpenAI API
@@ -136,7 +132,7 @@ analysis:
     model: gpt-4o-mini
 ```
 
-### Option 3: Anthropic API
+### Option 3: Anthropic API (default)
 
 ```yaml
 analysis:
@@ -212,7 +208,7 @@ Set `AIB_BASE_URL` in your `.env` to enable it — see **[docs/aib-integration.m
 3. **Obfuscation** → Sensitive data replaced with tokens
 4. **LLM Analysis** → Security-focused prompt analyzes the alert (with asset context if available)
 5. **Enrichment** → Response parsed and attached to alert
-6. **Storage** → Enriched alert stored in Loki with analysis labels
+6. **Storage** → Enriched alert stored in the active storage backend (VictoriaLogs or Loki) with analysis labels
 
 ## Example Output
 

@@ -37,6 +37,8 @@ Key settings in the generated config:
 - `config/rules/falco_rules.yaml`: Default rules (from Falco)
 - `config/rules/custom_rules.yaml`: Your custom rules
 
+Only files listed under `rules_files` in `config/falco.yaml.template` are loaded; `cloud_rules.yaml` and `webserver_rules.yaml` are commented out by default. To use another rules file, add its path to `rules_files` and re-run `make install-detection`.
+
 ## Custom Rules Example
 
 ```yaml

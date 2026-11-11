@@ -134,7 +134,7 @@ The `make install` command automatically:
 | **VictoriaLogs** | http://localhost:9428 | `vm` only |
 | **VictoriaMetrics** | http://localhost:8428 | `vm` only |
 
-Default Grafana credentials: `admin` / `admin`
+Grafana login: `admin` with the password in `.env` (`GRAFANA_ADMIN_PASSWORD`, generated on install)
 
 > **Note:** Only the services for your selected `STACK` will be running.
 
@@ -191,7 +191,7 @@ Default Grafana credentials: `admin` / `admin`
 ### Events Explorer
 - Query help with LogQL examples
 - Event volume by rule
-- Filterable log view with priority and rule filters
+- Filterable log view (hostname, priority and rule dropdowns in the Loki and AI-analysis variants; the base VictoriaLogs variant has none)
 
 ### MITRE ATT&CK Coverage
 - Detection events mapped to ATT&CK tactics
@@ -206,6 +206,12 @@ Default Grafana credentials: `admin` / `admin`
 - Network traffic graphs
 - Log volume by host
 - **Hostname selector** to filter all panels by host
+
+### Risk Scores
+- Host risk assessment based on event severity and frequency
+
+### UniFi Logs (`vm` stack)
+- UniFi syslog events and sender overview
 
 ## 🛠️ Commands
 
@@ -241,7 +247,7 @@ make test-alert           # Generate a test security alert
 
 # Threat Intel & Sigma
 make update-threatintel   # Download threat intel feeds
-make convert-sigma        # Convert Sigma rules to Falco/LogsQL
+make convert-sigma        # Convert Sigma rules to Falco rules
 
 # AI Analysis (Optional)
 make install-analysis     # Install AI analysis API (integrated with Grafana)
@@ -279,7 +285,7 @@ sib/
 ├── detection/                  # Falco stack
 │   ├── compose.yaml
 │   └── config/
-│       ├── falco.yaml          # Falco config (modern_ebpf)
+│       ├── falco.yaml.template # Falco config template (modern_ebpf; falco.yaml is generated)
 │       └── rules/
 │           └── custom_rules.yaml  # Custom detection rules
 ├── alerting/                   # Falcosidekick
@@ -435,9 +441,9 @@ SIDEKICK_PORT=2801
 ## 🔒 Security Notes
 
 - Internal services (Loki, Prometheus) bind to localhost only
-- Grafana and Sidekick API are externally accessible (for fleet support)
+- Grafana and Sidekick API bind to `127.0.0.1` by default; set `GRAFANA_BIND_ADDR` / `SIDEKICK_BIND_ADDR` to `0.0.0.0` to expose them (e.g. for fleet support, preferably with mTLS)
 - Falco requires privileged access for syscall monitoring
-- Change default Grafana password in production
+- Grafana's admin password is generated into `.env` on install; rotate it for production
 - **mTLS available** for encrypted fleet communication
 
 ### Hardening Checklist
@@ -468,7 +474,7 @@ Sensitive data is **obfuscated before sending to the LLM**:
 - Usernames → `[USER-1]`
 - Hostnames → `[HOST-1]`
 - Container IDs → `[CONTAINER-1]`
-- Secrets/credentials → `[REDACTED]`
+- Secrets/credentials → `[REDACTED-<label>]`
 
 The analyzer auto-detects the storage backend from the `STACK` env var — it queries VictoriaLogs when `STACK=vm` (default) or Loki when `STACK=grafana`.
 
@@ -515,9 +521,9 @@ Browse past analyses from the API history page:
 
 | Provider | Privacy | Setup |
 |----------|---------|-------|
-| **Ollama** (local) | ✅ Data stays on-premises | `ollama pull llama3.1:8b` |
+| **Anthropic** (default) | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY` |
 | OpenAI | ⚠️ Data sent to API (obfuscated) | Set `OPENAI_API_KEY` |
-| Anthropic | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY` |
+| **Ollama** (fully local) | ✅ Data stays on-premises | `ollama pull qwen2.5:14b`, set `LLM_PROVIDER=ollama` |
 
 Configure in `analysis/config.yaml`. See [analysis/README.md](analysis/README.md) for full documentation.
 
@@ -596,7 +602,7 @@ The deploy script will:
 
 ### What Gets Collected
 
-| Type | Sources | Labels |
+| Type | Sources | Labels (`grafana` stack, Alloy) |
 |------|---------|--------|
 | **System Logs** | `/var/log/syslog`, `/var/log/messages` | `job="syslog"` |
 | **Auth Logs** | `/var/log/auth.log`, `/var/log/secure` | `job="auth"` |
@@ -604,6 +610,8 @@ The deploy script will:
 | **Journal** | systemd journal | `job="journal"` |
 | **Docker Logs** | All containers | `job="docker"`, `container=...` |
 | **Node Metrics** | CPU, memory, disk, network | `job="node"` |
+
+The `job` labels are set only by Alloy (`grafana` stack). On the default `vm` stack, Vector tags every log with just `host` and `collector="vector"`.
 
 All data is tagged with `host` (hostname of the remote machine).
 
@@ -713,7 +721,7 @@ See [ansible/README.md](ansible/README.md) for detailed configuration options.
 Generate realistic security events **locally on your SIB server** — no fleet setup required! Perfect for first-time users, demonstrations, or testing detection capabilities.
 
 ```bash
-# Run comprehensive demo (~30 events across 9 MITRE ATT&CK categories)
+# Run comprehensive demo (~30 events across 12 MITRE ATT&CK categories)
 make demo
 
 # Quick demo with 1-second delays
@@ -748,7 +756,7 @@ Each event triggers corresponding Falco rules and flows through to Grafana in re
 # Convert all Sigma rules in sigma/rules/
 make convert-sigma
 
-# Convert to LogsQL for VictoriaLogs (default)
+# Convert to LogsQL for VictoriaLogs
 ./sigma/sigma2sib.py sigma/rules/ -o logsql
 
 # Convert a specific rule
@@ -761,7 +769,7 @@ make convert-sigma
 |------|-------------|--------------|
 | `crypto_mining.yml` | Detects cryptocurrency miners | Impact (T1496) |
 | `shadow_access.yml` | Password file access | Credential Access (T1003) |
-| `ssh_keys.yml` | SSH private key access | Credential Access (T1552) |
+| `ssh_keys.yml` | SSH private key access | Persistence (T1098) |
 | `reverse_shell.yml` | Reverse shell patterns | Execution (T1059) |
 | `container_escape.yml` | Container breakout attempts | Privilege Escalation (T1611) |
 
@@ -833,14 +841,14 @@ After running `make update-threatintel`:
 ```
 threatintel/
 ├── feeds/                      # Individual feed downloads
-│   ├── feodo_ipblocklist.txt
-│   ├── sslbl_aggressive.txt
-│   ├── emerging_threats.txt
+│   ├── feodotracker.txt
+│   ├── sslbl.txt
+│   ├── et_compromised.txt
 │   ├── spamhaus_drop.txt
-│   ├── blocklist_de_ssh.txt
-│   ├── blocklist_de_all.txt
-│   └── cinsscore.txt
-├── combined_blocklist.txt      # Unified blocklist
+│   ├── blocklist_ssh.txt
+│   ├── blocklist_all.txt
+│   ├── ci_army.txt
+│   └── combined_blocklist.txt  # Unified blocklist
 ├── falco_threatintel_rules.yaml # Generated Falco rules
 └── lookup-ip.sh                # IP lookup utility
 ```

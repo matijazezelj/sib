@@ -23,21 +23,21 @@ Then run `make install` - it automatically deploys the correct stack.
 
 ## Components
 
-### VM Stack (`STACK=vm`) - Default
+### Grafana Stack (`STACK=grafana`)
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **Loki** | 3100 | Log aggregation for security events |
 | **Prometheus** | 9090 | Metrics storage and scraping |
 
-### VM Stack (`STACK=vm`)
+### VM Stack (`STACK=vm`) - Default
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **VictoriaLogs** | 9428 | Log storage (fast full-text search) |
 | **VictoriaLogs syslog** | 5514/UDP | Direct RFC3164/RFC5424 appliance log ingestion |
 | **VictoriaMetrics** | 8428 | Metrics storage (10x less RAM than Prometheus) |
-| **node_exporter** | 9100 | Host metrics (CPU, memory, disk, network) |
+| **node_exporter** | internal only (9100, not published) | Host metrics (CPU, memory, disk, network) |
 
 ## Loki
 
@@ -49,7 +49,7 @@ Loki stores security events from Falcosidekick in a scalable, cost-efficient way
 - Native Grafana integration
 
 ### Configuration
-Edit `config/loki-config.yml`:
+Edit `config/loki-config.yml` (retention is set here only; there is no `.env` variable for it):
 - `retention_period`: How long to keep events (default: 7 days)
 - `ingestion_rate_mb`: Max ingestion rate
 

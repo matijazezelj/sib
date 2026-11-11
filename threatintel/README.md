@@ -51,13 +51,27 @@ This will:
 
 ### Enable Threat Intel Rules in Falco
 
-```bash
-# Copy generated rules to Falco
-cp threatintel/falco_threatintel_rules.yaml detection/config/rules/
+Falco only loads the files listed under `rules_files` in
+`detection/config/falco.yaml.template`, so copying the file is not enough.
+Because the rules are regenerated on every feed update, load them as their own
+file rather than appending them to `custom_rules.yaml` (which would duplicate
+them on each update).
 
-# Restart Falco to load new rules
-make restart-detection
+First copy the generated file in (Falco won't start if a listed rules file is
+missing):
+
+```bash
+cp threatintel/falco_threatintel_rules.yaml detection/config/rules/
 ```
+
+Then, once, add this line to `rules_files` in
+`detection/config/falco.yaml.template` and re-run `make install-detection`:
+
+```yaml
+  - /etc/falco/rules/falco_threatintel_rules.yaml
+```
+
+After later feed updates, copy the file again and run `make restart-detection`.
 
 ## Automated Updates
 
@@ -98,7 +112,7 @@ The feed updater generates Falco rules for:
 | Connection from Threat Intel IP (Inbound) | WARNING | Inbound connections from blocklisted IPs |
 | Connection to Known C2 Server | ERROR | Connections on common C2 ports |
 | Connection to Crypto Mining Pool | CRITICAL | Connections to mining pool ports |
-| DNS Query to Suspicious Domain | NOTICE | DNS activity monitoring |
+| Connection to Known Malicious IP | WARNING | Any outbound connection to an IP in the blocklist |
 
 ## CrowdSec Integration (Optional)
 
@@ -115,14 +129,6 @@ sudo cscli bouncers add sib-bouncer
 # - Block known malicious IPs
 # - Share threat intel with the community
 # - Provide real-time IP reputation
-```
-
-## Grafana Dashboard
-
-The MITRE ATT&CK dashboard includes a panel for threat intel events. Filter by:
-
-```
-{source="syscall"} |= "threatintel"
 ```
 
 ## Adding Custom Feeds

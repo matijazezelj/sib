@@ -79,14 +79,12 @@ That's it! Your SIB instance is now running.
 
 | Service | URL | Binding | Stack |
 |---------|-----|---------|-------|
-| **Grafana** | http://localhost:3000 | External (0.0.0.0) | Both |
-| **Sidekick API** | http://localhost:2801 | External (0.0.0.0) | Both |
+| **Grafana** | http://localhost:3000 | Localhost by default (`GRAFANA_BIND_ADDR`) | Both |
+| **Sidekick API** | http://localhost:2801 | Localhost by default (`SIDEKICK_BIND_ADDR`) | Both |
 | VictoriaLogs | http://localhost:9428 | Localhost only | VM (default) |
 | VictoriaMetrics | http://localhost:8428 | Localhost only | VM (default) |
 | Loki | http://localhost:3100 | Localhost only | Grafana |
 | Prometheus | http://localhost:9090 | Localhost only | Grafana |
-
-Default Grafana credentials: `admin` / `admin`
 
 ---
 
@@ -247,7 +245,8 @@ See [AI Analysis](ai-analysis.md) for configuration details.
 Install components individually if needed:
 
 ```bash
-make install-detection       # Falco + Falcosidekick
+make install-detection       # Falco
+make install-alerting        # Falcosidekick
 make install-storage-vm      # VictoriaLogs + VictoriaMetrics (default)
 make install-storage-grafana # Loki + Prometheus (alternative)
 make install-grafana         # Grafana dashboards

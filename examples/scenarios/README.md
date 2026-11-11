@@ -25,13 +25,14 @@ docker run --rm alpine cat /etc/shadow
 
 ### 3. Package Installation
 ```bash
-# This should trigger: "Package management in container"
+# This should trigger: "Package management process launched"
 docker run --rm alpine apk add curl
 ```
 
 ### 4. Network Tool Usage
 ```bash
-# This should trigger: "Network tool usage"
+# No dedicated rule exists for a netcat client; this triggers
+# "Package management process launched" for the apk install
 docker run --rm alpine sh -c "apk add --no-cache netcat-openbsd && nc -v google.com 80"
 ```
 
@@ -53,13 +54,13 @@ docker run --rm -v /etc:/host-etc alpine cat /host-etc/passwd
 
 ### 7. SSH Key Access
 ```bash
-# This should trigger: "SSH private key accessed"
+# This should trigger: "Read SSH Private Key"
 docker run --rm -v ~/.ssh:/root/.ssh:ro alpine cat /root/.ssh/id_rsa 2>/dev/null || echo "No key"
 ```
 
 ### 8. AWS Credentials
 ```bash
-# This should trigger: "AWS credentials file accessed"
+# This should trigger: "Read AWS Credentials File"
 docker run --rm -v ~/.aws:/root/.aws:ro alpine cat /root/.aws/credentials 2>/dev/null || echo "No creds"
 ```
 
@@ -67,7 +68,7 @@ docker run --rm -v ~/.aws:/root/.aws:ro alpine cat /root/.aws/credentials 2>/dev
 
 ### 9. Crontab Modification
 ```bash
-# This should trigger: "Crontab modified"
+# This should trigger: "Crontab Modified"
 docker run --rm alpine sh -c "echo '* * * * * echo test' >> /etc/crontabs/root"
 ```
 
@@ -99,10 +100,11 @@ After running scenarios:
 |----------|--------------|----------|
 | Shell in container | Terminal shell in container | NOTICE |
 | Shadow file access | Read sensitive file untrusted | WARNING |
-| Package install | Package management process | NOTICE |
-| Privileged container | Container running as root | NOTICE |
-| SSH key access | SSH private key accessed | WARNING |
-| Crontab modification | Crontab modified | WARNING |
+| Package install | Package management process launched | NOTICE |
+| Privileged container | Container Running as Root | NOTICE |
+| SSH key access | Read SSH Private Key | WARNING |
+| AWS credentials | Read AWS Credentials File | WARNING |
+| Crontab modification | Crontab Modified | WARNING |
 
 ## Troubleshooting
 
@@ -111,4 +113,4 @@ If events don't appear:
 1. Check Falco is running: `docker ps | grep falco`
 2. Check Falco logs: `make logs-falco`
 3. Verify Falcosidekick: `curl http://localhost:2801/healthz`
-4. Check Loki: `curl http://localhost:3100/ready`
+4. Check storage: `curl http://localhost:9428/health` (`STACK=vm`, default) or `curl http://localhost:3100/ready` (`STACK=grafana`)
