@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy analysis module
 COPY *.py ./
-COPY templates/ ./templates/
 
 # Create non-root user and cache directory
 RUN useradd -m -r sib && \

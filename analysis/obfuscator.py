@@ -554,26 +554,3 @@ def obfuscate_alert(
     
     return obfuscated, obfuscator.get_mapping()
 
-
-# Example usage and testing
-if __name__ == "__main__":
-    test_alert = """
-    Read sensitive file untrusted: user=jsmith command=cat /etc/shadow 
-    container=a1b2c3d4e5f6 (nginx:latest) connection from 192.168.1.100 
-    to external IP 52.94.233.12:443 password=secret123 
-    AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE email=admin@company.com
-    host=prod-web-01.acme.com pid=12345
-    """
-    
-    print("=== MINIMAL ===")
-    obfuscator = Obfuscator(ObfuscationLevel.MINIMAL)
-    print(obfuscator.obfuscate(test_alert))
-    
-    print("\n=== STANDARD ===")
-    obfuscator = Obfuscator(ObfuscationLevel.STANDARD)
-    print(obfuscator.obfuscate(test_alert))
-    
-    print("\n=== PARANOID ===")
-    obfuscator = Obfuscator(ObfuscationLevel.PARANOID)
-    print(obfuscator.obfuscate(test_alert))
-    print("\nMapping:", obfuscator.get_mapping())

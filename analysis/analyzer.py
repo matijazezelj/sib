@@ -630,7 +630,7 @@ def read_secret(env_var: str) -> str | None:
 
 
 # Environment variable names that should support Docker Secrets (_FILE suffix)
-_SECRET_VARS = {'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OLLAMA_API_KEY', 'GRAFANA_ADMIN_PASSWORD'}
+_SECRET_VARS = {'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GRAFANA_ADMIN_PASSWORD'}
 
 
 def expand_env_vars(obj):
