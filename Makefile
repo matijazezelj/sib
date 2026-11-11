@@ -48,7 +48,7 @@ help: ## Show this help message
 	@grep -E '^(enable-remote|deploy-collector):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Fleet Management (Ansible):$(RESET)"
-	@grep -E '^(fleet-build|deploy-fleet|update-rules|fleet-health|fleet-docker-check|remove-fleet|fleet-ping|fleet-shell):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(fleet-build|deploy-fleet|update-rules|fleet-certs|fleet-health|fleet-docker-check|remove-fleet|fleet-ping|fleet-shell):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)mTLS Certificates:$(RESET)"
 	@grep -E '^(generate-certs|generate-client-cert|generate-fleet-certs|verify-certs|rotate-certs|test-mtls|test-alert-mtls):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -900,7 +900,7 @@ update: ## Pull latest images and restart all stacks
 	enable-remote deploy-collector \
 	generate-certs generate-client-cert generate-fleet-certs verify-certs rotate-certs \
 	test-mtls test-alert-mtls \
-	fleet-build deploy-fleet update-rules fleet-health fleet-docker-check remove-fleet fleet-shell fleet-ping \
+	fleet-build deploy-fleet update-rules fleet-certs fleet-health fleet-docker-check remove-fleet fleet-shell fleet-ping \
 	convert-sigma update-threatintel
 
 # ==================== Remote Collectors ====================
@@ -1068,6 +1068,10 @@ deploy-fleet: ## Deploy Falco + Alloy to fleet hosts (LIMIT=host to target speci
 update-rules: ## Push updated Falco rules to fleet hosts
 	@echo "$(CYAN)📤 Pushing rules to fleet...$(RESET)"
 	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/update-rules.yml $(ANSIBLE_LIMIT) $(ANSIBLE_ARGS)
+
+fleet-certs: ## Push mTLS certificates to fleet hosts without a full redeploy
+	@echo "$(CYAN)🔐 Deploying certificates to fleet...$(RESET)"
+	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/deploy-certs.yml $(ANSIBLE_LIMIT) $(ANSIBLE_ARGS)
 
 fleet-health: ## Check health of all fleet agents
 	@echo "$(CYAN)🏥 Checking fleet health...$(RESET)"

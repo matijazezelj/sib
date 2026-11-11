@@ -67,3 +67,6 @@ grafana/provisioning/dashboards/dashboards.yml
 # Events Explorer is rendered at install time (embeds host + ANALYSIS_API_TOKEN)
 grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json
 grafana/provisioning/dashboards/loki/events-explorer.json
+
+# Ansible runtime state
+.ansible/

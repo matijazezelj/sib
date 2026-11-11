@@ -80,20 +80,11 @@ mtls_client_key: "{{ mtls_cert_dir }}/client.key"
 
 alloy_version: "v1.16.1"
 
-# Alloy deployment method: auto (uses deployment_strategy), docker, or native
-alloy_deployment: auto
-
 # What to collect
 alloy_collect_logs: true
 alloy_collect_metrics: true
 alloy_collect_docker_logs: true
 alloy_collect_journal: true
-
-# Metric scrape targets (local to each host)
-alloy_scrape_targets:
-  - job: node
-    port: 9100
-    metrics_path: /metrics
 
 # =============================================================================
 # VM Collectors Configuration (vmagent + node_exporter)

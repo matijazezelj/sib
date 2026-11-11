@@ -19,6 +19,5 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
       - ANSIBLE_HOST_KEY_CHECKING=false
       - ANSIBLE_FORCE_COLOR=true
-      - DETECTION_CONFIG_PATH=/detection-config
     working_dir: /ansible
     network_mode: host

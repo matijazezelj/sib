@@ -18,10 +18,8 @@ RUN pip install --no-cache-dir \
     jmespath
 
 # Install Ansible collections
-RUN ansible-galaxy collection install \
-    ansible.posix \
-    community.docker \
-    community.general
+COPY requirements.yml /tmp/requirements.yml
+RUN ansible-galaxy collection install -r /tmp/requirements.yml
 
 # Create non-root user
 RUN groupadd --gid 1000 ansible && \
