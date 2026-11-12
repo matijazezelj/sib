@@ -18,10 +18,14 @@ services:
       # Logging
       - GF_LOG_MODE=console
       - GF_LOG_LEVEL=info
+      # Alert notifications (contact point provisioned only when the URL is set)
+      - GRAFANA_ALERT_WEBHOOK_URL=${GRAFANA_ALERT_WEBHOOK_URL:-}
+      - GRAFANA_ALERT_WEBHOOK_TYPE=${GRAFANA_ALERT_WEBHOOK_TYPE:-slack}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./provisioning/alerting:/etc/grafana/provisioning/alerting:ro
     networks:
       - sib-network
     healthcheck:

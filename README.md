@@ -273,6 +273,7 @@ make restore              # Restore from a backup file
 - [ROADMAP.md](ROADMAP.md)
 - Kubernetes deployment: [sib-k8s](https://github.com/matijazezelj/sib-k8s)
 - VictoriaLogs backend: [docs/victorialogs.md](docs/victorialogs.md)
+- Grafana alert rules: [docs/grafana-alerts.md](docs/grafana-alerts.md)
 
 ## 📁 Project Structure
 

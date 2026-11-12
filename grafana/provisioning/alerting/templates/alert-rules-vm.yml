@@ -1,0 +1,564 @@
+# SIB Grafana alert rules (VictoriaLogs + VictoriaMetrics stack)
+# Copied to grafana/provisioning/alerting/alert-rules.yml by `make install-grafana`.
+# Provisioned rules are read-only in the UI: edit thresholds here and re-run
+# `make install-grafana`.
+apiVersion: 1
+groups:
+- orgId: 1
+  folder: SIB
+  name: Pipeline health
+  interval: 1m
+  rules:
+  - uid: sib-no-events
+    title: No Falco events from any host
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 7200
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: Alerting
+    execErrState: Alerting
+    for: 0s
+    annotations:
+      summary: No Falco events reached SIB in the last 2 hours
+      description: Falco sends a metrics snapshot every hour, so a healthy pipeline is never silent for 2 hours.
+        Check sib-falco, sib-sidekick and log storage.
+    labels:
+      severity: critical
+      source: sib
+    isPaused: false
+  - uid: sib-falco-drops
+    title: Falco dropping syscall events
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: 'rule:"Falco internal: syscall event drop" | stats by (hostname) count()'
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: Falco on {{ $labels.hostname }} is dropping syscall events
+      description: '{{ $values.A }} drop alerts in 15 minutes. Detections may be missed; the host may need a bigger
+        buffer (buf_size_preset) or fewer noisy rules.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-sidekick-output-errors
+    title: Falcosidekick output errors
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: sum by (destination) (increase(falcosidekick_outputs{status="error"}[15m]))
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: Falcosidekick failed to deliver to {{ $labels.destination }}
+      description: '{{ $values.A }} failed deliveries in 15 minutes. Check the output settings in .env and docker
+        logs sib-sidekick.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-sidekick-down
+    title: Falcosidekick down
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: up{job="falcosidekick"}
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: Alerting
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Falcosidekick is not responding
+      description: Prometheus can't scrape sib-sidekick, so Falco events are not being stored or forwarded.
+    labels:
+      severity: critical
+      source: sib
+    isPaused: false
+- orgId: 1
+  folder: SIB
+  name: Detection
+  interval: 1m
+  rules:
+  - uid: sib-critical-burst
+    title: Burst of Critical/Error events
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall (priority:Critical or priority:Error) | stats by (hostname) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 10
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: '{{ $values.A }} Critical/Error events on {{ $labels.hostname }} in 10 minutes'
+      description: A burst of high-priority detections on one host often means an active intrusion or a broken workload.
+        Review it in the Events Explorer.
+    labels:
+      severity: critical
+      source: sib
+    isPaused: false
+  - uid: sib-critical-event
+    title: Critical Falco event
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 120
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall priority:Critical | stats by (hostname, rule) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: 'Critical: {{ $labels.rule }} on {{ $labels.hostname }}'
+      description: 'Paused by default: Falcosidekick already forwards every event to its outputs. Resume this rule
+        if Grafana is your only notification channel.'
+    labels:
+      severity: critical
+      source: sib
+    isPaused: true
+- orgId: 1
+  folder: SIB
+  name: Detection baselines
+  interval: 5m
+  rules:
+  - uid: sib-silent-host
+    title: Host stopped sending Falco events
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats by (hostname) count() if (_time:2h) as recent
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: No Falco events from {{ $labels.hostname }} for 2 hours
+      description: The host sent events in the last 24 hours but none in the last 2. Falco or the network path to
+        SIB is down on that host.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-host-spike
+    title: Event spike on a host
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats by (hostname) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats by (hostname) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: B
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: math
+        expression: $A > 50 && $A > 5 * $B / 144
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: Event volume on {{ $labels.hostname }} is 5x its daily average
+      description: '{{ $values.A }} events in the last 10 minutes, against a 24-hour average of {{ $values.B }}
+        per day.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-rule-spike
+    title: Rule firing far above normal
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats by (rule) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: B
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: source:syscall | stats by (rule) count()
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: B
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: math
+        expression: $A > 50 && $A > 5 * $B / 144
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: '{{ $labels.rule }} is firing 5x above its daily average'
+      description: '{{ $values.A }} events in the last 10 minutes. A new rule hit across the fleet, or a noisy rule
+        that needs tuning.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+- orgId: 1
+  folder: SIB
+  name: Resources
+  interval: 1m
+  rules:
+  - uid: sib-disk-full
+    title: Disk almost full
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: max by (host, mountpoint) (100 - node_filesystem_avail_bytes{job=~"node|integrations/unix",fstype!~"tmpfs|overlay|squashfs"}
+          / node_filesystem_size_bytes{job=~"node|integrations/unix",fstype!~"tmpfs|overlay|squashfs"} * 100)
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 85
+    noDataState: OK
+    execErrState: Error
+    for: 10m
+    annotations:
+      summary: '{{ $labels.mountpoint }} on {{ $labels.host }} is {{ humanize $values.A.Value }}% full'
+      description: 'On the SIB server this is usually log storage: lower the retention in .env.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-memory-high
+    title: Memory usage high
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: max by (host) ((1 - node_memory_MemAvailable_bytes{job=~"node|integrations/unix"} / node_memory_MemTotal_bytes{job=~"node|integrations/unix"})
+          * 100)
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 90
+    noDataState: OK
+    execErrState: Error
+    for: 15m
+    annotations:
+      summary: Memory on {{ $labels.host }} is {{ humanize $values.A.Value }}% used
+      description: Sustained for 15 minutes.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-storage-down
+    title: Storage backend down
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: up{job=~"victorialogs|victoriametrics"}
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: Alerting
+    execErrState: Alerting
+    for: 5m
+    annotations:
+      summary: '{{ $labels.job }} is not responding'
+      description: Events or metrics are not being stored. No data at all also fires this alert, since it usually
+        means the metrics store itself is down.
+    labels:
+      severity: critical
+      source: sib
+    isPaused: false
