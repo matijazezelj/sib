@@ -27,7 +27,7 @@ help: ## Show this help message
 	@echo "  make $(GREEN)<target>$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Installation:$(RESET)"
-	@grep -E '^(install|install-detection|install-alerting|install-storage-grafana|install-storage-vm|install-grafana|install-analysis):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(install|install-detection|install-alerting|install-storage-grafana|install-storage-vm|install-grafana|install-analysis|refresh-alerts):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Management:$(RESET)"
 	@grep -E '^(start|stop|restart|status|uninstall):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -188,6 +188,22 @@ install-grafana: network ## Install Grafana dashboard
 	fi
 	@cd grafana && $(DOCKER_COMPOSE) up -d --force-recreate
 	@echo "$(GREEN)✓ Grafana installed$(RESET)"
+
+refresh-alerts: ## Regenerate Grafana alerting (expected Falco hosts from the inventory) and reload it
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	./scripts/generate-grafana-alerting.sh || exit 1; \
+	echo "$(GREEN)✓ Alerting regenerated: $$(sed -n 's/^# Expected Falco sensors: //p' grafana/provisioning/alerting/falco-liveness.yml 2>/dev/null || echo 'no expected Falco hosts')$(RESET)"; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx sib-grafana; then \
+		auth=$$(printf 'admin:%s' "$${GRAFANA_ADMIN_PASSWORD:-admin}" | base64 | tr -d '\n'); \
+		if docker exec sib-grafana wget -q -O /dev/null --header "Authorization: Basic $$auth" --post-data '' \
+			http://127.0.0.1:3000/api/admin/provisioning/alerting/reload; then \
+			echo "$(GREEN)✓ Grafana reloaded alerting provisioning$(RESET)"; \
+		else \
+			echo "$(RED)✗ Grafana reload failed; run make install-grafana$(RESET)"; exit 1; \
+		fi; \
+	else \
+		echo "$(YELLOW)! Grafana not running; changes apply on the next make install-grafana$(RESET)"; \
+	fi
 
 install-analysis: network ## Install AI Analysis API service
 	@echo "$(CYAN)🤖 Installing AI Analysis API...$(RESET)"
@@ -900,7 +916,7 @@ update: ## Pull latest images and restart all stacks
 	@echo ""
 	@echo "$(GREEN)✓ All stacks updated$(RESET)"
 
-.PHONY: help network install install-detection install-alerting install-storage-grafana install-storage-vm install-grafana install-analysis \
+.PHONY: help network install install-detection install-alerting install-storage-grafana install-storage-vm install-grafana install-analysis refresh-alerts \
 	start start-detection start-alerting start-storage-grafana start-storage-vm start-grafana start-analysis \
 	stop stop-detection stop-alerting stop-storage-grafana stop-storage-vm stop-grafana stop-analysis \
         restart restart-detection restart-alerting restart-storage-grafana restart-storage-vm restart-grafana restart-analysis \
@@ -1073,6 +1089,7 @@ deploy-fleet: ## Deploy Falco + Alloy to fleet hosts (LIMIT=host to target speci
 	@docker compose -f ansible/compose.yaml build -q 2>/dev/null || true
 	@echo "$(CYAN)🚀 Deploying SIB agents to fleet...$(RESET)"
 	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/deploy-fleet.yml $(ANSIBLE_LIMIT) $(ANSIBLE_ARGS)
+	@$(MAKE) --no-print-directory refresh-alerts
 	@echo ""
 	@echo "$(GREEN)✓ Fleet deployment complete$(RESET)"
 
@@ -1095,6 +1112,8 @@ fleet-docker-check: ## Check Docker on fleet, install if missing (ARGS="-e auto_
 remove-fleet: ## Remove SIB agents from fleet (requires confirmation)
 	@echo "$(YELLOW)⚠️  This will remove SIB agents from fleet hosts$(RESET)"
 	@$(ANSIBLE_RUN) -i inventory/hosts.yml playbooks/remove-fleet.yml $(ANSIBLE_LIMIT) -e confirm_removal=true $(ANSIBLE_ARGS)
+	@echo "$(YELLOW)! Removed hosts stay expected by the Falco liveness alert until you delete them from$(RESET)"
+	@echo "$(YELLOW)  ansible/inventory/hosts.yml (or set sib_expected: false) and run make refresh-alerts$(RESET)"
 
 fleet-shell: ## Open shell in Ansible container for manual commands
 	@docker compose -f ansible/compose.yaml run --rm --entrypoint /bin/bash ansible

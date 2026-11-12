@@ -24,6 +24,15 @@ scrape_configs:
           instance: 'sib-host'
           host: 'sib-host'
 
+  # Falco liveness: up{job="falco"} feeds the "Falco not reporting" alert
+  - job_name: 'falco'
+    static_configs:
+      - targets: ['sib-falco:8765']
+        labels:
+          instance: 'sib-falco'
+          host: 'sib-host'
+    metrics_path: '/metrics'
+
   # Falcosidekick metrics
   - job_name: 'falcosidekick'
     static_configs:

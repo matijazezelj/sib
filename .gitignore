@@ -67,6 +67,7 @@ grafana/provisioning/alerting/alert-rules.yml
 grafana/provisioning/alerting/contact-point.yml
 grafana/provisioning/alerting/notifications.yml
 grafana/provisioning/alerting/heartbeat.yml
+grafana/provisioning/alerting/falco-liveness.yml
 
 # Events Explorer is rendered at install time (embeds host + ANALYSIS_API_TOKEN)
 grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json

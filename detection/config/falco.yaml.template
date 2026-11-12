@@ -87,6 +87,9 @@ webserver:
   enabled: true
   listen_port: 8765
   k8s_healthz_endpoint: /healthz
+  # /metrics, scraped by VictoriaMetrics/Prometheus over sib-network as job
+  # "falco" (Falco liveness alert). Port 8765 is not published on the host.
+  prometheus_metrics_enabled: true
   ssl_enabled: false
   ssl_certificate: /etc/falco/certs/server.pem
 
