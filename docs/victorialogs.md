@@ -88,7 +88,7 @@ When using `STACK=vm` (default):
 | **Grafana** | http://localhost:3000 | Dashboards and visualization |
 | **VictoriaLogs** | http://localhost:9428 | Log storage and querying |
 | **VictoriaMetrics** | http://localhost:8428 | Metrics storage and querying |
-| **Sidekick API** | http://localhost:2801 | Alert routing UI |
+| **Sidekick API** | http://localhost:2801 | Falco event intake and fan-out (no UI); `/healthz`, `/metrics` |
 
 ---
 

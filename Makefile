@@ -626,8 +626,9 @@ demo-quick: ## Run quick security demo (1s delay between events)
 
 test-rules: ## Validate Falco rules syntax
 	@echo "$(CYAN)Validating Falco rules...$(RESET)"
-	@docker run --rm -v $(PWD)/detection/config:/etc/falco:ro \
-		falcosecurity/falco:0.40.0 \
+	@ver=$$(grep -sE '^FALCO_VERSION=' .env | cut -d= -f2); \
+	docker run --rm -v $(PWD)/detection/config:/etc/falco:ro \
+		falcosecurity/falco:$${ver:-0.44.1} \
 		falco --validate /etc/falco/rules/ 2>&1 | head -20 || true
 	@echo ""
 
