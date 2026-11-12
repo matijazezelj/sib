@@ -21,6 +21,8 @@ services:
       # Alert notifications (contact point provisioned only when the URL is set)
       - GRAFANA_ALERT_WEBHOOK_URL=${GRAFANA_ALERT_WEBHOOK_URL:-}
       - GRAFANA_ALERT_WEBHOOK_TYPE=${GRAFANA_ALERT_WEBHOOK_TYPE:-slack}
+      # External heartbeat (heartbeat rule installed only when set)
+      - GRAFANA_HEARTBEAT_URL=${GRAFANA_HEARTBEAT_URL:-}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro

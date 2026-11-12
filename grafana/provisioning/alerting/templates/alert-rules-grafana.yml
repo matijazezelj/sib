@@ -284,11 +284,11 @@ groups:
     data:
     - refId: A
       relativeTimeRange:
-        from: 86400
+        from: 604800
         to: 0
       datasourceUid: loki
       model:
-        expr: count by (hostname) (count_over_time({source="syscall"}[24h])) unless count by (hostname) (count_over_time({source="syscall"}[2h]))
+        expr: count by (hostname) (count_over_time({source="syscall"}[7d])) unless count by (hostname) (count_over_time({source="syscall"}[2h]))
         queryType: instant
         datasource:
           type: loki
@@ -315,7 +315,7 @@ groups:
     for: 0s
     annotations:
       summary: No Falco events from {{ $labels.hostname }} for 2 hours
-      description: The host sent events in the last 24 hours but none in the last 2. Falco or the network path to
+      description: The host sent events in the last 7 days but none in the last 2 hours. Falco or the network path to
         SIB is down on that host.
     labels:
       severity: warning
