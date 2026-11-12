@@ -63,7 +63,9 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: sum by (destination) (increase(falcosidekick_outputs{status="error"}[15m]))
+        # Falcosidekick 2.29 exports falcosidekick_outputs; newer releases (2.35 checked) falcosecurity_falcosidekick_outputs_total.
+        expr: sum by (destination) (increase(falcosidekick_outputs{status="error"}[15m])) or sum by (destination)
+          (increase(falcosecurity_falcosidekick_outputs_total{status="error"}[15m]))
         instant: true
         range: false
         datasource:
