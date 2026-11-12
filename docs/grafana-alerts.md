@@ -23,7 +23,7 @@ filling up.
 | | Falcosidekick down | Sidekick can't be scraped for 5 minutes | critical |
 | Detection | Burst of Critical/Error events | More than 10 Critical/Error events on one host in 10 minutes | critical |
 | | Critical Falco event | Any Critical event (**paused**, see below) | critical |
-| Detection baselines (every 5 min) | Host stopped sending Falco events | A host sent events in the last 24 hours but none in the last 2 | warning |
+| Detection baselines (every 5 min) | Host stopped sending Falco events | A host sent events in the last 7 days but none in the last 2 hours (keeps firing for the whole retention period; a host gone longer than log retention drops out) | warning |
 | | Event spike on a host | More than 50 events in 10 minutes and 5× the host's 24-hour average | warning |
 | | Rule firing far above normal | Same, per rule | warning |
 | Resources | Disk almost full | A filesystem over 85% for 10 minutes | warning |
