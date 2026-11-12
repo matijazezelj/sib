@@ -372,6 +372,14 @@ make update-rules
 
 This pushes the latest detection rules from `detection/config/rules/` to all fleet hosts.
 
+It copies the files listed in `falco_custom_rules` (default: `custom_rules.yaml`), validates
+them together with Falco's `falco_rules.yaml`, and restarts Falco (the `sib-falco` container
+on Docker hosts, the systemd service on native hosts).
+
+> **Upgrading:** Docker hosts deployed before custom rules were mounted at
+> `/etc/falco/rules.d` never loaded them. `make update-rules` stops on such a host and
+> asks for a one-time `make deploy-fleet LIMIT=<host>`.
+
 ### Health Check
 
 ```bash
