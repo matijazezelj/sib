@@ -9,58 +9,86 @@
 - name: Update Falco Rules on Fleet
   hosts: fleet
   become: true
-  
+
   vars:
-    rules_source: "{{ playbook_dir }}/../../detection/config/rules"
-    effective_deployment: "{{ deployment_strategy | default('native') }}"
-  
+    # Mounted into the Ansible container by ansible/compose.yaml
+    rules_source: /detection-config/rules
+
   tasks:
-    - name: Check if custom rules exist locally
-      ansible.builtin.stat:
-        path: "{{ rules_source }}/{{ item }}"
-      delegate_to: localhost
-      become: false
-      register: rules_check
-      loop: "{{ falco_custom_rules }}"
-      tags: validate
+    # Go by what is actually running: deployment_strategy may be 'auto'.
+    - name: Check whether Falco runs as the sib-falco container
+      ansible.builtin.command: docker ps -q --filter name=^sib-falco$
+      register: falco_container
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Set Falco runtime and rules directory
+      ansible.builtin.set_fact:
+        falco_runtime: "{{ 'docker' if (falco_container.rc == 0 and falco_container.stdout | trim) else 'native' }}"
+        # docker: host directory mounted at /etc/falco/rules.d in the container
+        falco_rules_dir: "{{ '/etc/sib/falco/rules.d' if (falco_container.rc == 0 and falco_container.stdout | trim) else '/etc/falco/rules.d' }}"
+      tags: always
+
+    # Containers deployed before the fix mount the rules elsewhere, so the
+    # deployed custom rules file is missing from rules.d inside them.
+    - name: Check the container sees the deployed rules in rules.d
+      ansible.builtin.command: docker exec sib-falco test -f /etc/falco/rules.d/{{ falco_custom_rules | first }}
+      register: rules_mount
+      changed_when: false
+      failed_when: false
+      when: falco_runtime == 'docker'
+      tags: always
+
+    - name: Stop on containers deployed before rules.d was mounted
+      ansible.builtin.fail:
+        msg: >-
+          sib-falco on {{ inventory_hostname }} was deployed with the old rules mount,
+          so it never loaded custom rules. Run 'make deploy-fleet LIMIT={{ inventory_hostname }}'
+          once to recreate it, then 'make update-rules' works.
+      when: falco_runtime == 'docker' and rules_mount.rc != 0
+      tags: always
 
     - name: Copy custom rules to host
       ansible.builtin.copy:
         src: "{{ rules_source }}/{{ item }}"
-        dest: "/etc/falco/rules.d/{{ item }}"
+        dest: "{{ falco_rules_dir }}/{{ item }}"
         owner: root
         group: root
         mode: '0644'
-        backup: yes
+        backup: true
       loop: "{{ falco_custom_rules }}"
       notify: Restart Falco
       tags: deploy
 
+    # Custom rules use macros from falco_rules.yaml, so validate them together.
     - name: Validate Falco rules syntax
-      ansible.builtin.command: >
-        {% if effective_deployment == 'docker' %}
-        docker exec sib-falco falco --validate /etc/falco/rules.d/
-        {% else %}
-        falco --validate /etc/falco/rules.d/
-        {% endif %}
+      ansible.builtin.command: >-
+        {{ 'docker exec sib-falco ' if falco_runtime == 'docker' else '' }}falco
+        -V /etc/falco/falco_rules.yaml
+        {% for f in falco_custom_rules %}-V /etc/falco/rules.d/{{ f }} {% endfor %}
       register: validation
       changed_when: false
-      failed_when: validation.rc != 0
       tags: validate
 
     - name: Display validation result
       ansible.builtin.debug:
-        msg: "Rules validated successfully on {{ inventory_hostname }}"
+        msg: "Rules validated on {{ inventory_hostname }} ({{ falco_runtime }})"
       tags: validate
 
   handlers:
     - name: Restart Falco
-      ansible.builtin.service:
-        name: falco
-        state: restarted
-      when: effective_deployment == 'native'
-      
-    - name: Restart Falco Docker
+      ansible.builtin.shell: |
+        if systemctl is-enabled falco-modern-bpf 2>/dev/null; then
+          systemctl restart falco-modern-bpf
+        else
+          systemctl restart falco
+        fi
+      changed_when: true
+      when: falco_runtime == 'native'
+
+    - name: Restart Falco container
       ansible.builtin.command: docker restart sib-falco
-      when: effective_deployment == 'docker'
+      changed_when: true
+      when: falco_runtime == 'docker'
       listen: Restart Falco

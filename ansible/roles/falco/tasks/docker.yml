@@ -3,7 +3,7 @@
 
 - name: Create Falco config directory
   ansible.builtin.file:
-    path: /etc/sib/falco/rules
+    path: /etc/sib/falco/rules.d
     state: directory
     mode: '0755'
   tags: falco
@@ -15,11 +15,14 @@
     mode: '0644'
   tags: falco
 
-- name: Copy Falco rules
+# Mounted at /etc/falco/rules.d, which falco.yaml.j2 loads after the image's
+# own /etc/falco/falco_rules.yaml. Same files as native hosts get.
+- name: Copy custom Falco rules
   ansible.builtin.copy:
-    src: /detection-config/rules/
-    dest: /etc/sib/falco/rules/
+    src: "/detection-config/rules/{{ item }}"
+    dest: "/etc/sib/falco/rules.d/{{ item }}"
     mode: '0644'
+  loop: "{{ falco_custom_rules }}"
   tags: falco
 
 - name: Pull Falco image
@@ -79,12 +82,18 @@
       - /etc:/host/etc:ro
       - /dev:/host/dev:ro
       - /etc/sib/falco/falco.yaml:/etc/falco/falco.yaml:ro
-      - /etc/sib/falco/rules:/etc/falco/rules:ro
+      - /etc/sib/falco/rules.d:/etc/falco/rules.d:ro
       - "{{ mtls_cert_dir }}:{{ mtls_cert_dir }}:ro"
     env:
       HOST_ROOT: /host
       FALCOCTL_DRIVER_TYPE: modern_ebpf
   when: not is_lxc
+  tags: falco
+
+- name: Remove the old rules directory (was mounted where Falco never read it)
+  ansible.builtin.file:
+    path: /etc/sib/falco/rules
+    state: absent
   tags: falco
 
 - name: Wait for Falco to start
