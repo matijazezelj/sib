@@ -143,7 +143,10 @@ Prometheus collects metrics from Falcosidekick and other SIB components.
 
 ### Metrics Available
 
-Falcosidekick (2.29) exposes three counters:
+Falcosidekick 2.29 (the version SIB ships) exposes three counters. Newer
+releases rename them with a `falcosecurity_falcosidekick_` prefix and a
+`_total` suffix (`falcosecurity_falcosidekick_outputs_total`, ...; checked on
+2.35.0), so adjust the queries below if you run a newer Sidekick:
 
 - `falco_events`: Falco events received, labelled `rule`, `priority`, `hostname`, `source`
 - `falcosidekick_inputs`: Events received, labelled `source` and `status` (`accepted`/`rejected`)

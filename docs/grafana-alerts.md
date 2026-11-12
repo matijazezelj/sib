@@ -105,6 +105,9 @@ Notification policies are organisation-wide, so SIB is careful with them:
   yourself survives `make install-grafana`.
 - Removing both settings after SIB managed the policy hands it back as
   Grafana's default policy and deletes SIB's contact points.
+- With `GRAFANA_MANAGE_NOTIFICATION_POLICY=false`, SIB never touches the policy,
+  even with a webhook set. Use this on a Grafana that also serves other
+  teams or systems; see [Shared or external Grafana](#shared-or-external-grafana).
 
 Settings are read when the container starts. `make install-grafana` recreates
 it, so changing `.env` and re-running the target is enough.
@@ -123,6 +126,98 @@ your external monitor (Uptime Kuma push monitor, Healthchecks.io, ...) with a
 period above 5 minutes, e.g. 10. It alerts when the pings stop: Grafana down,
 alert evaluation stuck, or the metrics store unreachable (the heartbeat
 queries it).
+
+## Shared or external Grafana
+
+On a Grafana that SIB doesn't own (shared with other teams, or SIB's rules
+loaded into an existing Grafana), set in `.env`:
+
+```bash
+GRAFANA_MANAGE_NOTIFICATION_POLICY=false
+# Datasource UIDs as named in that Grafana (defaults: prometheus, and
+# victorialogs or loki depending on STACK)
+GRAFANA_METRICS_DS_UID=sib-victoriametrics
+GRAFANA_LOGS_DS_UID=victorialogs
+# Optional, as above
+GRAFANA_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+GRAFANA_HEARTBEAT_URL=https://uptime.example.com/api/push/XXXXXXXX
+```
+
+Then run `make refresh-alerts` (or `./scripts/generate-grafana-alerting.sh`
+with those variables set). It writes into `grafana/provisioning/alerting/`:
+
+| File | Contents |
+|------|----------|
+| `alert-rules.yml` | SIB's rules, pointing at your datasource UIDs |
+| `falco-liveness.yml` | Falco not reporting, for the expected hosts |
+| `heartbeat.yml` | SIB heartbeat (only with `GRAFANA_HEARTBEAT_URL`) |
+| `notifications.yml` | contact points `sib-alerts` / `sib-heartbeat`, plus deletions of SIB's own retired rules |
+
+For an external Grafana, copy those files into its `provisioning/alerting/`
+directory and set `GRAFANA_ALERT_WEBHOOK_URL` / `GRAFANA_HEARTBEAT_URL` in that
+Grafana's environment: the contact points read the URLs from there, so the
+URLs never land in the files.
+
+In this mode SIB writes no `policies`, never `resetPolicies`, and never deletes
+a contact point, not even its own. Grafana refuses to delete a contact point
+that a policy still routes to, and your routes may point at SIB's. Nothing is
+merged into your policy tree. Add two child routes to it yourself
+(Alerting → Notification policies → New child policy), heartbeat first:
+
+| Order | Matcher | Contact point | Timing |
+|-------|---------|---------------|--------|
+| 1 | `alertname = SIB heartbeat` | `sib-heartbeat` | group wait 0s, group interval 1m, repeat 5m; no other routes after it (turn off "continue matching") |
+| 2 | `source = sib` | `sib-alerts` | group by `alertname`, `hostname`, `host`; repeat e.g. 1h for `severity = critical`, 4h for `warning` (optional nested routes) |
+
+Every SIB rule carries `source=sib`. The heartbeat carries
+`source=sib-heartbeat`, so the `source = sib` route can't send it to Slack
+every 5 minutes even if the routes end up in a different order.
+
+To retire SIB's notifications in this mode: remove the two routes, unset the
+URLs, re-run `make refresh-alerts`, then delete the `sib-alerts` and
+`sib-heartbeat` contact points in the UI.
+
+### Falcosidekick metric names
+
+The *Falcosidekick output errors* rule matches both metric names in use:
+`falcosidekick_outputs` (Falcosidekick 2.29, which SIB ships) and
+`falcosecurity_falcosidekick_outputs_total` (newer releases; checked on
+2.35.0). *Falcosidekick down* uses `up{job="falcosidekick"}`, so the scrape
+job must be called `falcosidekick`.
+
+### Scraping Falcosidekick over mTLS
+
+With mTLS on (`MTLS_ENABLED=true`, or your own TLS setup), Falcosidekick's
+single listener requires a client certificate, so a plain `http://` scrape of
+`:2801/metrics` fails and *Falcosidekick down* fires. Scrape it with a client
+certificate instead of loosening the listener (no `insecure_skip_verify`, no
+separate plain-HTTP port):
+
+```yaml
+  - job_name: 'falcosidekick'
+    scheme: https
+    metrics_path: '/metrics'
+    tls_config:
+      ca_file: /certs/ca/ca.crt
+      cert_file: /certs/clients/metrics-scraper.crt
+      key_file: /certs/clients/metrics-scraper.key
+      # Must match a name in the server certificate. SIB's has sib-sidekick
+      # (scripts/generate-certs.sh); set server_name if you scrape by IP.
+      server_name: sib-sidekick
+    static_configs:
+      - targets: ['sib-sidekick:2801']
+        labels:
+          instance: 'sib-sidekick'
+```
+
+This works in both `prometheus.yml` and VictoriaMetrics' `-promscrape.config`.
+Mount the certificates read-only into the scraper (for SIB's storage
+containers: `../certs:/certs:ro`). Prefer a dedicated client certificate for
+the scraper over reusing `local`: `make generate-client-cert HOST=metrics-scraper`
+writes `certs/clients/metrics-scraper.{crt,key}`. The key is created `0600`, so
+make it readable by the scraper's user without making it world-readable
+(Prometheus' image runs as `nobody`, for example: `chown 65534`). Note that SIB's bundled `storage/config/prometheus*.yml` still
+scrape over plain HTTP, so with `MTLS_ENABLED=true` they need this change too.
 
 ## Tuning
 

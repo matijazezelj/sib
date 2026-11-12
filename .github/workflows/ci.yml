@@ -83,3 +83,6 @@ jobs:
       - name: Run analysis tests
         working-directory: analysis
         run: pytest tests/ -q
+
+      - name: Run Grafana alerting generator tests
+        run: pytest scripts/tests/ -q

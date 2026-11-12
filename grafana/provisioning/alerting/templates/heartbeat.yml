@@ -53,6 +53,8 @@ groups:
     annotations:
       summary: SIB heartbeat (always firing by design)
       description: Sent to GRAFANA_HEARTBEAT_URL every 5 minutes. An external monitor alerts when it stops.
+    # Not source=sib, so a "source=sib -> Slack" route in a shared policy can't
+    # catch the heartbeat; route it by alertname="SIB heartbeat" instead.
     labels:
-      source: sib
+      source: sib-heartbeat
     isPaused: false
