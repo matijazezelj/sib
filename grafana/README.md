@@ -34,6 +34,15 @@ SIB ships 11 dashboards — 5 for the Loki backend and 6 for VictoriaLogs (only 
 
 > **Note:** The Loki Events Explorer (and the AI-analysis variants installed by `make install-analysis`) has hostname, priority and rule dropdowns. The base VictoriaLogs Events Explorer has none.
 
+## Alert Rules
+
+`make install-grafana` also provisions 12 alert rules into the **SIB** folder:
+pipeline health (no events, Falco drops, Sidekick down or failing), detection
+spikes (Critical/Error bursts, a host or rule far above its daily average, a
+host gone silent) and resources (disk, memory, storage backends). Set
+`GRAFANA_ALERT_WEBHOOK_URL` in `.env` to get notified. See
+[docs/grafana-alerts.md](../docs/grafana-alerts.md).
+
 ## Access
 
 Open http://localhost:3000

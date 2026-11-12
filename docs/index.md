@@ -26,6 +26,7 @@ title: SIEM in a Box
 | [AI Analysis](ai-analysis.md) | LLM-powered alert analysis |
 | [Sigma Rules](sigma-rules.md) | Convert community detection rules |
 | [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
+| [Grafana Alerts](grafana-alerts.md) | Pipeline health, detection spike and resource alerts |
 | [Security Hardening](security-hardening.md) | Production hardening checklist |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [FAQ](faq.md) | Common questions and answers |
