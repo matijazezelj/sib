@@ -61,11 +61,15 @@ grpc:
 grpc_output:
   enabled: false
 
-# Webserver (health checks)
+# Webserver (health checks + /metrics). Loopback only: the local collector
+# (vmagent/Alloy) scrapes /metrics and pushes it to SIB, which alerts when a
+# fleet host's Falco stops reporting.
 webserver:
   enabled: true
+  listen_address: 127.0.0.1
   listen_port: 8765
   k8s_healthz_endpoint: /healthz
+  prometheus_metrics_enabled: true
   ssl_enabled: false
 
 # Metrics

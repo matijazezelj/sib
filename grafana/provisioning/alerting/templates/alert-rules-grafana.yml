@@ -9,49 +9,6 @@ groups:
   name: Pipeline health
   interval: 1m
   rules:
-  - uid: sib-no-events
-    title: No Falco events from any host
-    condition: C
-    data:
-    - refId: A
-      relativeTimeRange:
-        from: 7200
-        to: 0
-      datasourceUid: loki
-      model:
-        expr: sum(count_over_time({source="syscall"}[2h]))
-        queryType: instant
-        datasource:
-          type: loki
-          uid: loki
-        refId: A
-        intervalMs: 1000
-        maxDataPoints: 43200
-    - refId: C
-      datasourceUid: __expr__
-      model:
-        refId: C
-        datasource:
-          type: __expr__
-          uid: __expr__
-        type: threshold
-        expression: A
-        conditions:
-        - evaluator:
-            type: lt
-            params:
-            - 1
-    noDataState: Alerting
-    execErrState: Alerting
-    for: 0s
-    annotations:
-      summary: No Falco events reached SIB in the last 2 hours
-      description: Falco sends a metrics snapshot every hour, so a healthy pipeline is never silent for 2 hours.
-        Check sib-falco, sib-sidekick and log storage.
-    labels:
-      severity: critical
-      source: sib
-    isPaused: false
   - uid: sib-falco-drops
     title: Falco dropping syscall events
     condition: C
@@ -278,49 +235,6 @@ groups:
   name: Detection baselines
   interval: 5m
   rules:
-  - uid: sib-silent-host
-    title: Host stopped sending Falco events
-    condition: C
-    data:
-    - refId: A
-      relativeTimeRange:
-        from: 604800
-        to: 0
-      datasourceUid: loki
-      model:
-        expr: count by (hostname) (count_over_time({source="syscall"}[7d])) unless count by (hostname) (count_over_time({source="syscall"}[2h]))
-        queryType: instant
-        datasource:
-          type: loki
-          uid: loki
-        refId: A
-        intervalMs: 1000
-        maxDataPoints: 43200
-    - refId: C
-      datasourceUid: __expr__
-      model:
-        refId: C
-        datasource:
-          type: __expr__
-          uid: __expr__
-        type: threshold
-        expression: A
-        conditions:
-        - evaluator:
-            type: gt
-            params:
-            - 0
-    noDataState: OK
-    execErrState: Error
-    for: 0s
-    annotations:
-      summary: No Falco events from {{ $labels.hostname }} for 2 hours
-      description: The host sent events in the last 7 days but none in the last 2 hours. Falco or the network path to
-        SIB is down on that host.
-    labels:
-      severity: warning
-      source: sib
-    isPaused: false
   - uid: sib-host-spike
     title: Event spike on a host
     condition: C

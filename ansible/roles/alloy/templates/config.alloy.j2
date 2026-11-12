@@ -99,6 +99,14 @@ prometheus.exporter.unix "node" {
 {% endif %}
 }
 
+// Local Falco (webserver on 127.0.0.1); up{job="falco"} is SIB's liveness signal
+prometheus.scrape "falco" {
+  targets         = [{"__address__" = "127.0.0.1:8765"}]
+  forward_to      = [prometheus.remote_write.sib.receiver]
+  scrape_interval = "30s"
+  job_name        = "falco"
+}
+
 prometheus.scrape "node" {
   targets    = prometheus.exporter.unix.node.targets
   forward_to = [prometheus.remote_write.sib.receiver]

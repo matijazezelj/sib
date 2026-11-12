@@ -133,6 +133,7 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 | `make fleet-ping` | Test SSH connectivity |
 | `make fleet-shell` | Open shell in Ansible container |
 | `make remove-fleet` | Remove agents from fleet |
+| `make refresh-alerts` | Update the hosts the Falco liveness alert expects (after editing the inventory) |
 
 ---
 
@@ -361,6 +362,16 @@ This shows:
 - Hostname selector to filter all panels
 
 ---
+
+## Falco Liveness Alert
+
+Every host in the `fleet` group is expected to report Falco metrics. If one
+stops (Falco or its collector down, host offline), Grafana fires **Falco not
+reporting** until it is back, however long that takes. `make deploy-fleet`
+keeps the expected list in sync with the inventory. To retire a host, remove it
+from `inventory/hosts.yml` and run `make refresh-alerts`; for a host that runs
+no Falco, set `sib_expected: false`. See
+[Grafana Alerts](grafana-alerts.md#falco-liveness).
 
 ## Updating Fleet
 
