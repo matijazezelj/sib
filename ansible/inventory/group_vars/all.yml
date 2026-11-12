@@ -45,7 +45,9 @@ deployment_strategy: auto
 # Falco Configuration
 # =============================================================================
 
-falco_version: "0.40.0"
+# Keep in sync with FALCO_VERSION in .env.example. Needs 0.44+: older releases
+# have modern_ebpf issues, and the config below expects the container plugin.
+falco_version: "0.44.1"
 falco_priority: "notice"  # debug, info, notice, warning, error, critical
 
 # Custom rules to deploy (from detection/config/rules/)

@@ -143,22 +143,24 @@ Prometheus collects metrics from Falcosidekick and other SIB components.
 
 ### Metrics Available
 
-- `falcosidekick_alerts_total`: Total alerts by priority
-- `falcosidekick_outputs_total`: Output attempts by destination
-- `falcosidekick_outputs_ok`: Successful outputs
-- `falcosidekick_outputs_error`: Failed outputs
+Falcosidekick (2.29) exposes three counters:
+
+- `falco_events`: Falco events received, labelled `rule`, `priority`, `hostname`, `source`
+- `falcosidekick_inputs`: Events received, labelled `source` and `status` (`accepted`/`rejected`)
+- `falcosidekick_outputs`: Output attempts, labelled `destination` and `status` (`ok`/`error`)
 
 ### PromQL Examples
 
 ```promql
-# Alert rate by priority
-rate(falcosidekick_alerts_total[5m])
+# Event rate by priority
+sum by (priority) (rate(falco_events[5m]))
 
-# Total alerts in last hour
-increase(falcosidekick_alerts_total[1h])
+# Events in the last hour, per host
+sum by (hostname) (increase(falco_events[1h]))
 
-# Output success rate
-falcosidekick_outputs_ok / falcosidekick_outputs_total
+# Output success rate per destination
+sum by (destination) (rate(falcosidekick_outputs{status="ok"}[5m]))
+  / sum by (destination) (rate(falcosidekick_outputs[5m]))
 ```
 
 ## VictoriaMetrics

@@ -45,7 +45,7 @@
 
 - name: Install Falco (Debian/Ubuntu)
   ansible.builtin.apt:
-    name: falco
+    name: "falco={{ falco_version }}"
     state: present
     update_cache: true
   when: ansible_os_family == 'Debian'
@@ -53,7 +53,7 @@
 
 - name: Install Falco (RHEL/CentOS)
   ansible.builtin.yum:
-    name: falco
+    name: "falco-{{ falco_version }}"
     state: present
   when: ansible_os_family == 'RedHat'
   tags: falco
@@ -63,6 +63,15 @@
     cmd: falcoctl artifact install container --no-verify
   args:
     creates: /usr/share/falco/plugins/libcontainer.so
+  tags: falco
+
+- name: Ensure Falco config.d exists (falco.yaml loads it)
+  ansible.builtin.file:
+    path: /etc/falco/config.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
   tags: falco
 
 - name: Deploy Falco configuration

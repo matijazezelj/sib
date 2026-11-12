@@ -148,7 +148,7 @@ sib_stack: vm
 deployment_strategy: auto
 
 # Falco settings
-falco_version: "0.40.0"
+falco_version: "0.44.1"   # 0.44+ required; keep in sync with FALCO_VERSION in .env
 falco_priority: notice
 
 # Docker network name (must match SIB server's network)

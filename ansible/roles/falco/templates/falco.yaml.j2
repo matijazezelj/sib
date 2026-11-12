@@ -1,6 +1,12 @@
 # Falco configuration for SIB fleet agents
 # Managed by Ansible - do not edit directly
 
+# Falco 0.44+ enables the container plugin through a config.d fragment that
+# ships with the image and packages. This file replaces the stock falco.yaml,
+# so load config.d explicitly; without it container.* fields fail to compile.
+config_files:
+  - /etc/falco/config.d
+
 # Engine Configuration
 engine:
   kind: modern_ebpf
@@ -98,6 +104,14 @@ container_engines:
     enabled: false
   bpm:
     enabled: false
+
+# Container metadata (container.name, container.image.*) via the container plugin
+plugins:
+  - name: container
+    library_path: libcontainer.so
+    init_config:
+      label_max_len: 100
+      with_size: false
 
 # Logging
 log_stderr: true
