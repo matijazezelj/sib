@@ -96,6 +96,16 @@ Without `GRAFANA_ALERT_WEBHOOK_URL`, the rules still evaluate and show their
 state in Grafana, but nobody is notified. For email, PagerDuty or other
 channels, add a contact point in the Grafana UI instead.
 
+Notification policies are organisation-wide, so SIB is careful with them:
+
+- With `GRAFANA_ALERT_WEBHOOK_URL` or `GRAFANA_HEARTBEAT_URL` set, SIB
+  provisions the whole policy tree above. A policy you built in the UI is
+  replaced (your contact points are kept).
+- With neither set, SIB leaves the policy alone, so routing you manage
+  yourself survives `make install-grafana`.
+- Removing both settings after SIB managed the policy hands it back as
+  Grafana's default policy and deletes SIB's contact points.
+
 Settings are read when the container starts. `make install-grafana` recreates
 it, so changing `.env` and re-running the target is enough.
 
