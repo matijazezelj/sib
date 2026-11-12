@@ -157,9 +157,8 @@ install-storage-vm: network ## Install VictoriaLogs + VictoriaMetrics + node_exp
 
 install-grafana: network ## Install Grafana dashboard
 	@echo "$(CYAN)📊 Installing Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) up -d
-	@echo "$(GREEN)✓ Grafana installed$(RESET)"
-	@# Configure datasources based on STACK
+	@# Write all provisioning first, then recreate the container so it starts with
+	@# the current .env (alert webhook URLs are read from its environment).
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
 	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
@@ -167,7 +166,6 @@ install-grafana: network ## Install Grafana dashboard
 		cp grafana/provisioning/dashboards/templates/dashboards-vm.yml grafana/provisioning/dashboards/dashboards.yml; \
 		[ -f grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json ] || \
 			cp grafana/provisioning/dashboards/templates/events-explorer-victorialogs.json grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json; \
-		cp grafana/provisioning/alerting/templates/alert-rules-vm.yml grafana/provisioning/alerting/alert-rules.yml; \
 		echo "$(GREEN)✓ Datasources: VictoriaLogs + VictoriaMetrics$(RESET)"; \
 		echo "$(GREEN)✓ Dashboards: VictoriaLogs set$(RESET)"; \
 	else \
@@ -175,19 +173,21 @@ install-grafana: network ## Install Grafana dashboard
 		cp grafana/provisioning/dashboards/templates/dashboards-grafana.yml grafana/provisioning/dashboards/dashboards.yml; \
 		[ -f grafana/provisioning/dashboards/loki/events-explorer.json ] || \
 			cp grafana/provisioning/dashboards/templates/events-explorer-loki.json grafana/provisioning/dashboards/loki/events-explorer.json; \
-		cp grafana/provisioning/alerting/templates/alert-rules-grafana.yml grafana/provisioning/alerting/alert-rules.yml; \
 		echo "$(GREEN)✓ Datasources: Loki + Prometheus$(RESET)"; \
 		echo "$(GREEN)✓ Dashboards: Loki set$(RESET)"; \
 	fi; \
+	./scripts/generate-grafana-alerting.sh || exit 1; \
 	echo "$(GREEN)✓ Alert rules: SIB folder (pipeline, detection, resources)$(RESET)"; \
 	if [ -n "$${GRAFANA_ALERT_WEBHOOK_URL:-}" ]; then \
-		cp grafana/provisioning/alerting/templates/contact-point.yml grafana/provisioning/alerting/contact-point.yml; \
 		echo "$(GREEN)✓ Alert notifications: contact point sib-alerts ($${GRAFANA_ALERT_WEBHOOK_TYPE:-slack})$(RESET)"; \
 	else \
-		rm -f grafana/provisioning/alerting/contact-point.yml; \
 		echo "$(YELLOW)! Alert notifications off: set GRAFANA_ALERT_WEBHOOK_URL in .env$(RESET)"; \
 	fi; \
-	docker restart sib-grafana >/dev/null 2>&1 || true
+	if [ -n "$${GRAFANA_HEARTBEAT_URL:-}" ]; then \
+		echo "$(GREEN)✓ Heartbeat: pinging GRAFANA_HEARTBEAT_URL every 5 minutes$(RESET)"; \
+	fi
+	@cd grafana && $(DOCKER_COMPOSE) up -d --force-recreate
+	@echo "$(GREEN)✓ Grafana installed$(RESET)"
 
 install-analysis: network ## Install AI Analysis API service
 	@echo "$(CYAN)🤖 Installing AI Analysis API...$(RESET)"

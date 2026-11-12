@@ -65,6 +65,8 @@ analysis/__pycache__/
 grafana/provisioning/dashboards/dashboards.yml
 grafana/provisioning/alerting/alert-rules.yml
 grafana/provisioning/alerting/contact-point.yml
+grafana/provisioning/alerting/notifications.yml
+grafana/provisioning/alerting/heartbeat.yml
 
 # Events Explorer is rendered at install time (embeds host + ANALYSIS_API_TOKEN)
 grafana/provisioning/dashboards/victorialogs/events-explorer-victorialogs.json

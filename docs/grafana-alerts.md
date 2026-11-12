@@ -10,7 +10,7 @@ outputs. Grafana alerts cover what single events can't show: a pipeline that
 went quiet, a host that stopped reporting, a burst of detections, a disk
 filling up.
 
-`make install-grafana` provisions 12 rules into the **SIB** folder
+`make install-grafana` provisions 12 rules (plus an optional heartbeat) into the **SIB** folder
 (Grafana → Alerting → Alert rules), using the queries for your `STACK`.
 
 ## Rules
@@ -51,11 +51,38 @@ GRAFANA_ALERT_WEBHOOK_URL=https://alerts.example.com/hook
 GRAFANA_ALERT_WEBHOOK_TYPE=webhook
 ```
 
-This provisions a `sib-alerts` contact point and makes it the default
-notification policy (grouped by rule, repeated every 4 hours while firing).
+This provisions a `sib-alerts` contact point and a notification policy:
+
+| Severity | First notification | Repeated while firing |
+|----------|--------------------|-----------------------|
+| critical | after 10 seconds | every hour |
+| warning | after 1 minute | every 4 hours |
+
+Alerts are grouped per rule and per host (`hostname` for log-based rules,
+`host` for metrics), so one host's burst doesn't hide another's. Alerts without
+a host label are grouped per rule.
+
 Without `GRAFANA_ALERT_WEBHOOK_URL`, the rules still evaluate and show their
 state in Grafana, but nobody is notified. For email, PagerDuty or other
 channels, add a contact point in the Grafana UI instead.
+
+Settings are read when the container starts. `make install-grafana` recreates
+it, so changing `.env` and re-running the target is enough.
+
+## External heartbeat
+
+Grafana can't tell you that Grafana is down. Point an external monitor at it:
+
+```bash
+GRAFANA_HEARTBEAT_URL=https://uptime.example.com/api/push/XXXXXXXX
+```
+
+`make install-grafana` then adds an always-firing **SIB heartbeat** rule that
+Grafana POSTs to that URL every 5 minutes. Create a push/heartbeat check in
+your external monitor (Uptime Kuma push monitor, Healthchecks.io, ...) with a
+period above 5 minutes, e.g. 10. It alerts when the pings stop: Grafana down,
+alert evaluation stuck, or the metrics store unreachable (the heartbeat
+queries it).
 
 ## Tuning
 

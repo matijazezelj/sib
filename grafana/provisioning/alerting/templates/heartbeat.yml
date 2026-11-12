@@ -1,0 +1,58 @@
+# SIB heartbeat (installed by `make install-grafana` only when GRAFANA_HEARTBEAT_URL is set)
+#
+# Always firing on purpose. The notification policy sends it to the heartbeat
+# URL every 5 minutes, and an external monitor (Uptime Kuma push monitor,
+# Healthchecks.io, ...) alerts when the pings stop: Grafana down, alert
+# evaluation stuck, or the metrics store unreachable. Grafana can't report
+# its own outage, so this check has to live outside SIB.
+apiVersion: 1
+groups:
+- orgId: 1
+  folder: SIB
+  name: Heartbeat
+  interval: 1m
+  rules:
+  - uid: sib-heartbeat
+    title: SIB heartbeat
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: vector(1)
+        instant: true
+        range: false
+        datasource:
+          type: prometheus
+          uid: prometheus
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    # If the metrics store is down the query fails: stop pinging so the
+    # external monitor notices, instead of reporting an error state.
+    noDataState: OK
+    execErrState: OK
+    for: 0s
+    annotations:
+      summary: SIB heartbeat (always firing by design)
+      description: Sent to GRAFANA_HEARTBEAT_URL every 5 minutes. An external monitor alerts when it stops.
+    labels:
+      source: sib
+    isPaused: false
