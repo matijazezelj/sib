@@ -3,15 +3,20 @@
 #
 # Usage: ./scripts/generate-scrape-config.sh   (run by 'make install-storage-*')
 #
-# Source:  storage/config/prometheus-vm.yml (STACK=vm) or prometheus.yml (STACK=grafana)
-# Output:  storage/config/generated/prometheus.yml
+#   STACK=vm       storage/config/prometheus-vm.yml -> generated/prometheus-vm.yml,
+#                  certificates in volume sib-scraper-tls-vm (VictoriaMetrics, root)
+#   STACK=grafana  storage/config/prometheus.yml    -> generated/prometheus-grafana.yml,
+#                  certificates in volume sib-scraper-tls-grafana (Prometheus, nobody)
+# Each stack has its own file and volume, so installing one never changes the
+# config or key ownership the other one is running with.
 #
 # With MTLS_ENABLED=true, Falcosidekick's listener requires a client
 # certificate, so its scrape job becomes https with the dedicated
 # "metrics-scraper" client certificate (created here if missing). The scraper
-# gets only ca.crt and that certificate/key, copied into the sib-scraper-tls
-# Docker volume with the key readable by the scraper's user alone (0400);
-# nothing on the host is made more readable and the CA key never leaves certs/.
+# gets only ca.crt and that certificate/key, copied into its volume with the
+# key readable by the scraper's user alone (0400); nothing on the host is made
+# more readable and the CA key never leaves certs/. Turning mTLS off empties
+# the volume again.
 
 set -e
 
@@ -19,17 +24,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 STACK="${STACK:-vm}"
 MTLS_ENABLED="${MTLS_ENABLED:-false}"
-VOLUME="sib-scraper-tls"
+HELPER_IMAGE="alpine:3.20"
 
-if [ "$STACK" = "vm" ]; then
-    SRC="$ROOT/storage/config/prometheus-vm.yml"
-    SCRAPER_UID=0          # VictoriaMetrics runs as root
-else
-    SRC="$ROOT/storage/config/prometheus.yml"
-    SCRAPER_UID=65534      # prom/prometheus runs as nobody
-fi
+case "$STACK" in
+    vm)
+        SRC="$ROOT/storage/config/prometheus-vm.yml"
+        SCRAPER_UID=0          # VictoriaMetrics runs as root
+        ;;
+    grafana)
+        SRC="$ROOT/storage/config/prometheus.yml"
+        SCRAPER_UID=65534      # prom/prometheus runs as nobody
+        ;;
+    *) echo "STACK must be 'vm' or 'grafana', got '$STACK'" >&2; exit 1 ;;
+esac
+VOLUME="sib-scraper-tls-$STACK"
 OUT_DIR="$ROOT/storage/config/generated"
-OUT="$OUT_DIR/prometheus.yml"
+OUT="$OUT_DIR/prometheus-$STACK.yml"
+# Present while $VOLUME holds the client key, so turning mTLS off knows to empty it.
+MARKER="$OUT_DIR/.scraper-tls-$STACK-has-credentials"
 mkdir -p "$OUT_DIR"
 
 if ! grep -q "SIB_SIDEKICK_TLS" "$SRC"; then
@@ -50,9 +62,10 @@ if [ "$MTLS_ENABLED" = "true" ]; then
         "$SCRIPT_DIR/generate-client-cert.sh" metrics-scraper >/dev/null
     fi
     # Write into the volume as root, owned by the scraper's user.
+    touch "$MARKER"
     docker run --rm \
         -v "$CERTS:/src:ro" -v "$VOLUME:/dst" \
-        alpine:3.20 sh -c "
+        "$HELPER_IMAGE" sh -c "
             set -e
             rm -f /dst/*
             cp /src/ca/ca.crt /src/clients/metrics-scraper.crt /src/clients/metrics-scraper.key /dst/
@@ -67,10 +80,17 @@ if [ "$MTLS_ENABLED" = "true" ]; then
       # Name in the server certificate (scripts/generate-certs.sh)
       server_name: sib-sidekick'
 else
-    # Don't leave a client key behind after mTLS is turned off. alpine is only
-    # present if the mTLS branch ran before, so a plain install pulls nothing.
-    if docker image inspect alpine:3.20 >/dev/null 2>&1; then
-        docker run --rm -v "$VOLUME:/dst" alpine:3.20 sh -c 'rm -f /dst/*'
+    # Don't leave a client key behind after mTLS is turned off. The volume holds
+    # one if the marker exists or the previous config pointed at it; then empty
+    # it whatever is cached locally (docker pulls the helper if needed), and fail
+    # rather than report success with the key still there. A plain install that
+    # never had credentials runs no helper and pulls nothing.
+    if [ -f "$MARKER" ] || { [ -f "$OUT" ] && grep -q "/scraper-tls/" "$OUT"; }; then
+        if ! docker run --rm -v "$VOLUME:/dst" "$HELPER_IMAGE" sh -c 'rm -f /dst/*'; then
+            echo "Could not remove the scraper's client key from volume $VOLUME." >&2
+            exit 1
+        fi
+        rm -f "$MARKER"
     fi
     TLS_BLOCK=""
 fi

@@ -182,7 +182,7 @@ VictoriaMetrics is a high-performance Prometheus-compatible metrics storage.
 Edit `config/prometheus-vm.yml` (VM stack) or `config/prometheus.yml` (Grafana
 stack) for scrape targets, then run `make install-storage-vm` /
 `make install-storage-grafana`. The containers mount
-`config/generated/prometheus.yml`, which those targets generate from your file:
+`config/generated/prometheus-vm.yml` / `prometheus-grafana.yml`, which those targets generate from your file:
 with `MTLS_ENABLED=true` the Falcosidekick job becomes an https scrape with the
 `metrics-scraper` client certificate (see
 [docs/grafana-alerts.md](../docs/grafana-alerts.md#scraping-falcosidekick-over-mtls)).

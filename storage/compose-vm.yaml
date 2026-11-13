@@ -49,9 +49,9 @@ services:
     volumes:
       - victoriametrics-data:/vmstorage
       # Generated from config/prometheus-vm.yml by make install-storage-vm
-      - ./config/generated/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/generated/prometheus-vm.yml:/etc/prometheus/prometheus.yml:ro
       # Client certificate for scraping Falcosidekick when MTLS_ENABLED=true (empty otherwise)
-      - sib-scraper-tls:/scraper-tls:ro
+      - sib-scraper-tls-vm:/scraper-tls:ro
     networks:
       - sib-network
     healthcheck:
@@ -86,5 +86,5 @@ volumes:
   victorialogs-data:
   victoriametrics-data:
   # Created and filled by scripts/generate-scrape-config.sh
-  sib-scraper-tls:
+  sib-scraper-tls-vm:
     external: true

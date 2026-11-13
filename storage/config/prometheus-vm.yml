@@ -1,4 +1,4 @@
-# Source for storage/config/generated/prometheus.yml, which the storage
+# Source for storage/config/generated/prometheus-vm.yml, which the storage
 # containers mount. Edit this file, then run make install-storage-*.
 # ==============================================
 # Prometheus-compatible Configuration for VictoriaMetrics

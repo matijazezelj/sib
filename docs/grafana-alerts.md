@@ -219,7 +219,8 @@ make it readable by the scraper's user without making it world-readable
 (Prometheus' image runs as `nobody`, for example: `chown 65534`). SIB's own storage stack does all of this automatically: with
 `MTLS_ENABLED=true`, `make install-storage-vm` / `install-storage-grafana`
 create the `metrics-scraper` certificate if needed, copy only `ca.crt` and that
-certificate and key into the `sib-scraper-tls` Docker volume (owned by the
+certificate and key into a per-stack Docker volume (`sib-scraper-tls-vm` or
+`sib-scraper-tls-grafana`, owned by the
 scraper's user, key `0400`; the CA key stays in `certs/`), and generate the
 scrape config with the block above.
 
