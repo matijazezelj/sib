@@ -86,6 +86,13 @@ echo "MTLS_ENABLED=true" >> .env
 make install
 ```
 
+With mTLS on, Falcosidekick's listener requires a client certificate, so
+`make install-storage-vm` / `install-storage-grafana` generate a scrape config
+(`storage/config/generated/`) that scrapes it over https with a dedicated
+`metrics-scraper` client certificate. After turning mTLS on or off, re-run your
+storage target (turning it off also removes the scraper's key). See
+[Grafana Alerts](grafana-alerts.md#scraping-falcosidekick-over-mtls).
+
 ### Fleet Deployment with mTLS
 
 ```bash
@@ -105,6 +112,7 @@ make deploy-fleet  # Uses mtls_enabled from inventory
 |--------------------|--------------|-----------|
 | Falco → Falcosidekick | HTTP (plaintext) | HTTPS + client cert |
 | Fleet Falco → Sidekick | HTTP (plaintext) | HTTPS + client cert |
+| Metrics scraper → Sidekick `/metrics` | HTTP (plaintext) | HTTPS + `metrics-scraper` client cert |
 
 ### Certificate Management
 
@@ -113,6 +121,7 @@ make deploy-fleet  # Uses mtls_enabled from inventory
 | `make generate-certs` | Generate CA, server, and local client certs |
 | `make generate-client-cert HOST=name` | Generate cert for specific host |
 | `make generate-fleet-certs` | Generate certs for all fleet hosts |
+| `make fleet-certs` | Push certs to fleet hosts without a full redeploy |
 | `make verify-certs` | Verify certificate chain |
 | `make rotate-certs` | Regenerate all certificates |
 | `make test-mtls` | Test mTLS connection |

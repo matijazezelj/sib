@@ -17,7 +17,8 @@ certs/
 │   ├── local.crt          # Local SIB server's Falco client cert
 │   ├── local.key          # Local client private key
 │   ├── fleet-host-1.crt   # Fleet host certificates...
-│   └── fleet-host-1.key
+│   ├── fleet-host-1.key
+│   └── metrics-scraper.crt/.key  # Created by make install-storage-* when MTLS_ENABLED=true
 └── README.md              # This file
 ```
 

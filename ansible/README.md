@@ -75,8 +75,9 @@ make fleet-health
 | Command | Description |
 |---------|-------------|
 | `make fleet-build` | Build Ansible Docker image (auto-runs on first deploy) |
-| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
-| `make update-rules` | Push updated detection rules to fleet |
+| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts, then run `make refresh-alerts` |
+| `make update-rules` | Push updated detection rules to fleet (Docker or native, detected per host) |
+| `make fleet-certs` | Push mTLS certificates without a full redeploy |
 | `make fleet-health` | Check health of all fleet agents |
 | `make fleet-docker-check` | Check if Docker is installed, install if missing |
 | `make fleet-ping` | Test SSH connectivity to fleet hosts |
@@ -142,6 +143,8 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 - Runtime security detection using eBPF
 - Configured to send events to central Falcosidekick (with optional mTLS)
 - Custom rules from `detection/config/rules/`
+- Falco `falco_version` 0.44.1 (keep in sync with `FALCO_VERSION`); native installs are pinned to it
+- Falco `/metrics` on `127.0.0.1`, scraped by the host collector; Grafana's "Falco not reporting" alert uses it. Every fleet host is expected unless it sets `sib_expected: false` (see [docs/grafana-alerts.md](../docs/grafana-alerts.md))
 
 ### Collectors (stack-dependent)
 
@@ -281,6 +284,8 @@ Add custom Falco rules to `detection/config/rules/`, then push to fleet:
 ```bash
 make update-rules
 ```
+
+Rules are copied to the Docker (`/etc/sib/falco/rules.d`) or native (`/etc/falco/rules.d`) location, validated together with `falco_rules.yaml`, and Falco is restarted only if validation passes.
 
 ## Troubleshooting
 

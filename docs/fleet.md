@@ -128,6 +128,8 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 |---------|-------------|
 | `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
 | `make update-rules` | Push detection rules to fleet |
+| `make generate-fleet-certs` | Generate client certificates for every host in the inventory |
+| `make fleet-certs` | Push mTLS certificates to fleet hosts without a full redeploy |
 | `make fleet-health` | Check health of all agents |
 | `make fleet-docker-check` | Check/install Docker on fleet hosts |
 | `make fleet-ping` | Test SSH connectivity |
@@ -224,6 +226,10 @@ make install-alerting
 # 5. Regenerate Falco config with mTLS and restart
 make install-detection
 
+#    Re-run the storage target too, so VictoriaMetrics/Prometheus scrape
+#    Falcosidekick over https with their own client certificate
+make install-storage-vm        # or install-storage-grafana
+
 # 6. Enable mTLS in Ansible group_vars
 #    Edit ansible/inventory/group_vars/all.yml:
 #    mtls_enabled: true
@@ -315,6 +321,7 @@ ssh user@remote "cd ~/sib-collector && HOSTNAME=\$(hostname) docker compose up -
 | **Docker Logs** | All containers | `hostname` field, `container_name` |
 | **Node Metrics** | CPU, memory, disk, network | `host` label, `job="node"` |
 | **Falco Events** | Security detections | `hostname` field (via Falcosidekick) |
+| **Falco Metrics** | Falco's `/metrics` on `127.0.0.1:8765`, scraped by the local collector | `host` label, `job="falco"` (drives the [liveness alert](#falco-liveness-alert)) |
 
 Data labeling convention:
 - **Metrics** (VictoriaMetrics): tagged with `host` label (set by vmagent's `-remoteWrite.label`)

@@ -130,21 +130,21 @@ Alerts are grouped per rule and per host (`hostname` for log-based rules,
 `host` for metrics), so one host's burst doesn't hide another's. Alerts without
 a host label are grouped per rule.
 
-Without `GRAFANA_ALERT_WEBHOOK_URL`, the rules still evaluate and show their
-state in Grafana, but nobody is notified. For email, PagerDuty or other
+Without a webhook or Telegram configured, the rules still evaluate and show
+their state in Grafana, but nobody is notified. For email, PagerDuty or other
 channels, add a contact point in the Grafana UI instead.
 
 Notification policies are organisation-wide, so SIB is careful with them:
 
-- With `GRAFANA_ALERT_WEBHOOK_URL` or `GRAFANA_HEARTBEAT_URL` set, SIB
+- With a webhook, Telegram or `GRAFANA_HEARTBEAT_URL` configured, SIB
   provisions the whole policy tree above. A policy you built in the UI is
   replaced (your contact points are kept).
-- With neither set, SIB leaves the policy alone, so routing you manage
+- With none of them set, SIB leaves the policy alone, so routing you manage
   yourself survives `make install-grafana`.
-- Removing both settings after SIB managed the policy hands it back as
+- Removing all of them after SIB managed the policy hands it back as
   Grafana's default policy and deletes SIB's contact points.
 - With `GRAFANA_MANAGE_NOTIFICATION_POLICY=false`, SIB never touches the policy,
-  even with a webhook set. Use this on a Grafana that also serves other
+  even with a webhook or Telegram set. Use this on a Grafana that also serves other
   teams or systems; see [Shared or external Grafana](#shared-or-external-grafana).
 
 Settings are read when the container starts. `make install-grafana` recreates
@@ -189,7 +189,7 @@ with those variables set). It writes into `grafana/provisioning/alerting/`:
 | `alert-rules.yml` | SIB's rules, pointing at your datasource UIDs |
 | `falco-liveness.yml` | Falco not reporting, for the expected hosts |
 | `heartbeat.yml` | SIB heartbeat (only with `GRAFANA_HEARTBEAT_URL`) |
-| `notifications.yml` | contact points `sib-alerts` / `sib-heartbeat`, plus deletions of SIB's own retired rules |
+| `notifications.yml` | contact points `sib-alerts` (webhook and/or Telegram integrations) / `sib-heartbeat`, plus deletions of SIB's own retired rules |
 
 For an external Grafana, copy those files into its `provisioning/alerting/`
 directory and set `GRAFANA_ALERT_WEBHOOK_URL` / `GRAFANA_HEARTBEAT_URL` in that
@@ -254,13 +254,18 @@ containers: `../certs:/certs:ro`). Prefer a dedicated client certificate for
 the scraper over reusing `local`: `make generate-client-cert HOST=metrics-scraper`
 writes `certs/clients/metrics-scraper.{crt,key}`. The key is created `0600`, so
 make it readable by the scraper's user without making it world-readable
-(Prometheus' image runs as `nobody`, for example: `chown 65534`). SIB's own storage stack does all of this automatically: with
+(Prometheus' image runs as `nobody`, for example: `chown 65534`).
+
+SIB's own storage stack does all of this automatically. With
 `MTLS_ENABLED=true`, `make install-storage-vm` / `install-storage-grafana`
 create the `metrics-scraper` certificate if needed, copy only `ca.crt` and that
 certificate and key into a per-stack Docker volume (`sib-scraper-tls-vm` or
-`sib-scraper-tls-grafana`, owned by the
-scraper's user, key `0400`; the CA key stays in `certs/`), and generate the
-scrape config with the block above.
+`sib-scraper-tls-grafana`, owned by the scraper's user, key `0400`; the CA key
+stays in `certs/`), and generate the scrape config with the block above into
+`storage/config/generated/prometheus-vm.yml` or `prometheus-grafana.yml`, from
+the tracked `storage/config/prometheus-vm.yml` / `prometheus.yml` (keep the
+`SIB_SIDEKICK_TLS` line in the falcosidekick job). Re-run the target after
+changing `MTLS_ENABLED`; turning mTLS off empties the volume.
 
 ## Tuning
 

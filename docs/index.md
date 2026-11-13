@@ -26,7 +26,7 @@ title: SIEM in a Box
 | [AI Analysis](ai-analysis.md) | LLM-powered alert analysis |
 | [Sigma Rules](sigma-rules.md) | Convert community detection rules |
 | [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
-| [Grafana Alerts](grafana-alerts.md) | Pipeline health, detection spike and resource alerts |
+| [Grafana Alerts](grafana-alerts.md) | Falco liveness, pipeline health, detection spike and resource alerts; Slack, webhook or Telegram |
 | [Security Hardening](security-hardening.md) | Production hardening checklist |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [FAQ](faq.md) | Common questions and answers |
@@ -431,6 +431,7 @@ make shell-analysis       # Open shell in analysis container
 # Fleet Management (no local Ansible needed)
 make deploy-fleet         # Deploy agents to all fleet hosts
 make update-rules         # Push detection rules to fleet
+make refresh-alerts       # Re-read the fleet inventory for the Falco liveness alert
 make fleet-health         # Check health of all agents
 make fleet-docker-check   # Check/install Docker on fleet
 make fleet-ping           # Test SSH connectivity

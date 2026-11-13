@@ -5,12 +5,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Grafana alert rules in a **SIB** folder (pipeline health, Critical/Error bursts, event spikes, disk/memory, storage down), installed by `make install-grafana`; see `docs/grafana-alerts.md`
+- Falco liveness alert "Falco not reporting" for expected hosts (fleet inventory plus the SIB host); `sib_expected: false` opts a host out; `make refresh-alerts` regenerates the list and `make deploy-fleet` runs it
+- Alert notifications: `GRAFANA_ALERT_WEBHOOK_URL` (Slack or generic webhook), `GRAFANA_ALERT_TELEGRAM_*`, severity routing and an external heartbeat (`GRAFANA_HEARTBEAT_URL`)
+- Shared Grafana support: `GRAFANA_MANAGE_NOTIFICATION_POLICY=false`, `GRAFANA_METRICS_DS_UID`, `GRAFANA_LOGS_DS_UID`
+- Falcosidekick Telegram output (`TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_MINIMUM_PRIORITY`) and an authenticated webhook output
+- Authenticated multi-host Falco sensors with per-sensor client certificates, and `make fleet-certs`
+- Appliance syslog ingestion in VictoriaLogs and a UniFi syslog dashboard
+- AIB asset context for alerts (obfuscated before it reaches the LLM); `AIB_BASE_URL` / `AIB_API_TOKEN` work in Docker
+- `_FILE` secrets for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN` (`./secrets` mounted in the analysis container)
+- `config/custom-outputs.yaml` for extra Falcosidekick outputs
+
+### Changed
+- Claude alert analysis starts each alert on Haiku 5.5 and escalates answers that fail validation (Haiku high, then Sonnet 5.5); `ANTHROPIC_MODEL` / `ANTHROPIC_EFFORT` pin one model
+- Fleet hosts run Falco 0.44.1 like the SIB host (fleet was on 0.40.0); native fleet installs are pinned to it
+- The analysis API requires a token; placeholder tokens are rejected
+- With `MTLS_ENABLED=true`, VictoriaMetrics/Prometheus scrape Falcosidekick over https with a dedicated `metrics-scraper` client certificate (per-stack generated scrape config)
+- `make test-rules` validates with `FALCO_VERSION` from `.env`
+
+### Fixed
+- Configuration in `.env` now takes effect (Makefile, compose and generators); the Grafana alert settings reach the container on every `make install-grafana`
+- "Falcosidekick down" no longer fires permanently with mTLS enabled
+- `make install-alerting` fails when Falcosidekick cannot read its config (it used to run on defaults) or when Telegram is half-configured
+- Custom rules are now loaded on Docker fleet hosts; `make update-rules` works for Docker and native hosts
+- Paranoid obfuscation now applies the generic secret patterns
+- Grafana notification policies SIB does not manage are no longer reset
+- Detection tuning: non-mutating kernel module probes, root/qBittorrent rules and local VictoriaLogs queries no longer alert noisily
+- UniFi dashboard counts unique senders and separates uplink-monitor noise
+
+### Removed
+- Grafana rules "No Falco events from any host" and "Host stopped sending Falco events" (replaced by Falco liveness; deleted from existing installs)
+- `LOKI_RETENTION_PERIOD` from `.env.example` (nothing read it)
+
+---
+
 ## [0.6.0] - 2026-04-08
 
 ### Added
 - 6 new obfuscator tests for real Falco alert patterns (`container_id=host`, system users, hex IDs)
 - Auto-detection of host IP for `make install-analysis` (no interactive prompt)
 - `ANALYSIS_BIND` and `ANALYSIS_HOST` settings in `.env.example`
+- Rule packs for cloud and web server environments (`cloud_rules.yaml`, `webserver_rules.yaml`)
+- `docs/upgrade.md` with upgrade instructions
+- `docs/kubernetes.md` documenting sib-k8s integration
 
 ### Fixed
 - Falco upgraded from 0.39.2 to 0.40.0 (fixes `scap_init` crash on kernel 6.12+)
@@ -22,15 +62,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - `make install-analysis` no longer prompts for IP — auto-detects via `hostname -I` with fallback chain (CLI arg → `.env` → auto-detect)
 - Detection rules consolidated and refined
-
----
-
-## [Unreleased]
-
-### Added
-- Rule packs for cloud and web server environments (`cloud_rules.yaml`, `webserver_rules.yaml`)
-- `docs/upgrade.md` with upgrade instructions
-- `docs/kubernetes.md` documenting sib-k8s integration
 
 ---
 

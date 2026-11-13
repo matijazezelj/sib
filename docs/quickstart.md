@@ -256,9 +256,15 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
 SLACK_MINIMUM_PRIORITY=warning
 PAGERDUTY_ROUTING_KEY=your-routing-key
 PAGERDUTY_MINIMUM_PRIORITY=critical
+# Telegram needs both values (an incomplete pair fails make install-alerting)
+TELEGRAM_TOKEN=123456789:replace-with-bot-token
+TELEGRAM_CHAT_ID=-1001234567890
+TELEGRAM_MINIMUM_PRIORITY=warning
 ```
 
-Then run `make install-alerting` to regenerate the config.
+Then run `make install-alerting` to regenerate the config. It also fails if Falcosidekick can't read the generated config (check the file's group matches `SIDECAR_CONFIG_GID` in `.env`).
+
+These outputs forward every Falco event, including command lines and paths. For aggregate alerts (a sensor gone silent, a full disk, bursts) see [Grafana Alerts](grafana-alerts.md), which can notify Slack, a webhook or Telegram.
 
 Falcosidekick supports 50+ outputs. See the [Falcosidekick documentation](https://github.com/falcosecurity/falcosidekick) for all options.
 
