@@ -1,0 +1,132 @@
+# =============================================================================
+# SIB rule pack: coding agents (Claude Code, Codex, and HIB which runs them)
+# =============================================================================
+# Opt-in, like cloud_rules.yaml / webserver_rules.yaml. Enable it on hosts where
+# coding agents run unattended or through HIB (https://github.com/matijazezelj/hib):
+#   - SIB server: add /etc/falco/rules/coding_agent_rules.yaml to rules_files in
+#     detection/config/falco.yaml.template, then make install-detection
+#   - fleet hosts: add coding_agent_rules.yaml to falco_custom_rules for the host
+#     (inventory host_vars or group_vars), then make deploy-fleet / make update-rules
+#
+# The agents' own CLIs legitimately read their config and credentials; what these
+# rules flag is a *child* of an agent (a shell, a script it ran) touching
+# credentials, or anything an agent runs writing persistence hooks. HIB's sandbox
+# denies most of this, so a hit usually means a sandbox bypass or an unsandboxed
+# agent. See docs/hib-integration.md.
+# =============================================================================
+
+- required_engine_version: 0.31.0
+
+- list: coding_agent_binaries
+  items: [claude, codex]
+
+# Processes an agent legitimately runs that touch ~/.ssh (git over ssh).
+- list: coding_agent_ssh_clients
+  items: [ssh, git, git-remote-http, git-remote-https, scp, ssh-add, ssh-keygen]
+
+- macro: coding_agent_proc
+  condition: proc.name in (coding_agent_binaries)
+
+# Any ancestor up to 8 levels is a coding agent CLI.
+- macro: coding_agent_descendant
+  condition: >
+    (proc.aname[1] in (coding_agent_binaries) or proc.aname[2] in (coding_agent_binaries)
+     or proc.aname[3] in (coding_agent_binaries) or proc.aname[4] in (coding_agent_binaries)
+     or proc.aname[5] in (coding_agent_binaries) or proc.aname[6] in (coding_agent_binaries)
+     or proc.aname[7] in (coding_agent_binaries) or proc.aname[8] in (coding_agent_binaries))
+
+- macro: coding_agent_activity
+  condition: (coding_agent_proc or coding_agent_descendant)
+
+- macro: user_credential_store
+  condition: >
+    (fd.name contains "/.ssh/" or fd.name contains "/.aws/" or fd.name contains "/.gnupg/"
+     or fd.name contains "/.config/gh/" or fd.name contains "/.kube/"
+     or fd.name endswith "/.netrc" or fd.name endswith "/.git-credentials"
+     or fd.name endswith "/.docker/config.json" or fd.name endswith "/.pgpass")
+
+- macro: agent_credential_file
+  condition: >
+    (fd.name endswith "/.claude/.credentials.json" or fd.name endswith "/.codex/auth.json"
+     or fd.name endswith "/.hib/token" or fd.name endswith "/.hib/vault.key")
+
+- macro: shell_or_login_persistence_file
+  condition: >
+    (fd.name endswith "/.bashrc" or fd.name endswith "/.bash_profile" or fd.name endswith "/.profile"
+     or fd.name endswith "/.zshrc" or fd.name endswith "/.zprofile"
+     or fd.name endswith "/.ssh/authorized_keys" or fd.name endswith "/.ssh/rc"
+     or fd.name startswith "/etc/cron" or fd.name startswith "/var/spool/cron"
+     or fd.name contains "/.config/systemd/user/" or fd.name contains "/.config/autostart/")
+
+- macro: repo_or_agent_hook_file
+  condition: >
+    (fd.name contains "/.git/hooks/" or fd.name endswith "/.mcp.json"
+     or fd.name contains "/.claude/settings" or fd.name endswith "/.codex/config.toml")
+
+- rule: Coding Agent Read Credential Store
+  desc: >
+    A coding agent or a process it started read a user credential store (SSH
+    keys, cloud, GitHub, kube or registry credentials). HIB denies these paths
+    to agents; a hit means an unsandboxed agent or a bypass.
+  condition: >
+    open_read and coding_agent_activity and user_credential_store
+    and not (proc.name in (coding_agent_ssh_clients) and fd.name contains "/.ssh/")
+  output: >
+    Coding agent read a credential store (file=%fd.name process=%proc.name
+    cmdline=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2]>%proc.aname[3]
+    user=%user.name container=%container.name)
+  priority: WARNING
+  tags: [coding_agent, hib, mitre_credential_access, T1552.001]
+
+- rule: Coding Agent Subprocess Read Agent Credentials
+  desc: >
+    A process started by a coding agent (not the agent CLI itself) read the
+    agent's or HIB's own credentials. The CLIs read these legitimately; their
+    children never need to.
+  condition: >
+    open_read and coding_agent_descendant and not coding_agent_proc
+    and agent_credential_file
+  output: >
+    Coding agent subprocess read agent credentials (file=%fd.name process=%proc.name
+    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+  priority: CRITICAL
+  tags: [coding_agent, hib, mitre_credential_access, T1552.001]
+
+- rule: Coding Agent Write Shell or Login Persistence
+  desc: >
+    A coding agent or a process it started wrote a shell startup file,
+    authorized_keys, a crontab or a user systemd/autostart unit.
+  condition: >
+    open_write and coding_agent_activity and shell_or_login_persistence_file
+  output: >
+    Coding agent wrote a persistence file (file=%fd.name process=%proc.name
+    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+  priority: CRITICAL
+  tags: [coding_agent, hib, mitre_persistence, T1546.004]
+
+- rule: Coding Agent Write Repository or Agent Hook
+  desc: >
+    A process started by a coding agent wrote a git hook, .mcp.json or agent
+    settings. HIB reverts unapproved changes (protected.reverted); this shows
+    the attempt itself, including outside HIB.
+  condition: >
+    open_write and coding_agent_descendant and not coding_agent_proc
+    and repo_or_agent_hook_file
+  output: >
+    Coding agent subprocess wrote a hook or agent config (file=%fd.name process=%proc.name
+    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+  priority: WARNING
+  tags: [coding_agent, hib, mitre_persistence, T1546]
+
+- rule: HIB Secrets Read by Unexpected Process
+  desc: >
+    Something other than the HIB daemon (bun) read HIB's API token or vault
+    key. The token unlocks the whole daemon, including its terminal.
+  condition: >
+    open_read and (fd.name endswith "/.hib/token" or fd.name endswith "/.hib/vault.key")
+    and not proc.name = bun
+  output: >
+    HIB secret read by unexpected process (file=%fd.name process=%proc.name
+    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+  priority: WARNING
+  tags: [coding_agent, hib, mitre_credential_access, T1552.001]

@@ -65,6 +65,48 @@ loki.process "docker" {
 {% endif %}
 
 // Loki writer - send to central SIB
+{% if hib_events_dir | default('') %}
+// HIB security events (docs/hib-events-spec.md). The Docker deployment sees the
+// host filesystem under /host. Only the current file: loki.source.file tracks by
+// path, so a rotated events.jsonl.1 would be read again in full.
+{% set hib_root = '' if (effective_deployment | default('docker') | trim) == 'native' else '/host' %}
+local.file_match "hib" {
+  path_targets = [{"__path__" = "{{ hib_root }}{{ hib_events_dir }}/events.jsonl"}]
+}
+
+loki.source.file "hib" {
+  targets    = local.file_match.hib.targets
+  forward_to = [loki.process.hib.receiver]
+}
+
+loki.process "hib" {
+  forward_to = [loki.write.sib.receiver]
+
+  stage.json {
+    expressions = { event = "event", severity = "severity", ts = "ts" }
+  }
+
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339"
+  }
+
+  stage.labels {
+    values = { event = "", severity = "" }
+  }
+
+  stage.static_labels {
+    values = {
+      source    = "hib",
+      job       = "hib",
+      hostname  = "{{ inventory_hostname }}",
+      host      = "{{ inventory_hostname }}",
+      collector = "alloy",
+    }
+  }
+}
+{% endif %}
+
 loki.write "sib" {
   endpoint {
     url = "{{ sib_loki_url }}/loki/api/v1/push"

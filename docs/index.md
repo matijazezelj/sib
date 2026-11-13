@@ -26,6 +26,7 @@ title: SIEM in a Box
 | [AI Analysis](ai-analysis.md) | LLM-powered alert analysis |
 | [Sigma Rules](sigma-rules.md) | Convert community detection rules |
 | [Threat Intelligence](threat-intel.md) | IOC feeds and blocklists |
+| [HIB Integration](hib-integration.md) | Falco rules for coding agents, HIB's security event log and alerts |
 | [Grafana Alerts](grafana-alerts.md) | Falco liveness, pipeline health, detection spike and resource alerts; Slack, webhook or Telegram |
 | [Security Hardening](security-hardening.md) | Production hardening checklist |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |

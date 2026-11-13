@@ -64,6 +64,7 @@ rules_files:
   # Optional rule packs — uncomment to enable:
   # - /etc/falco/rules/cloud_rules.yaml      # AWS/GCP/Azure environments
   # - /etc/falco/rules/webserver_rules.yaml  # Nginx/Apache/PHP-FPM
+  # - /etc/falco/rules/coding_agent_rules.yaml  # Claude Code/Codex/HIB hosts (docs/hib-integration.md)
   # For Kubernetes environments, use sib-k8s: https://github.com/matijazezelj/sib-k8s
 
 # Watch rules files for changes

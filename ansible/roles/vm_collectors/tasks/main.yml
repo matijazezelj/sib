@@ -143,11 +143,12 @@
         env:
           HOSTNAME: "{{ inventory_hostname }}"
           VECTOR_CONFIG: /etc/vector/vector.toml
-        volumes:
-          - /etc/sib-collector/config/vector.toml:/etc/vector/vector.toml:ro
-          - /var/log:/var/log:ro
-          - /var/run/docker.sock:/var/run/docker.sock:ro
-          - /var/lib/sib-vector:/var/lib/vector
+        volumes: >-
+          {{ ['/etc/sib-collector/config/vector.toml:/etc/vector/vector.toml:ro',
+              '/var/log:/var/log:ro',
+              '/var/run/docker.sock:/var/run/docker.sock:ro',
+              '/var/lib/sib-vector:/var/lib/vector']
+             + ([hib_events_dir ~ ':/hib-events:ro'] if hib_events_dir | default('') else []) }}
 
 - name: VM collectors native deployment not supported
   when: common_effective_collectors_deployment | trim != 'docker'

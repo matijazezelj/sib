@@ -28,6 +28,7 @@ filling up.
 | Resources | Disk almost full | A filesystem over 85% for 10 minutes | warning |
 | | Memory usage high | Memory over 90% for 15 minutes | warning |
 | | Storage backend down | VictoriaLogs/VictoriaMetrics (or Loki/Prometheus) unreachable for 5 minutes | critical |
+| HIB | HIB critical security event, authentication failures, agent denials burst, sandbox unavailable | from [HIB](https://github.com/matijazezelj/hib)'s event log, see [HIB Integration](hib-integration.md) | critical / warning |
 
 Disk and memory rules cover the SIB server on the VM stack and every fleet host
 that ships metrics.

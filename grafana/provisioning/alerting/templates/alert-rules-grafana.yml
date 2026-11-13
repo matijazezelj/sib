@@ -478,3 +478,181 @@ groups:
       severity: critical
       source: sib
     isPaused: false
+- orgId: 1
+  folder: SIB
+  name: HIB
+  interval: 1m
+  rules:
+  - uid: sib-hib-critical
+    title: HIB critical security event
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (hostname, event) (count_over_time({source="hib", severity="critical"}[10m]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: 'HIB on {{ $labels.hostname }}: {{ $labels.event }}'
+      description: 'A critical HIB event, e.g. protected.reverted: an agent changed git hooks, git config or agent
+        config without approval and HIB put it back. Look for persistence attempts in that workspace (docs/hib-integration.md).'
+    labels:
+      severity: critical
+      source: sib
+    isPaused: false
+  - uid: sib-hib-auth-failures
+    title: HIB authentication failures
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (hostname) (sum_over_time({source="hib", event="auth.failure"} | json | unwrap count [15m]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: Repeated authentication failures against HIB on {{ $labels.hostname }}
+      description: '{{ $values.A }} failed requests in 15 minutes (bad token, Host or Origin). Something local
+        is trying to use HIB''s API without its token.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-hib-denials
+    title: HIB agent denials burst
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (hostname) (count_over_time({source="hib", event=~"tool.permission|data.block"}
+          | json | decision!="allow" and decision!="always" [15m]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: Coding agent on {{ $labels.hostname }} keeps hitting HIB denials
+      description: '{{ $values.A }} denied tool calls (network requests included) or blocked data reads in 15 minutes.
+        An agent repeatedly trying what it may not do is worth a look.'
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-hib-sandbox-unavailable
+    title: HIB sandbox unavailable
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (hostname) (count_over_time({source="hib", event="sandbox.unavailable"}[1h]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: HIB on {{ $labels.hostname }} is running without its sandbox
+      description: HIB's sandbox probe failed, so agents run without the filesystem and network sandbox and auto
+        mode is off.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false

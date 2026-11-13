@@ -88,6 +88,13 @@ alloy_collect_metrics: true
 alloy_collect_docker_logs: true
 alloy_collect_journal: true
 
+# HIB (https://github.com/matijazezelj/hib) security event log. Set per host,
+# e.g. in host_vars or the inventory: hib_events_dir: /home/alice/.hib/events
+# The collector (Vector or Alloy) then ships those JSON lines to SIB, where
+# Grafana alerts on them (docs/hib-integration.md). Only that directory is
+# exposed to the collector, never ~/.hib itself. Empty = off.
+hib_events_dir: ""
+
 # =============================================================================
 # VM Collectors Configuration (vmagent + node_exporter)
 # =============================================================================
