@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- HIB integration (docs/hib-integration.md): opt-in Falco rule pack for coding agents (`coding_agent_rules.yaml`: credential reads, persistence writes, hook tampering, HIB secret access), collection of HIB's security event log via `hib_events_dir` (Vector and Alloy), and a HIB alert group (critical events, auth failures, denial bursts, sandbox unavailable)
+
 ---
 
 ## [0.7.0] - 2026-11-13

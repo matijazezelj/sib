@@ -69,3 +69,54 @@ headers.ProjectID = "0"
 [sinks.victorialogs.batch]
 max_bytes = 1048576
 timeout_secs = 1
+{% if hib_events_dir | default('') %}
+
+# ============================================
+# HIB security events (docs/hib-events-spec.md)
+# ============================================
+# hib_events_dir is mounted read-only at /hib-events. Rotated files
+# (events.jsonl.1 ...) are included so a rotation never loses lines; the
+# checkpoints in /var/lib/vector prevent duplicates.
+
+[sources.hib_events]
+type = "file"
+include = ["/hib-events/events.jsonl*"]
+read_from = "beginning"
+
+[transforms.hib_parse]
+type = "remap"
+inputs = ["hib_events"]
+drop_on_abort = true
+source = '''
+ev, err = parse_json(.message)
+if err != null || !is_object(ev) { abort }
+. = object!(ev)
+.hib_host = del(.host)
+.hostname = "{{ inventory_hostname }}"
+.source = "hib"
+.collector = "vector"
+ts, terr = parse_timestamp(.ts, format: "%+")
+.timestamp = if terr == null { ts } else { now() }
+.message = to_string(.event) ?? "hib"
+'''
+
+[sinks.victorialogs_hib]
+type = "elasticsearch"
+inputs = ["hib_parse"]
+endpoints = ["{{ sib_victorialogs_url }}/insert/elasticsearch/"]
+mode = "bulk"
+api_version = "v8"
+compression = "gzip"
+
+[sinks.victorialogs_hib.healthcheck]
+enabled = false
+
+[sinks.victorialogs_hib.query]
+_msg_field = "message"
+_time_field = "timestamp"
+_stream_fields = "hostname,source"
+
+[sinks.victorialogs_hib.request]
+headers.AccountID = "0"
+headers.ProjectID = "0"
+{% endif %}
