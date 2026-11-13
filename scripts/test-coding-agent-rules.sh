@@ -4,7 +4,7 @@
 # Usage: sudo-less if your user can run Docker; needs a kernel with BTF (modern eBPF).
 #   ./scripts/test-coding-agent-rules.sh
 #
-# Starts Falco (FALCO_VERSION, default 0.44.1) privileged with the modern eBPF
+# Starts Falco (FALCO_VERSION, default 0.45.2) privileged with the modern eBPF
 # probe, loading only falco_rules.yaml (for its macros) and the coding agent
 # pack. Then it plays positive and negative cases with stand-in processes named
 # claude / codex / bun against a throwaway fake home: fake files only, never
@@ -21,7 +21,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-FALCO_IMAGE="falcosecurity/falco:${FALCO_VERSION:-0.44.1}"
+FALCO_IMAGE="falcosecurity/falco:${FALCO_VERSION:-0.45.2}"
 NAME="sib-falco-agent-test"
 FX="$(mktemp -d /tmp/sib-agent-rules.XXXXXX)"
 OUT="$FX/falco.jsonl"

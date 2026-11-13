@@ -66,17 +66,16 @@ not from inside Claude Code or Codex: the rules key on agent ancestry, so
 everything started from an agent's own terminal counts as agent activity.
 
 ```bash
-./scripts/test-coding-agent-rules.sh                        # FALCO_VERSION from the environment, default 0.44.1
-FALCO_VERSION=0.45.2 ./scripts/test-coding-agent-rules.sh   # another Falco release
+./scripts/test-coding-agent-rules.sh                        # FALCO_VERSION from the environment, default 0.45.2
+FALCO_VERSION=0.44.1 ./scripts/test-coding-agent-rules.sh   # another Falco release
 ```
 
 It ends with `PASS`/`FAIL` per case and lists any other coding-agent alerts the
 host raised meanwhile (real activity), which is a quick false-positive check.
 
-All 13 cases pass with Falco 0.45.2. On Linux 7.2 (aarch64), Falco 0.44.1's
-modern eBPF probe doesn't load at all (the kernel's verifier rejects its
-`signal_deliver` program), so there the script fails before any case runs and
-Falco 0.45.2 is needed.
+All 13 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
+Falco 0.44.1's modern eBPF probe doesn't load at all: the kernel's verifier
+rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 
 ## 2. HIB's security event log
 

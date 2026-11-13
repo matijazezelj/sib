@@ -52,7 +52,7 @@
     Potential AWS credential exfiltration
     (command=%proc.cmdline user=%user.name container_id=%container.id
      container_name=%container.name image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [cloud, aws, mitre_exfiltration, T1552.001]
 
 # ---------------------------------------------
@@ -146,5 +146,5 @@
     Container registry login from within container
     (command=%proc.cmdline user=%user.name container_id=%container.id
      container_name=%container.name image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [cloud, container, mitre_persistence, T1525]

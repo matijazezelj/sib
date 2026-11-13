@@ -12,8 +12,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - "HIB daemon not running" alert from HIB's `daemon.alive` heartbeats
 - `scripts/test-coding-agent-rules.sh`: runtime test of the coding agent Falco rules (7 positive, 6 negative cases) with live kernel events
 
+### Changed
+- Falco 0.45.2 on the SIB server and fleet hosts (was 0.44.1, whose modern eBPF probe doesn't load on Linux 7.2 aarch64)
+
 ### Fixed
 - "Coding Agent Write Repository or Agent Hook" no longer fires on the `*.sample` hooks `git init`/`git clone` write
+- The opt-in `cloud_rules.yaml` and `webserver_rules.yaml` packs failed to load (priority `HIGH` doesn't exist in Falco, now `ERROR`; `not in` operator), so enabling them stopped Falco
 
 ---
 

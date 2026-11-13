@@ -37,6 +37,15 @@ nav_order: 9
 
 ## Version-specific notes
 
+### Unreleased: Falco 0.45.2
+
+Falco moves from 0.44.1 to 0.45.2 everywhere (`FALCO_VERSION` in `.env`,
+`falco_version` in `ansible/inventory/group_vars/all.yml`). 0.44.1's modern
+eBPF probe doesn't load on newer kernels (Linux 7.2 aarch64: the verifier
+rejects it), so Falco never started there. If your `.env` pins
+`FALCO_VERSION=0.44.1`, change it to `0.45.2`, then run `make install-detection`
+on the SIB server and `make deploy-fleet` for fleet hosts.
+
 ### 0.7.0
 
 Re-run these once after `git pull`; each is safe to repeat.

@@ -670,7 +670,7 @@ test-rules: ## Validate Falco rules syntax
 	@echo "$(CYAN)Validating Falco rules...$(RESET)"
 	@ver=$$(grep -sE '^FALCO_VERSION=' .env | cut -d= -f2); \
 	docker run --rm -v $(PWD)/detection/config:/etc/falco:ro \
-		falcosecurity/falco:$${ver:-0.44.1} \
+		falcosecurity/falco:$${ver:-0.45.2} \
 		falco --validate /etc/falco/rules/ 2>&1 | head -20 || true
 	@echo ""
 

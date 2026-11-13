@@ -143,7 +143,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 - Runtime security detection using eBPF
 - Configured to send events to central Falcosidekick (with optional mTLS)
 - Custom rules from `detection/config/rules/`
-- Falco `falco_version` 0.44.1 (keep in sync with `FALCO_VERSION`); native installs are pinned to it
+- Falco `falco_version` 0.45.2 (keep in sync with `FALCO_VERSION`); native installs are pinned to it
 - Falco `/metrics` on `127.0.0.1`, scraped by the host collector; Grafana's "Falco not reporting" alert uses it. Every fleet host is expected unless it sets `sib_expected: false` (see [docs/grafana-alerts.md](../docs/grafana-alerts.md))
 
 ### Collectors (stack-dependent)
