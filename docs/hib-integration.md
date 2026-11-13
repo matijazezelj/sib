@@ -28,7 +28,7 @@ everything they start:
 | Coding Agent Read Credential Store | WARNING | an agent or its child reads `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.kube`, `.netrc`, `.git-credentials`, `~/.docker/config.json`, `.pgpass` (git/ssh reading `~/.ssh` excepted) |
 | Coding Agent Subprocess Read Agent Credentials | CRITICAL | a child of an agent (not the CLI itself) reads `~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.hib/token` or `~/.hib/vault.key` |
 | Coding Agent Write Shell or Login Persistence | CRITICAL | an agent or its child writes a shell rc file, `authorized_keys`, a crontab, or a user systemd/autostart unit |
-| Coding Agent Write Repository or Agent Hook | WARNING | a child of an agent writes `.git/hooks/*`, `.mcp.json`, `.claude/settings*` or `.codex/config.toml` |
+| Coding Agent Write Repository or Agent Hook | WARNING | a child of an agent writes `.git/hooks/*` (not git's inert `*.sample` templates), `.mcp.json`, `.claude/settings*` or `.codex/config.toml` |
 | HIB Secrets Read by Unexpected Process | WARNING | anything other than the HIB daemon (`bun`) reads HIB's token or vault key |
 
 The agents' own CLIs legitimately read their config and credentials, so most
@@ -53,6 +53,30 @@ Enable it:
 
 Events land in the Events Explorer like any other Falco detection, and the
 standard *Burst of Critical/Error events* alert covers them.
+
+### Testing the rules on a host
+
+`scripts/test-coding-agent-rules.sh` runs Falco privileged with the modern
+eBPF probe for a minute and plays 7 cases that must alert and 6 that must not,
+with stand-in processes named `claude`, `codex` and `bun` against a throwaway
+fake home (never real credentials). The negative cases include `ssh` reading
+`~/.ssh`, an agent CLI reading its own credentials, HIB's daemon reading its
+vault key, and `git init` writing its sample hooks. Run it from a normal shell,
+not from inside Claude Code or Codex: the rules key on agent ancestry, so
+everything started from an agent's own terminal counts as agent activity.
+
+```bash
+./scripts/test-coding-agent-rules.sh                        # FALCO_VERSION from the environment, default 0.44.1
+FALCO_VERSION=0.45.2 ./scripts/test-coding-agent-rules.sh   # another Falco release
+```
+
+It ends with `PASS`/`FAIL` per case and lists any other coding-agent alerts the
+host raised meanwhile (real activity), which is a quick false-positive check.
+
+All 13 cases pass with Falco 0.45.2. On Linux 7.2 (aarch64), Falco 0.44.1's
+modern eBPF probe doesn't load at all (the kernel's verifier rejects its
+`signal_deliver` program), so there the script fails before any case runs and
+Falco 0.45.2 is needed.
 
 ## 2. HIB's security event log
 
@@ -91,13 +115,27 @@ and metrics; HIB's own `host` field is kept as `hib_host`.
 | HIB authentication failures | more than 5 failed requests in 15 minutes (sum of the events' `count`; HIB aggregates repeats within 60 s into one line) | warning |
 | HIB agent denials burst | more than 5 denied tool calls or blocked data reads in 15 minutes (a denied network request is a denied tool call too; `sandbox.network` isn't counted again) | warning |
 | HIB sandbox unavailable | `sandbox.unavailable` in the last hour | warning |
+| HIB daemon not running | heartbeats (`daemon.alive`, every 5 min) in the last 24 hours, none for 15 minutes, and no clean `daemon.stop` in those 24 hours: a crash, a kill, or events no longer reaching SIB | warning |
 
 They stay quiet on hosts without HIB. `guard.decision` is written for every
 prompt; only its `warning` lines (`rejected`, `timeout`) are worth a look, e.g.
 `source:hib event:guard.decision severity:warning` in the Events Explorer.
 
-A crashed or killed HIB daemon writes nothing (only clean stops log
-`daemon.stop`), so these alerts can't tell you HIB is down.
+*HIB daemon not running* needs a HIB version that writes `daemon.alive`
+heartbeats. A clean stop suppresses it for 24 hours, so a crash within a day
+of a deliberate stop and restart is only noticed once the 24-hour window
+moves past that stop.
+
+## Privacy of the event log
+
+HIB keeps payloads out of the log: no prompts, model output, file contents or
+secrets, and the free-text fields (`command`, `url`, `reasons`) are redacted
+before they are written. The metadata still says a lot: absolute workspace
+paths (often a customer or project name), session and account names, when
+agents work and for how long, which tools they use and which files or hosts
+they touch. Treat the HIB stream in VictoriaLogs/Loki like the rest of SIB's
+security data: restrict who can query it and keep the retention short for
+sensitive workloads.
 
 ## What to look at when one fires
 

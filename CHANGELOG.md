@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - HIB integration (docs/hib-integration.md): opt-in Falco rule pack for coding agents (`coding_agent_rules.yaml`: credential reads, persistence writes, hook tampering, HIB secret access), collection of HIB's security event log via `hib_events_dir` (Vector and Alloy), and a HIB alert group (critical events, auth failures, denial bursts, sandbox unavailable)
+- "HIB daemon not running" alert from HIB's `daemon.alive` heartbeats
+- `scripts/test-coding-agent-rules.sh`: runtime test of the coding agent Falco rules (7 positive, 6 negative cases) with live kernel events
+
+### Fixed
+- "Coding Agent Write Repository or Agent Hook" no longer fires on the `*.sample` hooks `git init`/`git clone` write
 
 ---
 
