@@ -87,7 +87,7 @@
     (command=%proc.cmdline file=%fd.name user=%user.name
      container_id=%container.id container_name=%container.name
      image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [webserver, mitre_persistence, T1505.003]
 
 # ---------------------------------------------
@@ -109,7 +109,7 @@
     (command=%proc.cmdline parent=%proc.pname user=%user.name
      container_id=%container.id container_name=%container.name
      image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [webserver, mitre_command_and_control, T1105]
 
 # ---------------------------------------------
@@ -139,7 +139,7 @@
     (command=%proc.cmdline file=%fd.name user=%user.name
      container_id=%container.id container_name=%container.name
      image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [webserver, mitre_credential_access, T1552]
 
 # ---------------------------------------------
@@ -156,11 +156,11 @@
      fd.name contains "/var/log/apache2/" or
      fd.name contains "/var/log/httpd/" or
      fd.name contains "/var/log/lighttpd/") and
-    proc.name not in (nginx, apache2, httpd, logrotate, rsyslog, syslog-ng)
+    not proc.name in (nginx, apache2, httpd, logrotate, rsyslog, syslog-ng)
   output: >
     Web server log file modified by unexpected process
     (command=%proc.cmdline file=%fd.name user=%user.name
      container_id=%container.id container_name=%container.name
      image=%container.image.repository)
-  priority: HIGH
+  priority: ERROR
   tags: [webserver, mitre_defense_evasion, T1070.002]

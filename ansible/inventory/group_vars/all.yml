@@ -45,9 +45,10 @@ deployment_strategy: auto
 # Falco Configuration
 # =============================================================================
 
-# Keep in sync with FALCO_VERSION in .env.example. Needs 0.44+: older releases
+# Keep in sync with FALCO_VERSION in .env.example. 0.45.2: 0.44.1's modern eBPF
+# probe doesn't load on newer kernels (Linux 7.2 aarch64). Needs 0.44+: older releases
 # have modern_ebpf issues, and the config below expects the container plugin.
-falco_version: "0.44.1"
+falco_version: "0.45.2"
 falco_priority: "notice"  # debug, info, notice, warning, error, critical
 
 # Custom rules to deploy (from detection/config/rules/)
