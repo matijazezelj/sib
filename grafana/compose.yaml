@@ -21,6 +21,7 @@ services:
       # Alert notifications (contact point provisioned only when the URL is set)
       - GRAFANA_ALERT_WEBHOOK_URL=${GRAFANA_ALERT_WEBHOOK_URL:-}
       - GRAFANA_ALERT_WEBHOOK_TYPE=${GRAFANA_ALERT_WEBHOOK_TYPE:-slack}
+      - GRAFANA_ALERT_TELEGRAM_BOT_TOKEN=${GRAFANA_ALERT_TELEGRAM_BOT_TOKEN:-}
       # External heartbeat (heartbeat rule installed only when set)
       - GRAFANA_HEARTBEAT_URL=${GRAFANA_HEARTBEAT_URL:-}
     volumes:

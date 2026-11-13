@@ -126,7 +126,7 @@ def test_managed_enabled_then_disabled_hands_policy_back_once(sib):
     run(sib)
     doc = notifications(sib)
     assert doc["resetPolicies"] == [1]
-    assert deleted_contacts(doc) == ["sib-alerts", "sib-heartbeat"]
+    assert deleted_contacts(doc) == ["sib-alerts", "sib-alerts-telegram", "sib-heartbeat"]
     run(sib)  # next run: nothing left to hand back
     doc = notifications(sib)
     assert "resetPolicies" not in doc and "deleteContactPoints" not in doc
@@ -137,7 +137,7 @@ def test_managed_removing_heartbeat_keeps_policy_and_deletes_only_heartbeat(sib)
     run(sib, GRAFANA_ALERT_WEBHOOK_URL=SLACK)
     doc = notifications(sib)
     assert "policies" in doc and "resetPolicies" not in doc
-    assert deleted_contacts(doc) == ["sib-heartbeat"]
+    assert deleted_contacts(doc) == ["sib-alerts-telegram", "sib-heartbeat"]
 
 
 @pytest.mark.parametrize("manage", ["true", "false"])
@@ -197,4 +197,66 @@ def test_sidekick_output_errors_match_old_and_new_metric_names(sib):
     {"GRAFANA_ALERT_WEBHOOK_TYPE": "teams"},
 ])
 def test_invalid_settings_are_rejected(sib, env):
+    assert run(sib, check=False, **env).returncode != 0
+
+
+# --- Telegram ------------------------------------------------------------------
+
+TG = {"GRAFANA_ALERT_TELEGRAM_BOT_TOKEN": "123456:secret-token", "GRAFANA_ALERT_TELEGRAM_CHAT_ID": "-1001234567890"}
+
+
+def receivers(doc, name):
+    return next(cp["receivers"] for cp in doc.get("contactPoints", []) if cp["name"] == name)
+
+
+@pytest.mark.parametrize("webhook", [None, SLACK])
+def test_telegram_is_an_integration_on_sib_alerts(sib, webhook):
+    run(sib, GRAFANA_ALERT_WEBHOOK_URL=webhook, **TG)
+    doc = notifications(sib)
+    recv = receivers(doc, "sib-alerts")
+    tg = next(r for r in recv if r["type"] == "telegram")
+    assert tg["uid"] == "sib-alerts-telegram"
+    assert tg["settings"] == {"bottoken": "$GRAFANA_ALERT_TELEGRAM_BOT_TOKEN",
+                              "chatid": "-1001234567890"}
+    assert len(recv) == (2 if webhook else 1)
+    assert doc["policies"][0]["receiver"] == "sib-alerts"
+
+
+def test_telegram_chat_id_is_a_literal_string(sib):
+    """Grafana re-types substituted values, so a $VAR chat ID like -100... would
+    become a number and fail validation (seen on Grafana 11.4)."""
+    run(sib, **TG)
+    raw = (sib / "grafana/provisioning/alerting/notifications.yml").read_text()
+    assert 'chatid: "-1001234567890"' in raw
+    assert "$GRAFANA_ALERT_TELEGRAM_CHAT_ID" not in raw
+
+
+def test_telegram_token_is_not_written_to_disk(sib):
+    run(sib, **TG)
+    text = (sib / "grafana/provisioning/alerting/notifications.yml").read_text()
+    assert "secret-token" not in text
+
+
+def test_removing_telegram_deletes_only_its_integration(sib):
+    run(sib, GRAFANA_ALERT_WEBHOOK_URL=SLACK, **TG)
+    run(sib, GRAFANA_ALERT_WEBHOOK_URL=SLACK)
+    doc = notifications(sib)
+    assert "policies" in doc and "resetPolicies" not in doc
+    assert deleted_contacts(doc) == ["sib-alerts-telegram", "sib-heartbeat"]
+
+
+def test_unmanaged_telegram_never_owns_policy(sib):
+    for _ in range(2):
+        run(sib, GRAFANA_MANAGE_NOTIFICATION_POLICY="false", **TG)
+        doc = notifications(sib)
+        assert "policies" not in doc and "resetPolicies" not in doc and "deleteContactPoints" not in doc
+        assert receivers(doc, "sib-alerts")[0]["type"] == "telegram"
+
+
+@pytest.mark.parametrize("env", [
+    {"GRAFANA_ALERT_TELEGRAM_BOT_TOKEN": "123:abc"},
+    {"GRAFANA_ALERT_TELEGRAM_CHAT_ID": "-100123"},
+    {"GRAFANA_ALERT_TELEGRAM_BOT_TOKEN": "123:abc", "GRAFANA_ALERT_TELEGRAM_CHAT_ID": "not a chat"},
+])
+def test_incomplete_or_invalid_telegram_is_rejected(sib, env):
     assert run(sib, check=False, **env).returncode != 0

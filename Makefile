@@ -192,10 +192,12 @@ install-grafana: network ## Install Grafana dashboard
 	fi; \
 	./scripts/generate-grafana-alerting.sh || exit 1; \
 	echo "$(GREEN)✓ Alert rules: SIB folder (pipeline, detection, resources)$(RESET)"; \
-	if [ -n "$${GRAFANA_ALERT_WEBHOOK_URL:-}" ]; then \
-		echo "$(GREEN)✓ Alert notifications: contact point sib-alerts ($${GRAFANA_ALERT_WEBHOOK_TYPE:-slack})$(RESET)"; \
+	if [ -n "$${GRAFANA_ALERT_WEBHOOK_URL:-}$${GRAFANA_ALERT_TELEGRAM_BOT_TOKEN:-}" ]; then \
+		via=""; [ -n "$${GRAFANA_ALERT_WEBHOOK_URL:-}" ] && via="$${GRAFANA_ALERT_WEBHOOK_TYPE:-slack}"; \
+		[ -n "$${GRAFANA_ALERT_TELEGRAM_BOT_TOKEN:-}" ] && via="$${via:+$$via + }telegram"; \
+		echo "$(GREEN)✓ Alert notifications: contact point sib-alerts ($$via)$(RESET)"; \
 	else \
-		echo "$(YELLOW)! Alert notifications off: set GRAFANA_ALERT_WEBHOOK_URL in .env$(RESET)"; \
+		echo "$(YELLOW)! Alert notifications off: set GRAFANA_ALERT_WEBHOOK_URL or GRAFANA_ALERT_TELEGRAM_* in .env$(RESET)"; \
 	fi; \
 	if [ -n "$${GRAFANA_HEARTBEAT_URL:-}" ]; then \
 		echo "$(GREEN)✓ Heartbeat: pinging GRAFANA_HEARTBEAT_URL every 5 minutes$(RESET)"; \

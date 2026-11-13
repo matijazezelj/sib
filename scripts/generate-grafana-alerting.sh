@@ -16,8 +16,10 @@
 # so turning a setting off has to delete them explicitly; otherwise a removed
 # heartbeat would keep firing at an empty URL.
 #
-# URLs are not written to disk: the files reference $GRAFANA_ALERT_WEBHOOK_URL and
+# URLs and tokens are not written to disk: the files reference
+# $GRAFANA_ALERT_WEBHOOK_URL, $GRAFANA_ALERT_TELEGRAM_BOT_TOKEN and
 # $GRAFANA_HEARTBEAT_URL, which Grafana fills in from its container environment.
+# (The Telegram chat ID, not a secret, is written as is.)
 # Files are regenerated on every run; edit the templates instead.
 
 set -e
@@ -30,6 +32,9 @@ STACK="${STACK:-vm}"
 WEBHOOK_URL="${GRAFANA_ALERT_WEBHOOK_URL:-}"
 WEBHOOK_TYPE="${GRAFANA_ALERT_WEBHOOK_TYPE:-slack}"
 HEARTBEAT_URL="${GRAFANA_HEARTBEAT_URL:-}"
+# Telegram: a second integration on the sib-alerts contact point.
+TG_TOKEN="${GRAFANA_ALERT_TELEGRAM_BOT_TOKEN:-}"
+TG_CHAT="${GRAFANA_ALERT_TELEGRAM_CHAT_ID:-}"
 # false: SIB provisions its rules and contact points only and never touches the
 # organisation's notification policy (shared/external Grafana).
 MANAGE_POLICY="${GRAFANA_MANAGE_NOTIFICATION_POLICY:-true}"
@@ -42,6 +47,16 @@ case "$WEBHOOK_TYPE" in
     slack|webhook) ;;
     *) echo "GRAFANA_ALERT_WEBHOOK_TYPE must be 'slack' or 'webhook', got '$WEBHOOK_TYPE'" >&2; exit 1 ;;
 esac
+if { [ -n "$TG_TOKEN" ] && [ -z "$TG_CHAT" ]; } || { [ -z "$TG_TOKEN" ] && [ -n "$TG_CHAT" ]; }; then
+    echo "Set both GRAFANA_ALERT_TELEGRAM_BOT_TOKEN and GRAFANA_ALERT_TELEGRAM_CHAT_ID, or neither" >&2; exit 1
+fi
+if [ -n "$TG_CHAT" ] && ! [[ "$TG_CHAT" =~ ^-?[0-9]+$|^@[A-Za-z0-9_]{5,}$ ]]; then
+    echo "GRAFANA_ALERT_TELEGRAM_CHAT_ID must be a numeric chat ID or @channelname, got '$TG_CHAT'" >&2; exit 1
+fi
+# sib-alerts (the contact point SIB's rules notify) exists when either is set.
+ALERTS=""
+if [ -n "$WEBHOOK_URL" ] || [ -n "$TG_TOKEN" ]; then ALERTS=1; fi
+
 case "$MANAGE_POLICY" in
     true|false) ;;
     *) echo "GRAFANA_MANAGE_NOTIFICATION_POLICY must be 'true' or 'false', got '$MANAGE_POLICY'" >&2; exit 1 ;;
@@ -179,7 +194,7 @@ fi
 # GRAFANA_MANAGE_NOTIFICATION_POLICY=false SIB never owns the policy: no
 # policies, no resetPolicies, no contact point deletions.
 MANAGED=false
-if [ "$MANAGE_POLICY" = true ] && { [ -n "$WEBHOOK_URL" ] || [ -n "$HEARTBEAT_URL" ]; }; then MANAGED=true; fi
+if [ "$MANAGE_POLICY" = true ] && { [ -n "$ALERTS" ] || [ -n "$HEARTBEAT_URL" ]; }; then MANAGED=true; fi
 PREV_MANAGED=false
 if [ "$MANAGE_POLICY" = true ] && [ -f "$DIR/notifications.yml" ] && grep -q '^policies:' "$DIR/notifications.yml"; then PREV_MANAGED=true; fi
 
@@ -188,19 +203,33 @@ if [ "$MANAGE_POLICY" = true ] && [ -f "$DIR/notifications.yml" ] && grep -q '^p
     echo "apiVersion: 1"
 
     # --- contact points -------------------------------------------------------
-    if [ -n "$WEBHOOK_URL" ] || [ -n "$HEARTBEAT_URL" ]; then
+    if [ -n "$ALERTS" ] || [ -n "$HEARTBEAT_URL" ]; then
         echo ""
         echo "contactPoints:"
     fi
+    if [ -n "$ALERTS" ]; then
+        printf '  - orgId: 1\n    name: sib-alerts\n    receivers:\n'
+    fi
     if [ -n "$WEBHOOK_URL" ]; then
         cat <<EOF
-  - orgId: 1
-    name: sib-alerts
-    receivers:
       - uid: sib-alerts
         type: ${WEBHOOK_TYPE}
         settings:
           url: \$GRAFANA_ALERT_WEBHOOK_URL
+EOF
+    fi
+    if [ -n "$TG_TOKEN" ]; then
+        # The chat ID is written literally (it's validated above and useless
+        # without the token): Grafana re-types substituted values, so
+        # "$GRAFANA_ALERT_TELEGRAM_CHAT_ID" would turn -100... into a number
+        # and fail validation. Telegram bot tokens always contain ':' and stay
+        # strings, so the secret can still come from the environment.
+        cat <<EOF
+      - uid: sib-alerts-telegram
+        type: telegram
+        settings:
+          bottoken: \$GRAFANA_ALERT_TELEGRAM_BOT_TOKEN
+          chatid: "${TG_CHAT}"
 EOF
     fi
     if [ -n "$HEARTBEAT_URL" ]; then
@@ -235,7 +264,7 @@ EOF
         # Grafana's built-in default email receiver is used then (it sends
         # nothing without SMTP). Policies use its receiver name, not its
         # "email receiver" display name.
-        if [ -n "$WEBHOOK_URL" ]; then ROOT_RECEIVER="sib-alerts"; else ROOT_RECEIVER="grafana-default-email"; fi
+        if [ -n "$ALERTS" ]; then ROOT_RECEIVER="sib-alerts"; else ROOT_RECEIVER="grafana-default-email"; fi
         cat <<EOF
 
 policies:
@@ -260,7 +289,7 @@ EOF
         repeat_interval: 5m
 EOF
         fi
-        if [ -n "$WEBHOOK_URL" ]; then
+        if [ -n "$ALERTS" ]; then
             cat <<'EOF'
       - receiver: sib-alerts
         object_matchers: [['severity', '=', 'critical']]
@@ -288,10 +317,11 @@ EOF
     # do it when SIB owns (or owned) the policy that referenced it. Never in
     # unmanaged mode: your own routes may point at SIB's contact points.
     if { [ "$MANAGED" = true ] || [ "$PREV_MANAGED" = true ]; } &&
-       { [ -z "$WEBHOOK_URL" ] || [ -z "$HEARTBEAT_URL" ]; }; then
+       { [ -z "$WEBHOOK_URL" ] || [ -z "$TG_TOKEN" ] || [ -z "$HEARTBEAT_URL" ]; }; then
         echo ""
         echo "deleteContactPoints:"
         if [ -z "$WEBHOOK_URL" ]; then printf '  - orgId: 1\n    uid: sib-alerts\n'; fi
+        if [ -z "$TG_TOKEN" ]; then printf '  - orgId: 1\n    uid: sib-alerts-telegram\n'; fi
         if [ -z "$HEARTBEAT_URL" ]; then printf '  - orgId: 1\n    uid: sib-heartbeat\n'; fi
     fi
 } > "$DIR/notifications.yml"
