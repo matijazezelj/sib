@@ -92,6 +92,33 @@ on the same `sib-alerts` contact point, so every alert goes to both. Like the
 webhook URL, the bot token is read from Grafana's environment and never written
 to the provisioning files.
 
+**Grafana alerts and Falcosidekick events are two different streams.**
+Falcosidekick's Telegram output (`TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`, see
+`alerting/README.md`) sends every Falco event at or above
+`TELEGRAM_MINIMUM_PRIORITY`. Grafana sends the alerts above: bursts, a sensor
+gone silent, a full disk. Pointed at the same chat, one incident can produce
+both a stream of single detections and an aggregate alert. Decide that on
+purpose. A separate chat per stream is usually easier to read, or keep
+Falcosidekick at `TELEGRAM_MINIMUM_PRIORITY=critical`.
+
+**What leaves your network.** A Falcosidekick event carries Falco's full
+output: command lines, file paths, user names, container and image names, and
+IPs. SIB's AI-analysis obfuscation does not apply to Falcosidekick outputs.
+Telegram bot chats are not end-to-end encrypted, so that text is stored on
+Telegram's servers and readable by everyone in the chat. Grafana alerts carry
+less: the rule's summary, host name, Falco rule name and counts, not command
+lines. Choose who is in the chat accordingly.
+
+**Check delivery before relying on it.**
+
+- Grafana: Alerting → Contact points → `sib-alerts` → **Test**. This sends a
+  test notification through every integration on it. For a real alert with
+  recovery: stop Falco on a test host (`docker stop sib-falco`); after about
+  5 minutes **Falco not reporting** arrives. Start it again, and the resolved
+  message follows within a minute or two.
+- Falcosidekick: `make test-alert`. Falcosidekick sends its test event to
+  Telegram whatever `TELEGRAM_MINIMUM_PRIORITY` is set to.
+
 This provisions a `sib-alerts` contact point and a notification policy:
 
 | Severity | First notification | Repeated while firing |

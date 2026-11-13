@@ -43,6 +43,20 @@ yaml_quote() {
     printf '"%s"' "$value"
 }
 
+# Fail fast on a half-configured notification channel: skipping it with a
+# warning would leave someone believing security alerts reach them when they
+# don't. Checked before anything is written, so the old config stays in place.
+if [ -n "${TELEGRAM_TOKEN:-}${TELEGRAM_CHAT_ID:-}" ]; then
+    if [ -z "${TELEGRAM_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+        echo "Telegram: set both TELEGRAM_TOKEN and TELEGRAM_CHAT_ID, or neither." >&2
+        exit 1
+    fi
+    if ! [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$|^@[A-Za-z0-9_]{5,}$ ]]; then
+        echo "Telegram: TELEGRAM_CHAT_ID must be a numeric chat ID or @channelname, got '$TELEGRAM_CHAT_ID'." >&2
+        exit 1
+    fi
+fi
+
 # Generate config
 {
     echo "# Falcosidekick Configuration"
@@ -98,14 +112,12 @@ yaml_quote() {
         emit minimumpriority "${TEAMS_MINIMUM_PRIORITY:-}"
     fi
 
-    if [ -n "${TELEGRAM_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+    if [ -n "${TELEGRAM_TOKEN:-}" ]; then
         echo ""
         echo "telegram:"
         emit token "${TELEGRAM_TOKEN}"
         emit chatid "${TELEGRAM_CHAT_ID}"
         emit minimumpriority "${TELEGRAM_MINIMUM_PRIORITY:-}"
-    elif [ -n "${TELEGRAM_TOKEN:-}${TELEGRAM_CHAT_ID:-}" ]; then
-        echo "Telegram output skipped: set both TELEGRAM_TOKEN and TELEGRAM_CHAT_ID" >&2
     fi
 
     if [ -n "${ELASTICSEARCH_HOST_PORT:-}" ]; then

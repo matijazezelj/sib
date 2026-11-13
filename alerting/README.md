@@ -29,7 +29,7 @@ Falcosidekick is a simple daemon that takes Falco events and forwards them to di
 
 ## Configuration
 
-`config/config.yaml` is generated from `.env` on every install, so don't edit it. Set the common outputs (Slack, Discord, PagerDuty, Opsgenie, Teams, Telegram, Elasticsearch) in `.env`, and put any other output in `config/custom-outputs.yaml` (copy from `custom-outputs.yaml.example`); it is appended to the generated config.
+`config/config.yaml` is generated from `.env` on every install, so don't edit it. Set the common outputs (Slack, Discord, PagerDuty, Opsgenie, Teams, Telegram, Elasticsearch) in `.env`. A half-configured Telegram output (token without chat ID, or the other way round) fails `make install-alerting` instead of being skipped. Every event Falcosidekick forwards carries Falco's full output (command lines, paths, users); see [docs/grafana-alerts.md](../docs/grafana-alerts.md#notifications) before sending it to an external chat, and put any other output in `config/custom-outputs.yaml` (copy from `custom-outputs.yaml.example`); it is appended to the generated config.
 
 The snippets below show the Falcosidekick settings that end up in the generated config.
 
