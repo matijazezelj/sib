@@ -37,7 +37,7 @@ nav_order: 9
 
 ## Version-specific notes
 
-### Unreleased (after 0.6.0)
+### 0.7.0
 
 Re-run these once after `git pull`; each is safe to repeat.
 

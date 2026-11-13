@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.7.0] - 2026-11-13
+
 ### Added
 - Grafana alert rules in a **SIB** folder (pipeline health, Critical/Error bursts, event spikes, disk/memory, storage down), installed by `make install-grafana`; see `docs/grafana-alerts.md`
 - Falco liveness alert "Falco not reporting" for expected hosts (fleet inventory plus the SIB host); `sib_expected: false` opts a host out; `make refresh-alerts` regenerates the list and `make deploy-fleet` runs it
