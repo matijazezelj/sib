@@ -41,6 +41,7 @@ This automatically:
 - Configures Falcosidekick to send alerts to VictoriaLogs
 - Sets up Grafana with VictoriaLogs and VictoriaMetrics datasources
 - Provisions VictoriaLogs-compatible dashboards
+- Provisions the [Grafana alert rules](grafana-alerts.md) (SIB folder) and generates VictoriaMetrics' scrape config in `storage/config/generated/` (Falco, Falcosidekick, node, VictoriaMetrics/Logs, Grafana)
 
 ### Using the Grafana Stack Instead
 

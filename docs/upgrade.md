@@ -37,6 +37,60 @@ nav_order: 9
 
 ## Version-specific notes
 
+### Unreleased (after 0.6.0)
+
+Re-run these once after `git pull`; each is safe to repeat.
+
+**Storage: generated scrape config** (`make install-storage-vm` or `make install-storage-grafana`)
+
+The metrics scrape config the storage container mounts is now generated into
+`storage/config/generated/` from `storage/config/prometheus-vm.yml` /
+`prometheus.yml`. With `MTLS_ENABLED=true`, Falcosidekick is scraped over https
+with a dedicated `metrics-scraper` client certificate (kept in a Docker volume);
+before, *Falcosidekick down* fired with mTLS on. Re-run the target for your
+`STACK`, and again whenever you change `MTLS_ENABLED`.
+
+**Alerting: Falcosidekick config permissions** (`make install-alerting`)
+
+The generated config is now given the group from `SIDECAR_CONFIG_GID`, and the
+install fails (instead of silently running without outputs or mTLS) if
+Falcosidekick can't read it. Falcosidekick also gained a Telegram output
+(`TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_MINIMUM_PRIORITY`).
+
+**Grafana alerts** (`make install-grafana`)
+
+Alert rules now live in a **SIB** folder, with Telegram, an optional heartbeat
+and notification-policy control. Two rules are replaced: *No Falco events from
+any host* and *Host stopped sending Falco events* are deleted, and **Falco not
+reporting** takes over, based on Falco's `/metrics` instead of events. See
+[Grafana Alerts](grafana-alerts.md). New `.env` settings are optional
+(`GRAFANA_ALERT_WEBHOOK_URL`, `GRAFANA_ALERT_TELEGRAM_*`, `GRAFANA_HEARTBEAT_URL`,
+`GRAFANA_MANAGE_NOTIFICATION_POLICY`, `GRAFANA_METRICS_DS_UID`,
+`GRAFANA_LOGS_DS_UID`). If you manage Grafana's notification policy by hand, see
+the policy rules in [Grafana Alerts](grafana-alerts.md#notifications) first.
+
+**Fleet: Falco 0.44.1, metrics, rules.d** (`make deploy-fleet`, once)
+
+Falco is now 0.44.1 (`falco_version` in `ansible/inventory/group_vars/all.yml`
+and `FALCO_VERSION` in `.env`; keep them in sync). `make deploy-fleet` upgrades
+native installs to it, loads `/etc/falco/config.d` and the container plugin,
+mounts custom rules at `/etc/falco/rules.d` on Docker hosts, enables Falco's
+`/metrics` (on `127.0.0.1:8765`) and adds the collector's `falco` scrape job.
+Without it, **Falco not reporting** fires for every fleet host. The run also
+refreshes the expected-hosts list (`make refresh-alerts`). On the SIB server,
+`make install-detection` applies the same version and metrics settings. After
+this, `make update-rules` detects Docker or native hosts itself.
+
+**AI analysis** (`make install-analysis`)
+
+The Anthropic provider now starts each alert on Claude Haiku 5.5 and escalates
+to a higher effort, then Sonnet 5.5, only when the answer fails validation. A
+pinned `ANTHROPIC_MODEL` skips this. `*_FILE` secrets (`ANTHROPIC_API_KEY_FILE`,
+`OPENAI_API_KEY_FILE`, `ANALYSIS_API_TOKEN_FILE`) are read from `./secrets`,
+mounted at `/app/secrets`. See [AI Analysis](ai-analysis.md).
+
+---
+
 ### 0.5.0
 
 **New container images on GHCR**

@@ -243,6 +243,7 @@ make logs-grafana         # Tail Grafana logs
 make demo                 # Run comprehensive security demo (~30 events)
 make demo-quick           # Run quick demo (1s delay)
 make test-alert           # Generate a test security alert
+make refresh-alerts       # Regenerate Grafana alert rules (expected Falco hosts) and reload
 ./scripts/test-pipeline.sh  # Run full pipeline test
 
 # Threat Intel & Sigma
@@ -273,7 +274,7 @@ make restore              # Restore from a backup file
 - [ROADMAP.md](ROADMAP.md)
 - Kubernetes deployment: [sib-k8s](https://github.com/matijazezelj/sib-k8s)
 - VictoriaLogs backend: [docs/victorialogs.md](docs/victorialogs.md)
-- Grafana alert rules: [docs/grafana-alerts.md](docs/grafana-alerts.md)
+- Grafana alert rules (Falco liveness, Slack/webhook/Telegram, shared Grafana): [docs/grafana-alerts.md](docs/grafana-alerts.md)
 
 ## 📁 Project Structure
 
@@ -522,7 +523,7 @@ Browse past analyses from the API history page:
 
 | Provider | Privacy | Setup |
 |----------|---------|-------|
-| **Anthropic** (default) | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY` |
+| **Anthropic** (default) | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY`; starts on Haiku 5.5, escalates failed answers to Sonnet 5.5 |
 | OpenAI | ⚠️ Data sent to API (obfuscated) | Set `OPENAI_API_KEY` |
 | **Ollama** (fully local) | ✅ Data stays on-premises | `ollama pull qwen2.5:14b`, set `LLM_PROVIDER=ollama` |
 
@@ -707,8 +708,9 @@ make deploy-fleet LIMIT=webserver
 
 | Command | Description |
 |---------|-------------|
-| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
-| `make update-rules` | Push detection rules to fleet |
+| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts, then run `make refresh-alerts` |
+| `make update-rules` | Push detection rules to fleet (Docker or native, detected per host) |
+| `make fleet-certs` | Push mTLS certificates to fleet hosts without a full redeploy |
 | `make fleet-health` | Check health of all agents |
 | `make fleet-docker-check` | Check/install Docker on fleet hosts |
 | `make fleet-ping` | Test SSH connectivity |

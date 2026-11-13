@@ -226,6 +226,7 @@ echo "MTLS_ENABLED=true" >> .env
 # Reinstall with mTLS
 make install-alerting
 make install-detection
+make install-storage-vm   # or install-storage-grafana: scrapes Sidekick over https
 ```
 
 > **Tip:** For fresh installs, set `MTLS_ENABLED=true` and run `make generate-certs` **before** `make install`. See [Security Hardening](security-hardening.md) for the complete fresh install workflow.

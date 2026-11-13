@@ -196,6 +196,12 @@ make install-alerting
 docker compose -f alerting/compose.yaml restart
 ```
 
+`make install-alerting` fails if Falcosidekick can't read its config (`Error when reading config file`). It then runs with defaults: plain HTTP, no mTLS, no outputs. The file's group must match `SIDECAR_CONFIG_GID` in `.env`. The generator sets it, which only fails if you aren't a member of that group (it then warns): set `SIDECAR_CONFIG_GID` to a group you're in, usually your own (`id -g`). A half-configured Telegram output (`TELEGRAM_TOKEN` without `TELEGRAM_CHAT_ID`, or the reverse) also fails the install; see [Grafana Alerts](grafana-alerts.md#notifications).
+
+### "Falcosidekick down" Fires With mTLS On
+
+With `MTLS_ENABLED=true`, a plain `http://` scrape of Sidekick's `/metrics` is rejected. Re-run `make install-storage-vm` (or `install-storage-grafana`) to regenerate the scrape config with the `metrics-scraper` client certificate. See [Grafana Alerts](grafana-alerts.md#scraping-falcosidekick-over-mtls).
+
 ---
 
 ## Dashboard Issues
@@ -285,6 +291,19 @@ curl -s http://SIB_SERVER:9090/-/ready
    ```bash
    curl 'http://localhost:9428/select/logsql/query?query=hostname:*|stats+by(hostname)+count()&limit=10'
    ```
+
+---
+
+### "Falco not reporting" Fires for a Host
+
+The alert means no successful scrape of that host's Falco `/metrics` for 5 minutes. Check Falco and the collector (`make fleet-health`), and that `up{job="falco"}` has the host:
+
+```bash
+# VM stack; use port 9090 on the Grafana stack
+curl -s http://localhost:8428/api/v1/query --data-urlencode 'query=up{job="falco"}'
+```
+
+A host that was never redeployed since the alert was added has no `falco` scrape job: run `make deploy-fleet` once. A host retired on purpose, or one without Falco (LXC, collector-only), should be removed from the inventory or marked `sib_expected: false`, then `make refresh-alerts`. See [Falco liveness](grafana-alerts.md#falco-liveness).
 
 ---
 

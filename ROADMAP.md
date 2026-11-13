@@ -13,6 +13,9 @@ This is a living roadmap. Priorities may shift based on feedback and community c
 - Container images published to GHCR (`ghcr.io/matijazezelj/sib-analysis`, `sib-ansible`)
 - Upgrade notes and CHANGELOG
 - Rule packs for cloud and web server environments
+- Grafana alert rules (Falco liveness, pipeline health, spikes, resources) with Slack, webhook and Telegram notifications
+- Authenticated multi-host Falco sensors; Falcosidekick webhook and Telegram outputs
+- Claude alert analysis starting on Haiku 5.5, escalating failed answers
 - Kubernetes support via [sib-k8s](https://github.com/matijazezelj/sib-k8s) (Helm chart, EKS/GKE/AKS/webhook)
 
 ## 3–6 months

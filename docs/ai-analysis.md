@@ -115,7 +115,13 @@ analysis:
 Each alert starts on Claude Haiku 5.5 at `medium` effort. The answer is checked
 (valid JSON, MITRE technique ID, severity, summary, mitigations), and only
 alerts whose answer fails the check, is refused, or is cut off move up a tier.
-The CLI prints the tiers used and the estimated cost per alert.
+The CLI prints the tiers used and the estimated cost per alert; the same
+record (tiers tried, tokens, estimated cost) is in the `llm` field of each
+analysis result.
+
+To use one model for everything instead, set `ANTHROPIC_MODEL` (and optionally
+`ANTHROPIC_EFFORT`, default `medium`) in `.env`. That pins the model and skips
+the ladder.
 
 ---
 
