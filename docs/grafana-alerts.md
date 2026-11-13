@@ -216,8 +216,13 @@ containers: `../certs:/certs:ro`). Prefer a dedicated client certificate for
 the scraper over reusing `local`: `make generate-client-cert HOST=metrics-scraper`
 writes `certs/clients/metrics-scraper.{crt,key}`. The key is created `0600`, so
 make it readable by the scraper's user without making it world-readable
-(Prometheus' image runs as `nobody`, for example: `chown 65534`). Note that SIB's bundled `storage/config/prometheus*.yml` still
-scrape over plain HTTP, so with `MTLS_ENABLED=true` they need this change too.
+(Prometheus' image runs as `nobody`, for example: `chown 65534`). SIB's own storage stack does all of this automatically: with
+`MTLS_ENABLED=true`, `make install-storage-vm` / `install-storage-grafana`
+create the `metrics-scraper` certificate if needed, copy only `ca.crt` and that
+certificate and key into a per-stack Docker volume (`sib-scraper-tls-vm` or
+`sib-scraper-tls-grafana`, owned by the
+scraper's user, key `0400`; the CA key stays in `certs/`), and generate the
+scrape config with the block above.
 
 ## Tuning
 

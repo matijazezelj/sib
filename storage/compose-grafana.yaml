@@ -37,7 +37,10 @@ services:
       - '--web.enable-lifecycle'
       - '--web.enable-remote-write-receiver'
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Generated from config/prometheus.yml by make install-storage-grafana
+      - ./config/generated/prometheus-grafana.yml:/etc/prometheus/prometheus.yml:ro
+      # Client certificate for scraping Falcosidekick when MTLS_ENABLED=true (empty otherwise)
+      - sib-scraper-tls-grafana:/scraper-tls:ro
       - prometheus-data:/prometheus
     networks:
       - sib-network
@@ -55,3 +58,6 @@ networks:
 volumes:
   loki-data:
   prometheus-data:
+  # Created and filled by scripts/generate-scrape-config.sh
+  sib-scraper-tls-grafana:
+    external: true

@@ -139,7 +139,9 @@ bury real link transitions.
 
 ## Prometheus
 
-Prometheus collects metrics from Falcosidekick and other SIB components.
+Prometheus collects metrics from Falcosidekick and other SIB components. Its
+scrape config is generated from `config/prometheus.yml` the same way (see the
+VictoriaMetrics configuration below).
 
 ### Metrics Available
 
@@ -177,7 +179,14 @@ VictoriaMetrics is a high-performance Prometheus-compatible metrics storage.
 - Full PromQL compatibility
 
 ### Configuration
-Edit `config/prometheus-vm.yml` for scrape targets.
+Edit `config/prometheus-vm.yml` (VM stack) or `config/prometheus.yml` (Grafana
+stack) for scrape targets, then run `make install-storage-vm` /
+`make install-storage-grafana`. The containers mount
+`config/generated/prometheus-vm.yml` / `prometheus-grafana.yml`, which those targets generate from your file:
+with `MTLS_ENABLED=true` the Falcosidekick job becomes an https scrape with the
+`metrics-scraper` client certificate (see
+[docs/grafana-alerts.md](../docs/grafana-alerts.md#scraping-falcosidekick-over-mtls)).
+Keep the `# SIB_SIDEKICK_TLS` line in the falcosidekick job.
 
 ## Remote Collectors
 
