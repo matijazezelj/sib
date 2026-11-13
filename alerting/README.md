@@ -29,7 +29,7 @@ Falcosidekick is a simple daemon that takes Falco events and forwards them to di
 
 ## Configuration
 
-`config/config.yaml` is generated from `.env` on every install, so don't edit it. Set the common outputs (Slack, Discord, PagerDuty, Opsgenie, Teams, Elasticsearch) in `.env`, and put any other output in `config/custom-outputs.yaml` (copy from `custom-outputs.yaml.example`); it is appended to the generated config.
+`config/config.yaml` is generated from `.env` on every install, so don't edit it. Set the common outputs (Slack, Discord, PagerDuty, Opsgenie, Teams, Telegram, Elasticsearch) in `.env`, and put any other output in `config/custom-outputs.yaml` (copy from `custom-outputs.yaml.example`); it is appended to the generated config.
 
 The snippets below show the Falcosidekick settings that end up in the generated config.
 

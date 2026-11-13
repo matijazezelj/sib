@@ -79,7 +79,18 @@ GRAFANA_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
 # Or Grafana's generic JSON webhook to any URL
 GRAFANA_ALERT_WEBHOOK_URL=https://alerts.example.com/hook
 GRAFANA_ALERT_WEBHOOK_TYPE=webhook
+
+# Telegram, as well as or instead of the webhook
+GRAFANA_ALERT_TELEGRAM_BOT_TOKEN=123456789:replace-with-bot-token
+GRAFANA_ALERT_TELEGRAM_CHAT_ID=-1001234567890
 ```
+
+For Telegram, create a bot with [@BotFather](https://t.me/BotFather), add it to
+the group or channel, and use that chat's ID (groups and channels have negative
+IDs; a channel's `@name` works too). Webhook and Telegram are two integrations
+on the same `sib-alerts` contact point, so every alert goes to both. Like the
+webhook URL, the bot token is read from Grafana's environment and never written
+to the provisioning files.
 
 This provisions a `sib-alerts` contact point and a notification policy:
 

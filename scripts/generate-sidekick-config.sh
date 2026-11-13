@@ -98,6 +98,16 @@ yaml_quote() {
         emit minimumpriority "${TEAMS_MINIMUM_PRIORITY:-}"
     fi
 
+    if [ -n "${TELEGRAM_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+        echo ""
+        echo "telegram:"
+        emit token "${TELEGRAM_TOKEN}"
+        emit chatid "${TELEGRAM_CHAT_ID}"
+        emit minimumpriority "${TELEGRAM_MINIMUM_PRIORITY:-}"
+    elif [ -n "${TELEGRAM_TOKEN:-}${TELEGRAM_CHAT_ID:-}" ]; then
+        echo "Telegram output skipped: set both TELEGRAM_TOKEN and TELEGRAM_CHAT_ID" >&2
+    fi
+
     if [ -n "${ELASTICSEARCH_HOST_PORT:-}" ]; then
         echo ""
         echo "elasticsearch:"
@@ -148,7 +158,8 @@ chmod 640 "$OUTPUT"
 CONFIGURED=""
 for pair in "SLACK_WEBHOOK_URL:Slack" "DISCORD_WEBHOOK_URL:Discord" \
             "PAGERDUTY_ROUTING_KEY:PagerDuty" "OPSGENIE_API_KEY:Opsgenie" \
-            "TEAMS_WEBHOOK_URL:Teams" "ELASTICSEARCH_HOST_PORT:Elasticsearch" \
+            "TEAMS_WEBHOOK_URL:Teams" "TELEGRAM_CHAT_ID:Telegram" \
+            "ELASTICSEARCH_HOST_PORT:Elasticsearch" \
             "WEBHOOK_ADDRESS:Webhook"; do
     var="${pair%%:*}"
     label="${pair##*:}"
