@@ -1,3 +1,5 @@
+# Source for storage/config/generated/prometheus.yml, which the storage
+# containers mount. Edit this file, then run make install-storage-*.
 # ==============================================
 # Prometheus-compatible Configuration for VictoriaMetrics
 # ==============================================
@@ -35,6 +37,7 @@ scrape_configs:
 
   # Falcosidekick metrics
   - job_name: 'falcosidekick'
+    # SIB_SIDEKICK_TLS - becomes an https + client-certificate scrape when MTLS_ENABLED=true
     static_configs:
       - targets: ['sib-sidekick:2801']
         labels:

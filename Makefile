@@ -143,16 +143,30 @@ install-alerting: network ## Install Falcosidekick alerting stack
 	@# config.yaml is a bind mount, so 'up -d' does not notice content changes.
 	@# Falcosidekick reads it once at startup — restart or new outputs never load.
 	@cd alerting && $(DOCKER_COMPOSE) restart sidekick >/dev/null 2>&1 || true
+	@# An unreadable config makes Falcosidekick fall back to defaults (plain HTTP,
+	@# no mTLS, no outputs) without exiting. Treat that as a failed install.
+	@sleep 2; if docker logs --since 10s sib-sidekick 2>&1 | grep -q "Error when reading config file"; then \
+		echo "$(RED)✗ Falcosidekick could not read alerting/config/config.yaml and is running without it$(RESET)"; \
+		echo "$(YELLOW)  (no mTLS, no outputs). Check its group matches SIDECAR_CONFIG_GID in .env.$(RESET)"; \
+		docker logs --since 10s sib-sidekick 2>&1 | grep "Error when reading config file" | tail -1; \
+		exit 1; \
+	fi
 	@echo "$(GREEN)✓ Alerting stack installed$(RESET)"
 
 install-storage-grafana: network ## Install Loki + Prometheus storage stack (Grafana ecosystem)
 	@echo "$(CYAN)💾 Installing Grafana Storage Stack (Loki + Prometheus)...$(RESET)"
+	@set -a; . ./.env 2>/dev/null || true; set +a; STACK=grafana ./scripts/generate-scrape-config.sh
 	@cd storage && $(DOCKER_COMPOSE) -f compose-grafana.yaml up -d
+	@# The scrape config is bind-mounted: restart so a changed one is loaded.
+	@docker restart sib-prometheus >/dev/null
 	@echo "$(GREEN)✓ Grafana storage stack installed$(RESET)"
 
 install-storage-vm: network ## Install VictoriaLogs + VictoriaMetrics + node_exporter (VM ecosystem)
 	@echo "$(CYAN)💾 Installing VictoriaMetrics Storage Stack (VictoriaLogs + VictoriaMetrics + node_exporter)...$(RESET)"
+	@set -a; . ./.env 2>/dev/null || true; set +a; STACK=vm ./scripts/generate-scrape-config.sh
 	@cd storage && $(DOCKER_COMPOSE) -f compose-vm.yaml up -d
+	@# The scrape config is bind-mounted: restart so a changed one is loaded.
+	@docker restart sib-victoriametrics >/dev/null
 	@echo "$(GREEN)✓ VictoriaMetrics storage stack installed$(RESET)"
 
 install-grafana: network ## Install Grafana dashboard

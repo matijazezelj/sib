@@ -75,3 +75,6 @@ grafana/provisioning/dashboards/loki/events-explorer.json
 
 # Ansible runtime state
 .ansible/
+
+# Generated scrape config (scripts/generate-scrape-config.sh)
+storage/config/generated/

@@ -144,6 +144,12 @@ yaml_quote() {
 # The image runs as uid 1234. Keep the route secret unreadable to "other",
 # while allowing the configured supplementary host group to read the bind mount.
 chmod 640 "$OUTPUT"
+# The file gets the caller's primary group, which isn't SIDECAR_CONFIG_GID when
+# make runs from e.g. a 'newgrp docker' shell. Falcosidekick then can't read it
+# and silently falls back to defaults: plain HTTP, no mTLS, no outputs.
+if [ -n "${SIDECAR_CONFIG_GID:-}" ] && ! chgrp "$SIDECAR_CONFIG_GID" "$OUTPUT" 2>/dev/null; then
+    echo "Warning: could not give $OUTPUT group $SIDECAR_CONFIG_GID (SIDECAR_CONFIG_GID); Falcosidekick may not be able to read it." >&2
+fi
 
 CONFIGURED=""
 for pair in "SLACK_WEBHOOK_URL:Slack" "DISCORD_WEBHOOK_URL:Discord" \
