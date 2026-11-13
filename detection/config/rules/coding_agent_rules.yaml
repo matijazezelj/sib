@@ -108,10 +108,13 @@
   desc: >
     A process started by a coding agent wrote a git hook, .mcp.json or agent
     settings. HIB reverts unapproved changes (protected.reverted); this shows
-    the attempt itself, including outside HIB.
+    the attempt itself, including outside HIB. git init/clone writes inert
+    *.sample hooks from its templates; those are ignored, a real hook written
+    by git (e.g. from a --template dir) is not.
   condition: >
     open_write and coding_agent_descendant and not coding_agent_proc
     and repo_or_agent_hook_file
+    and not fd.name endswith ".sample"
   output: >
     Coding agent subprocess wrote a hook or agent config (file=%fd.name process=%proc.name
     cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)

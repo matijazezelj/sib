@@ -18,7 +18,7 @@ This page is the contract both sides implement against. Schema version: **1**.
   20): rename to `events.jsonl.1` (shift older up to `[events] keep`, default
   5) and start a new file. Append-only, one JSON object per line, `\n`
   terminated, flushed per event.
-- `[events] enabled` (default `true`). Directory mode 0700, files 0600 (the
+- `[events] enabled` (default `true`); `[events] heartbeat_sec` (default 300) for `daemon.alive`. Directory mode 0700, files 0600 (the
   collector reads as root inside its container).
 
 ## Common fields (every event)
@@ -56,7 +56,8 @@ characters (`…` appended). Paths inside a workspace are logged relative to
 | `event` | `severity` | When | Extra fields |
 |---------|-----------|------|--------------|
 | `daemon.start` | info | daemon listening | `bind`, `port`, `sandbox` (`available` / `unavailable`) |
-| `daemon.stop` | info | clean shutdown | |
+| `daemon.stop` | info | clean shutdown (`/hib/shutdown`, SIGTERM/SIGINT); pending `auth.failure` counts are written first | `signal`? |
+| `daemon.alive` | info | heartbeat every `[events] heartbeat_sec` (default 300, `0` = off) while the daemon runs | `uptime_sec` |
 | `auth.failure` | warning | request rejected: bad/missing token, Host or Origin mismatch | `reason` (`token`, `host`, `origin`), `path`, `remote` (peer address). At most one line per `reason`+`remote` per 60 s, with `count` |
 | `guard.decision` | info, or warning when `action` is `rejected`/`timeout` | every guard decision | `action` (`redacted`, `approved`, `rejected`, `timeout`), `decided_by` (`policy`, `user`), `findings` (object: category → count), `reasons` (string array) |
 | `approval.pending` | info | a request waits for human approval | `kind` (`guard`, `tool`, `network`), `timeout_sec` |

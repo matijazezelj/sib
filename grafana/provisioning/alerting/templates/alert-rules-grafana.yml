@@ -563,8 +563,8 @@ groups:
     for: 0s
     annotations:
       summary: Repeated authentication failures against HIB on {{ $labels.hostname }}
-      description: '{{ $values.A }} failed requests in 15 minutes (bad token, Host or Origin). Something local
-        is trying to use HIB''s API without its token.'
+      description: '{{ $values.A }} failed requests in 15 minutes (bad token, Host or Origin). Something local is
+        trying to use HIB''s API without its token.'
     labels:
       severity: warning
       source: sib
@@ -579,8 +579,8 @@ groups:
         to: 0
       datasourceUid: loki
       model:
-        expr: sum by (hostname) (count_over_time({source="hib", event=~"tool.permission|data.block"}
-          | json | decision!="allow" and decision!="always" [15m]))
+        expr: sum by (hostname) (count_over_time({source="hib", event=~"tool.permission|data.block"} | json | decision!="allow"
+          and decision!="always" [15m]))
         queryType: instant
         datasource:
           type: loki
@@ -652,6 +652,52 @@ groups:
       summary: HIB on {{ $labels.hostname }} is running without its sandbox
       description: HIB's sandbox probe failed, so agents run without the filesystem and network sandbox and auto
         mode is off.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
+  - uid: sib-hib-not-running
+    title: HIB daemon not running
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: count by (hostname) (count_over_time({source="hib", event="daemon.alive"}[24h])) unless on(hostname)
+          count by (hostname) (count_over_time({source="hib", event="daemon.alive"}[15m])) unless on(hostname) count
+          by (hostname) (count_over_time({source="hib", event="daemon.stop"}[24h]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: HIB on {{ $labels.hostname }} stopped sending heartbeats
+      description: 'HIB sent daemon.alive heartbeats in the last 24 hours but none for 15 minutes, and it never
+        logged a clean daemon.stop: it crashed, was killed, or its events stopped reaching SIB. Agents may now run
+        without HIB''s guard.'
     labels:
       severity: warning
       source: sib
