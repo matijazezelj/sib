@@ -29,14 +29,14 @@ This page is the contract both sides implement against. Schema version: **1**.
 | `schema` | int | `1` |
 | `source` | string | always `"hib"` |
 | `host` | string | machine hostname |
-| `hib_version` | string | |
+| `hib_version` | string | the `version` in hib's package.json (`0.1.0` since hib PR #10); `0.0.0+<git sha>` only if package.json has none |
 | `event` | string | one of the types below |
 | `severity` | string | `info`, `warning` or `critical` (fixed per event type, see below) |
 | `mode` | string | `router`, `workspace` or `daemon` |
 | `session_id` | string? | workspace/agent session, when there is one |
 | `run_id` | string? | router/engine run, when there is one |
-| `workspace` | string? | workspace root path (absolute) |
-| `account` | string? | `<provider>@<account>` |
+| `workspace` | string? | workspace root path (absolute); with hib's `[events] workspace = "name"` only its last folder, with `"hash"` a 16-hex keyed hash (stable per machine) |
+| `account` | string? | `<provider>@<account>`; with `[events] account = "hash"` the account part is a 16-hex keyed hash |
 | `model` | string? | |
 | `route` | string? | |
 
@@ -49,7 +49,10 @@ vault values or placeholders' originals. Any field below that can carry
 user-controlled text (`command`, `url`, `reasons`) is passed through HIB's
 redactor at `minimal` level or stricter before logging and truncated to 300
 characters (`…` appended). Paths inside a workspace are logged relative to
-`workspace`.
+`workspace`. hib can coarsen further (`[events]` settings, all off by default):
+`net_host = "domain"` logs `net_host` as its registrable domain and `url` as
+`scheme://domain`; `command = "program"` logs only the program's name;
+`remote = false` leaves `remote` out of `auth.failure`.
 
 ## Event types
 

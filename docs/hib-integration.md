@@ -136,6 +136,23 @@ they touch. Treat the HIB stream in VictoriaLogs/Loki like the rest of SIB's
 security data: restrict who can query it and keep the retention short for
 sensitive workloads.
 
+HIB can coarsen that metadata before it leaves the machine (`[events]` in
+HIB's `config.toml`, all off by default; see the
+[event log spec](hib-events-spec.md)):
+
+```toml
+[events]
+workspace = "hash"    # or "name" (last folder only); default "path"
+account = "hash"      # claude@<hash>; default "name"
+net_host = "domain"   # registrable domain only, url cut to scheme://domain
+command = "program"   # program name only, e.g. "curl"
+remote = false        # leave remote out of auth.failure
+```
+
+Hashes are a keyed HMAC, the same for the same value on one machine, so
+grouping and correlation still work. None of SIB's alerts depend on these
+fields, so any combination is safe to turn on.
+
 ## What to look at when one fires
 
 - **protected.reverted:** the event's `changes` list shows what the agent tried
