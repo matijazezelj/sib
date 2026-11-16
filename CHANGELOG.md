@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md)
+
+### Fixed
+- Alloy shipped no HIB events on a host with `alloy_collect_logs: false`: the HIB block and the Loki writer sat inside the host-logs section (found by `make e2e`)
+
 ---
 
 ## [0.8.0] - 2026-11-16

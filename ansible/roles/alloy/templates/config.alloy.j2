@@ -6,9 +6,10 @@
 // LOGGING - Ship logs to central Loki
 // ============================================================================
 
-{% if alloy_collect_logs %}
+{# The Loki writer is needed for host logs and for HIB's events, either alone. #}
+{% if alloy_collect_logs or (hib_events_dir | default('')) %}
 // Journal logs (systemd)
-{% if alloy_collect_journal %}
+{% if alloy_collect_logs and alloy_collect_journal %}
 loki.source.journal "system" {
   forward_to = [loki.write.sib.receiver]
   labels = {
@@ -26,7 +27,7 @@ loki.source.journal "system" {
 {% endif %}
 
 // Docker container logs
-{% if alloy_collect_docker_logs %}
+{% if alloy_collect_logs and alloy_collect_docker_logs %}
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }

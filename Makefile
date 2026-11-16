@@ -666,6 +666,9 @@ demo: ## Run comprehensive security demo (generates ~30 events)
 demo-quick: ## Run quick security demo (1s delay between events)
 	@./scripts/demo.sh --quick
 
+e2e: ## End-to-end test: HIB events -> collector -> storage -> Grafana alerts (STACK=vm|grafana)
+	@STACK=$${STACK:-vm} ./scripts/e2e/run.sh
+
 # Uses the image's own falco.yaml; falco_rules.yaml goes first because the other
 # packs use its macros. Fails if any file doesn't load.
 test-rules: ## Validate Falco rules syntax (all packs, loaded together)
@@ -938,7 +941,7 @@ update: ## Pull latest images and restart all stacks
 	@echo ""
 	@echo "$(GREEN)✓ All stacks updated$(RESET)"
 
-.PHONY: help network install install-detection install-alerting install-storage-grafana install-storage-vm install-grafana install-analysis refresh-alerts \
+.PHONY: help network install install-detection e2e install-alerting install-storage-grafana install-storage-vm install-grafana install-analysis refresh-alerts \
 	start start-detection start-alerting start-storage-grafana start-storage-vm start-grafana start-analysis \
 	stop stop-detection stop-alerting stop-storage-grafana stop-storage-vm stop-grafana stop-analysis \
         restart restart-detection restart-alerting restart-storage-grafana restart-storage-vm restart-grafana restart-analysis \

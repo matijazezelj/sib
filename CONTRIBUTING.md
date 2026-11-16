@@ -59,7 +59,7 @@ sib/
 ### Adding Falco Rules
 
 1. Add rules to `detection/config/rules/custom_rules.yaml`
-2. Test with: `make test-rules`
+2. Test with: `make test-rules` (and `make e2e` for changes to collectors or HIB alert rules)
 3. Generate test alerts: `make demo`
 
 ### Improving Dashboards
