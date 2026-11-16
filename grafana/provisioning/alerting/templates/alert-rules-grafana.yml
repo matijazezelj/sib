@@ -656,6 +656,51 @@ groups:
       severity: warning
       source: sib
     isPaused: false
+  - uid: sib-hib-events-key-refused
+    title: HIB event hash key refused
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: loki
+      model:
+        expr: sum by (hostname) (count_over_time({source="hib", event="events.key_refused"}[24h]))
+        queryType: instant
+        datasource:
+          type: loki
+          uid: loki
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: HIB on {{ $labels.hostname }} refuses its event hash key
+      description: HIB's events.key (~/.hib/events.key) is unusable (wrong owner, permissions, a symlink or bad
+        content), so HIB drops every session, tool, guard and data.block event until the key is fixed and the
+        daemon restarted. Heartbeats still arrive. The event's reason field says what is wrong. HIB reports it once
+        per daemon run, so the alert stays up for 24 hours.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
   - uid: sib-hib-not-running
     title: HIB daemon not running
     condition: C

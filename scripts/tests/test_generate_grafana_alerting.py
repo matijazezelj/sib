@@ -260,3 +260,12 @@ def test_unmanaged_telegram_never_owns_policy(sib):
 ])
 def test_incomplete_or_invalid_telegram_is_rejected(sib, env):
     assert run(sib, check=False, **env).returncode != 0
+
+
+def test_both_stacks_define_the_same_rules(sib):
+    uids = {}
+    for stack in ("vm", "grafana"):
+        run(sib, STACK=stack)
+        uids[stack] = sorted(r["uid"] for r in all_rules(sib))
+    assert uids["vm"] == uids["grafana"]
+    assert "sib-hib-events-key-refused" in uids["vm"]

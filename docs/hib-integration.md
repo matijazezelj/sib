@@ -114,6 +114,7 @@ and metrics; HIB's own `host` field is kept as `hib_host`.
 | HIB authentication failures | more than 5 failed requests in 15 minutes (sum of the events' `count`; HIB aggregates repeats within 60 s into one line) | warning |
 | HIB agent denials burst | more than 5 denied tool calls or blocked data reads in 15 minutes (a denied network request is a denied tool call too; `sandbox.network` isn't counted again) | warning |
 | HIB sandbox unavailable | `sandbox.unavailable` in the last hour | warning |
+| HIB event hash key refused | `events.key_refused` in the last 24 hours: HIB drops session, tool, guard and data events until the key is fixed and HIB restarted (it reports this once per run, hence the long window) | warning |
 | HIB daemon not running | heartbeats (`daemon.alive`, every 5 min) in the last 24 hours, none for 15 minutes, and no clean `daemon.stop` in those 24 hours: a crash, a kill, or events no longer reaching SIB | warning |
 
 They stay quiet on hosts without HIB. `guard.decision` is written for every
@@ -159,10 +160,11 @@ HIB drops an event rather than log a field whole when its hash key
 (`~/.hib/events.key`) is unusable: wrong owner or permissions, a symlink, or
 bad content. Only events that carry `workspace` or `account` are dropped
 (`session.*`, `tool.*`, `guard.decision`, `data.block`); heartbeats and
-`auth.failure` keep arriving, so *HIB daemon not running* doesn't notice, and
-the only other trace is an error on the daemon's stderr. After turning hashing
-on, run an agent session and check that its events arrive
-(`source:hib hostname:<host> event:session.start` in the Events Explorer).
+`auth.failure` keep arriving, so *HIB daemon not running* doesn't notice. HIB
+reports it with one `events.key_refused` event per daemon run (its `reason`
+says what is wrong), which raises *HIB event hash key refused*. Fix the key
+(`chmod 600`, owned by the user, a regular file of 64 hex characters), then
+restart HIB.
 
 ## What to look at when one fires
 
