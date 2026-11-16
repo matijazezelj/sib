@@ -49,7 +49,10 @@ rules see where the agent's *children* write (a shell, `sed -i`, `mv`, `ln`,
 `git`) but not where the CLI itself writes: a hook or `~/.bashrc` written by
 the Write tool doesn't alert. (Its reads use real paths and are covered.) When
 the agent runs under HIB, HIB's `protected.reverted` event covers the CLI
-planting git hooks or agent config; shell startup files written by the CLI
+changing the workspace's git hooks and git config, its `.claude/`, `.codex/`
+and `.hib/` folders and `.mcp.json` (HIB snapshots them around each agent turn
+and puts back unapproved changes). Nothing outside the workspace is covered:
+shell startup files and `~/.claude`/`~/.codex` settings written by the CLI
 itself remain a gap.
 
 The exemptions for a store's own tool match on the process name, so a binary

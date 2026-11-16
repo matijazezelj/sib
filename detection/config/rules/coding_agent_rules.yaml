@@ -22,7 +22,8 @@
 # Claude Code's own Write/Edit tool writes through /proc/self/fd/<dirfd>/name
 # and renames into place there, a path Falco doesn't resolve, so where the CLI
 # itself writes is invisible to these rules (what its children write is not);
-# HIB's protected.reverted event covers the CLI planting hooks or agent config.
+# HIB's protected.reverted event covers the CLI changing the workspace's git
+# hooks/config or its .claude/, .codex/, .mcp.json; nothing in the home folder.
 # The own-tool exemptions match on process name, so a binary renamed to e.g.
 # "gh" is exempt too.
 # See docs/hib-integration.md.
