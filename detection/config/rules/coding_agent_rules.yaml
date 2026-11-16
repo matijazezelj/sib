@@ -10,9 +10,23 @@
 #
 # The agents' own CLIs legitimately read their config and credentials; what these
 # rules flag is a *child* of an agent (a shell, a script it ran) touching
-# credentials, or anything an agent runs writing persistence hooks. HIB's sandbox
-# denies most of this, so a hit usually means a sandbox bypass or an unsandboxed
-# agent. See docs/hib-integration.md.
+# credentials, a credential store read by something other than its own tool, or
+# an agent (the CLI itself included) writing persistence or git hooks, directly
+# or by renaming or linking a file into place. HIB's sandbox denies most of this,
+# so a hit usually means a sandbox bypass or an unsandboxed agent.
+#
+# Limits: agents are recognised by process name and executable path (claude,
+# codex), so an npm install that runs Claude Code under `node` isn't covered,
+# and a process that detaches from the agent (setsid, nohup, reparented to init)
+# or sits more than 8 levels below it is no longer counted as agent activity.
+# Claude Code's own Write/Edit tool writes through /proc/self/fd/<dirfd>/name
+# and renames into place there, a path Falco doesn't resolve, so where the CLI
+# itself writes is invisible to these rules (what its children write is not);
+# HIB's protected.reverted event covers the CLI changing the workspace's git
+# hooks/config or its .claude/, .codex/, .mcp.json; nothing in the home folder.
+# The own-tool exemptions match on process name, so a binary renamed to e.g.
+# "gh" is exempt too.
+# See docs/hib-integration.md.
 # =============================================================================
 
 - required_engine_version: 0.31.0
@@ -20,12 +34,29 @@
 - list: coding_agent_binaries
   items: [claude, codex]
 
-# Processes an agent legitimately runs that touch ~/.ssh (git over ssh).
+# Each credential store and the tools that legitimately read it. Process names
+# are cut to 15 characters by the kernel: git-remote-https is "git-remote-http",
+# git-credential-store "git-credential-", docker-credential-* "docker-credenti".
 - list: coding_agent_ssh_clients
-  items: [ssh, git, git-remote-http, git-remote-https, scp, ssh-add, ssh-keygen]
+  items: [ssh, scp, sftp, ssh-add, ssh-keygen, git, git-remote-http]
+- list: coding_agent_git_credential_tools
+  items: [git, git-credential-, git-remote-http, gh]
+- list: coding_agent_gpg_tools
+  items: [gpg, gpg2, gpg-agent, gpgsm, gpgconf, keyboxd, scdaemon]
+- list: coding_agent_docker_tools
+  items: [docker, docker-credenti, docker-compose, docker-buildx, podman]
+- list: coding_agent_kube_tools
+  items: [kubectl, helm, k9s, kubelogin, kubectx, kubens, kustomize, minikube, kind]
+- list: coding_agent_postgres_tools
+  items: [psql, pg_dump, pg_dumpall, pg_restore]
 
+# The CLI itself. Its process name alone isn't enough: Claude Code does part of
+# its file I/O on worker threads that Falco reports as "Bun Pool N", so the
+# executable path is checked as well.
 - macro: coding_agent_proc
-  condition: proc.name in (coding_agent_binaries)
+  condition: >
+    (proc.name in (coding_agent_binaries)
+     or proc.exepath endswith "/claude" or proc.exepath endswith "/codex")
 
 # Any ancestor up to 8 levels is a coding agent CLI.
 - macro: coding_agent_descendant
@@ -38,6 +69,15 @@
 - macro: coding_agent_activity
   condition: (coding_agent_proc or coding_agent_descendant)
 
+# A file put into place by rename (mv, sed -i, editors' atomic saves): the new
+# name is fs.path.target. A hard or symbolic link: the new name is
+# fs.path.source (fs.path.target is what it points to).
+- macro: coding_agent_rename
+  condition: evt.type in (rename, renameat, renameat2) and evt.res = SUCCESS
+
+- macro: coding_agent_link
+  condition: evt.type in (link, linkat, symlink, symlinkat) and evt.res = SUCCESS
+
 - macro: user_credential_store
   condition: >
     (fd.name contains "/.ssh/" or fd.name contains "/.aws/" or fd.name contains "/.gnupg/"
@@ -45,36 +85,115 @@
      or fd.name endswith "/.netrc" or fd.name endswith "/.git-credentials"
      or fd.name endswith "/.docker/config.json" or fd.name endswith "/.pgpass")
 
+# The store is read by its own tool (an agent running gh, git push, docker,
+# kubectl, a signed commit): ordinary work, not an alert.
+- macro: credential_store_read_by_own_tool
+  condition: >
+    ((proc.name in (coding_agent_ssh_clients) and fd.name contains "/.ssh/")
+     or (proc.name = gh and fd.name contains "/.config/gh/")
+     or (proc.name in (coding_agent_git_credential_tools)
+         and (fd.name endswith "/.git-credentials" or fd.name endswith "/.netrc"))
+     or (proc.name in (coding_agent_gpg_tools) and fd.name contains "/.gnupg/")
+     or (proc.name in (coding_agent_docker_tools) and fd.name endswith "/.docker/config.json")
+     or (proc.name in (coding_agent_kube_tools) and fd.name contains "/.kube/")
+     or (proc.name = aws and fd.name contains "/.aws/")
+     or (proc.name in (coding_agent_postgres_tools) and fd.name endswith "/.pgpass"))
+
 - macro: agent_credential_file
   condition: >
     (fd.name endswith "/.claude/.credentials.json" or fd.name endswith "/.codex/auth.json"
      or fd.name endswith "/.hib/token" or fd.name endswith "/.hib/vault.key")
 
+# The path macros below exist three times: on fd.name for writes through
+# open(), on fs.path.target for renames, on fs.path.source for links. Keep them
+# in step (scripts/test-coding-agent-rules.sh has a case for each).
 - macro: shell_or_login_persistence_file
   condition: >
-    (fd.name endswith "/.bashrc" or fd.name endswith "/.bash_profile" or fd.name endswith "/.profile"
-     or fd.name endswith "/.zshrc" or fd.name endswith "/.zprofile"
+    (fd.name endswith "/.bashrc" or fd.name endswith "/.bash_profile" or fd.name endswith "/.bash_login"
+     or fd.name endswith "/.bash_logout" or fd.name endswith "/.profile"
+     or fd.name endswith "/.zshrc" or fd.name endswith "/.zshenv" or fd.name endswith "/.zprofile"
+     or fd.name endswith "/.zlogin" or fd.name endswith "/.zlogout"
+     or fd.name endswith "/.config/fish/config.fish" or fd.name contains "/.config/fish/conf.d/"
+     or fd.name endswith "/.pam_environment" or fd.name contains "/.config/environment.d/"
+     or fd.name = /etc/profile or fd.name startswith /etc/profile.d/ or fd.name = /etc/environment
+     or fd.name = /etc/bash.bashrc or fd.name startswith /etc/zsh/
      or fd.name endswith "/.ssh/authorized_keys" or fd.name endswith "/.ssh/rc"
      or fd.name startswith "/etc/cron" or fd.name startswith "/var/spool/cron"
+     or fd.name startswith /etc/systemd/system/
      or fd.name contains "/.config/systemd/user/" or fd.name contains "/.config/autostart/")
 
-- macro: repo_or_agent_hook_file
+- macro: shell_or_login_persistence_target
   condition: >
-    (fd.name contains "/.git/hooks/" or fd.name endswith "/.mcp.json"
-     or fd.name contains "/.claude/settings" or fd.name endswith "/.codex/config.toml")
+    (fs.path.target endswith "/.bashrc" or fs.path.target endswith "/.bash_profile" or fs.path.target endswith "/.bash_login"
+     or fs.path.target endswith "/.bash_logout" or fs.path.target endswith "/.profile"
+     or fs.path.target endswith "/.zshrc" or fs.path.target endswith "/.zshenv" or fs.path.target endswith "/.zprofile"
+     or fs.path.target endswith "/.zlogin" or fs.path.target endswith "/.zlogout"
+     or fs.path.target endswith "/.config/fish/config.fish" or fs.path.target contains "/.config/fish/conf.d/"
+     or fs.path.target endswith "/.pam_environment" or fs.path.target contains "/.config/environment.d/"
+     or fs.path.target = /etc/profile or fs.path.target startswith /etc/profile.d/ or fs.path.target = /etc/environment
+     or fs.path.target = /etc/bash.bashrc or fs.path.target startswith /etc/zsh/
+     or fs.path.target endswith "/.ssh/authorized_keys" or fs.path.target endswith "/.ssh/rc"
+     or fs.path.target startswith "/etc/cron" or fs.path.target startswith "/var/spool/cron"
+     or fs.path.target startswith /etc/systemd/system/
+     or fs.path.target contains "/.config/systemd/user/" or fs.path.target contains "/.config/autostart/")
+
+- macro: shell_or_login_persistence_source
+  condition: >
+    (fs.path.source endswith "/.bashrc" or fs.path.source endswith "/.bash_profile" or fs.path.source endswith "/.bash_login"
+     or fs.path.source endswith "/.bash_logout" or fs.path.source endswith "/.profile"
+     or fs.path.source endswith "/.zshrc" or fs.path.source endswith "/.zshenv" or fs.path.source endswith "/.zprofile"
+     or fs.path.source endswith "/.zlogin" or fs.path.source endswith "/.zlogout"
+     or fs.path.source endswith "/.config/fish/config.fish" or fs.path.source contains "/.config/fish/conf.d/"
+     or fs.path.source endswith "/.pam_environment" or fs.path.source contains "/.config/environment.d/"
+     or fs.path.source = /etc/profile or fs.path.source startswith /etc/profile.d/ or fs.path.source = /etc/environment
+     or fs.path.source = /etc/bash.bashrc or fs.path.source startswith /etc/zsh/
+     or fs.path.source endswith "/.ssh/authorized_keys" or fs.path.source endswith "/.ssh/rc"
+     or fs.path.source startswith "/etc/cron" or fs.path.source startswith "/var/spool/cron"
+     or fs.path.source startswith /etc/systemd/system/
+     or fs.path.source contains "/.config/systemd/user/" or fs.path.source contains "/.config/autostart/")
+
+# git init/clone copies inert *.sample hooks from its templates; those don't run.
+- macro: git_hook_file
+  condition: (fd.name contains "/.git/hooks/" and not fd.name endswith ".sample")
+
+- macro: git_hook_target
+  condition: (fs.path.target contains "/.git/hooks/" and not fs.path.target endswith ".sample")
+
+- macro: git_hook_source
+  condition: (fs.path.source contains "/.git/hooks/" and not fs.path.source endswith ".sample")
+
+- macro: agent_config_file
+  condition: >
+    (fd.name endswith "/.mcp.json" or fd.name contains "/.claude/settings"
+     or fd.name endswith "/.codex/config.toml")
+
+- macro: agent_config_target
+  condition: >
+    (fs.path.target endswith "/.mcp.json" or fs.path.target contains "/.claude/settings"
+     or fs.path.target endswith "/.codex/config.toml")
+
+- macro: agent_config_source
+  condition: >
+    (fs.path.source endswith "/.mcp.json" or fs.path.source contains "/.claude/settings"
+     or fs.path.source endswith "/.codex/config.toml")
+
+# Conditions test the event type and path first and agent ancestry last: the
+# ancestry check walks up to 8 parents, so it should only run for the few
+# events that already match a path.
 
 - rule: Coding Agent Read Credential Store
   desc: >
     A coding agent or a process it started read a user credential store (SSH
-    keys, cloud, GitHub, kube or registry credentials). HIB denies these paths
-    to agents; a hit means an unsandboxed agent or a bypass.
+    keys, cloud, GitHub, kube or registry credentials) with something other
+    than that store's own tool (e.g. cat, a script, the agent CLI). HIB denies
+    these paths to agents; a hit means an unsandboxed agent or a bypass.
   condition: >
-    open_read and coding_agent_activity and user_credential_store
-    and not (proc.name in (coding_agent_ssh_clients) and fd.name contains "/.ssh/")
+    open_read and user_credential_store and coding_agent_activity
+    and not credential_store_read_by_own_tool
   output: >
     Coding agent read a credential store (file=%fd.name process=%proc.name
     cmdline=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2]>%proc.aname[3]
-    user=%user.name container=%container.name)
+    exe=%proc.exepath user=%user.name container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_credential_access, T1552.001]
 
@@ -84,8 +203,8 @@
     agent's or HIB's own credentials. The CLIs read these legitimately; their
     children never need to.
   condition: >
-    open_read and coding_agent_descendant and not coding_agent_proc
-    and agent_credential_file
+    open_read and agent_credential_file and coding_agent_descendant
+    and not coding_agent_proc
   output: >
     Coding agent subprocess read agent credentials (file=%fd.name process=%proc.name
     cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
@@ -95,41 +214,56 @@
 - rule: Coding Agent Write Shell or Login Persistence
   desc: >
     A coding agent or a process it started wrote a shell startup file,
-    authorized_keys, a crontab or a user systemd/autostart unit.
+    authorized_keys, a crontab or a systemd/autostart unit, or renamed or
+    linked a file into one of those places.
   condition: >
-    open_write and coding_agent_activity and shell_or_login_persistence_file
+    ((open_write and shell_or_login_persistence_file)
+     or (coding_agent_rename and shell_or_login_persistence_target)
+     or (coding_agent_link and shell_or_login_persistence_source))
+    and coding_agent_activity
   output: >
-    Coding agent wrote a persistence file (file=%fd.name process=%proc.name
-    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+    Coding agent wrote a persistence file (file=%fd.name new=%fs.path.source>%fs.path.target
+    syscall=%evt.type process=%proc.name cmdline=%proc.cmdline parent=%proc.pname
+    user=%user.name container=%container.name)
   priority: CRITICAL
   tags: [coding_agent, hib, mitre_persistence, T1546.004]
 
 - rule: Coding Agent Write Repository or Agent Hook
   desc: >
-    A process started by a coding agent wrote a git hook, .mcp.json or agent
-    settings. HIB reverts unapproved changes (protected.reverted); this shows
-    the attempt itself, including outside HIB. git init/clone writes inert
-    *.sample hooks from its templates; those are ignored, a real hook written
-    by git (e.g. from a --template dir) is not.
+    A coding agent (the CLI itself included) or a process it started wrote a
+    git hook, or a process it started wrote .mcp.json or agent settings
+    (the CLIs write their own settings legitimately). Renames and links into
+    place count too. HIB reverts unapproved changes (protected.reverted); this
+    shows the attempt itself, including outside HIB. git's inert *.sample
+    hooks are ignored; a real hook written by git (e.g. from a --template
+    dir) is not.
   condition: >
-    open_write and coding_agent_descendant and not coding_agent_proc
-    and repo_or_agent_hook_file
-    and not fd.name endswith ".sample"
+    (((open_write and git_hook_file)
+      or (coding_agent_rename and git_hook_target)
+      or (coding_agent_link and git_hook_source))
+     and coding_agent_activity)
+    or (((open_write and agent_config_file)
+         or (coding_agent_rename and agent_config_target)
+         or (coding_agent_link and agent_config_source))
+        and coding_agent_descendant and not coding_agent_proc)
   output: >
-    Coding agent subprocess wrote a hook or agent config (file=%fd.name process=%proc.name
-    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+    Coding agent wrote a hook or agent config (file=%fd.name new=%fs.path.source>%fs.path.target
+    syscall=%evt.type process=%proc.name cmdline=%proc.cmdline parent=%proc.pname
+    user=%user.name container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_persistence, T1546]
 
 - rule: HIB Secrets Read by Unexpected Process
   desc: >
-    Something other than the HIB daemon (bun) read HIB's API token or vault
-    key. The token unlocks the whole daemon, including its terminal.
+    Something other than the HIB daemon (bun, including its worker threads)
+    read HIB's API token or vault key. The token unlocks the whole daemon,
+    including its terminal.
   condition: >
     open_read and (fd.name endswith "/.hib/token" or fd.name endswith "/.hib/vault.key")
-    and not proc.name = bun
+    and not (proc.name = bun or proc.exepath endswith "/bun")
   output: >
     HIB secret read by unexpected process (file=%fd.name process=%proc.name
-    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+    cmdline=%proc.cmdline parent=%proc.pname exe=%proc.exepath user=%user.name
+    container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_credential_access, T1552.001]

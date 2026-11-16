@@ -46,6 +46,12 @@ rejects it), so Falco never started there. If your `.env` pins
 `FALCO_VERSION=0.44.1`, change it to `0.45.2`, then run `make install-detection`
 on the SIB server and `make deploy-fleet` for fleet hosts.
 
+**HIB hosts:** `make deploy-fleet` now stops on a host whose `hib_events_dir`
+isn't an existing absolute directory (before, Docker created a missing one as
+root). Start HIB once on that host first. If you enabled
+`coding_agent_rules.yaml`, run `make update-rules` (or `make install-detection`
+on the SIB server) to load the revised pack.
+
 ### 0.7.0
 
 Re-run these once after `git pull`; each is safe to repeat.

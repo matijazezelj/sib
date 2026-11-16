@@ -35,13 +35,15 @@ trap cleanup EXIT
 
 # --- fixtures -------------------------------------------------------------------
 H="$FX/home"
-mkdir -p "$H/.ssh" "$H/.aws" "$H/.claude" "$H/.codex" "$H/.hib" "$H/repo/.git/hooks" "$H/repo/src" "$FX/bin"
+mkdir -p "$H/.ssh" "$H/.aws" "$H/.claude" "$H/.codex" "$H/.hib" "$H/.config/gh" "$H/repo/.git/hooks" "$H/repo/.claude" "$H/repo/src" "$FX/bin"
 # A git template with a real (non-.sample) hook: git init copies it, which must alert.
 mkdir -p "$FX/tpl/hooks" && printf '#!/bin/sh\nexit 0\n' > "$FX/tpl/hooks/post-checkout" && chmod +x "$FX/tpl/hooks/post-checkout"
 for f in .ssh/id_case1 .ssh/id_case3 .ssh/config .ssh/known_hosts .aws/credentials_case2 .claude/.credentials.json \
-         .codex/auth.json .hib/token .hib/vault.key .bashrc; do
+         .codex/auth.json .hib/token .hib/vault.key .bashrc .aws/credentials_case12 .config/gh/hosts.yml .git-credentials; do
     echo "fake test content, not a secret" > "$H/$f"
 done
+# ssh -G must parse the config, so it gets real (harmless) syntax.
+printf 'Host sib-test.invalid\n  User sib-test\n' > "$H/.ssh/config"
 chmod -R a+rX "$FX"
 
 # Stand-ins: each runs the command it is given, as a child process.
@@ -52,7 +54,13 @@ done
 printf '#!/bin/sh\nexec 3< "$1"\nexec 3<&-\n' > "$FX/bin/claude-self"
 cp "$FX/bin/claude-self" "$FX/bin/bun"
 mkdir -p "$FX/self" && cp "$FX/bin/claude-self" "$FX/self/claude"
-chmod +x "$FX/bin/"* "$FX/self/claude"
+# A stand-in tool that reads its argument itself (gh reading a credential store).
+cp "$FX/bin/claude-self" "$FX/bin/gh"
+# git's credential store helper; the kernel cuts its name to "git-credential-".
+cp "$FX/bin/claude-self" "$FX/bin/git-credential-store"
+# The CLI writing a file itself (its Write/Edit tool), no child process.
+mkdir -p "$FX/selfw" && printf '#!/bin/sh\necho x > "$1"\n' > "$FX/selfw/claude"
+chmod +x "$FX/bin/"* "$FX/self/claude" "$FX/selfw/claude"
 
 # --- Falco -----------------------------------------------------------------------
 docker rm -f "$NAME" >/dev/null 2>&1
@@ -90,10 +98,23 @@ cases=(
   "N5|-|$FX/bin/claude sh -c 'echo x > $H/repo/src/app.ts'"
   "N6|-|$FX/bin/claude git init -q $H/repo"
   "P7|Coding Agent Write Repository or Agent Hook|$FX/bin/claude git init -q --template=$FX/tpl $H/repo2"
+  "P8|Coding Agent Write Repository or Agent Hook|$FX/selfw/claude $H/repo/.git/hooks/post-merge"
+  "P9|Coding Agent Write Shell or Login Persistence|$FX/bin/claude sh -c 'echo x > $FX/tmp9 && mv $FX/tmp9 $H/.bash_profile'"
+  "P10|Coding Agent Write Shell or Login Persistence|$FX/bin/codex sh -c 'echo x >> $H/.zshenv'"
+  "P11|Coding Agent Write Repository or Agent Hook|$FX/bin/claude ln -s /bin/true $H/repo/.git/hooks/post-commit"
+  "P12|Coding Agent Read Credential Store|$FX/bin/claude $FX/bin/gh $H/.aws/credentials_case12"
+  "P13|Coding Agent Write Shell or Login Persistence|$FX/bin/claude sh -c 'echo x > $FX/tmp13 && ln $FX/tmp13 $H/.zlogin'"
+  "N7|-|$FX/bin/claude $FX/bin/gh $H/.config/gh/hosts.yml"
+  "N9|-|$FX/bin/claude $FX/bin/git-credential-store $H/.git-credentials"
+  "N8|-|$FX/selfw/claude $H/repo/.claude/settings.local.json"
 )
+# A case whose command fails (a missing tool, a typo) didn't exercise the rule,
+# so it fails too, rather than passing a negative case vacuously.
+declare -A RC
 for c in "${cases[@]}"; do
-    IFS='|' read -r _ _ cmd <<< "$c"
+    IFS='|' read -r id _ cmd <<< "$c"
     eval "$cmd" >/dev/null 2>&1
+    RC[$id]=$?
     sleep 0.5
 done
 sleep 5
@@ -110,6 +131,9 @@ target_of() { # the fixture path a case touches
         P3) echo "$H/.claude/.credentials.json" ;; P4) echo "$H/.bashrc" ;;
         P5) echo "$H/repo/.git/hooks/pre-commit" ;; P6) echo "$H/.hib/token" ;;
         P7) echo "$H/repo2/.git/hooks/post-checkout" ;;
+        P8) echo "$H/repo/.git/hooks/post-merge" ;; P9) echo "$H/.bash_profile" ;; P10) echo "$H/.zshenv" ;;
+        P11) echo "$H/repo/.git/hooks/post-commit" ;; P12) echo "$H/.aws/credentials_case12" ;; P13) echo "$H/.zlogin" ;;
+        N7) echo "$H/.config/gh/hosts.yml" ;; N8) echo "$H/repo/.claude/settings.local.json" ;; N9) echo "$H/.git-credentials" ;;
         N1) echo "$H/.codex/auth.json" ;; N2) echo "$H/.ssh/config" ;; N4) echo "$H/.hib/vault.key" ;;
         N5) echo "$H/repo/src/app.ts" ;;
         N6) echo "$H/repo/.git/" ;;
@@ -119,6 +143,9 @@ target_of() { # the fixture path a case touches
 for c in "${cases[@]}"; do
     IFS='|' read -r id rule _ <<< "$c"
     t=$(target_of "$id")
+    if [ "${RC[$id]}" -ne 0 ]; then
+        echo "FAIL $id command exited ${RC[$id]}: case not exercised"; FAILED=1; continue
+    fi
     if [ "$rule" = "-" ]; then
         if [ "$id" = N6 ]; then n=$(agent_hits_for "$t" | grep -c '\.sample' || true); else n=$(agent_hits_for "$t" | wc -l); fi
         if [ "$n" -eq 0 ]; then echo "PASS $id no alert          ($t)"; else echo "FAIL $id unexpected alert ($t)"; agent_hits_for "$t" | head -2; FAILED=1; fi
