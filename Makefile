@@ -666,13 +666,19 @@ demo: ## Run comprehensive security demo (generates ~30 events)
 demo-quick: ## Run quick security demo (1s delay between events)
 	@./scripts/demo.sh --quick
 
-test-rules: ## Validate Falco rules syntax
+# Uses the image's own falco.yaml; falco_rules.yaml goes first because the other
+# packs use its macros. Fails if any file doesn't load.
+test-rules: ## Validate Falco rules syntax (all packs, loaded together)
 	@echo "$(CYAN)Validating Falco rules...$(RESET)"
-	@ver=$$(grep -sE '^FALCO_VERSION=' .env | cut -d= -f2); \
-	docker run --rm -v $(PWD)/detection/config:/etc/falco:ro \
+	@log=$$(mktemp); ver=$$(grep -sE '^FALCO_VERSION=' .env | cut -d= -f2); \
+	files=$$(cd detection/config/rules && ls falco_rules.yaml; ls *.yaml | grep -vx falco_rules.yaml); \
+	docker run --rm -v $(PWD)/detection/config/rules:/sib-rules:ro -w /sib-rules \
 		falcosecurity/falco:$${ver:-0.45.2} \
-		falco --validate /etc/falco/rules/ 2>&1 | head -20 || true
-	@echo ""
+		falco $$(printf -- '-V %s ' $$files) > $$log 2>&1; \
+	rc=$$?; grep -oE '[A-Za-z0-9_.-]+\.yaml: (Ok|Invalid).*' $$log | sort -u; \
+	if [ $$rc -ne 0 ]; then grep -iE 'error|invalid' $$log | head -20; rm -f $$log; \
+		echo "$(RED)Rule validation failed$(RESET)"; exit $$rc; fi; rm -f $$log
+	@echo "$(GREEN)All rule files load$(RESET)"
 
 # ==================== Threat Intel & Sigma ====================
 

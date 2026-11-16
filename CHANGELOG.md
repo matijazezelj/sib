@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - HIB integration (docs/hib-integration.md): opt-in Falco rule pack for coding agents (`coding_agent_rules.yaml`: credential reads, persistence writes, hook tampering, HIB secret access), collection of HIB's security event log via `hib_events_dir` (Vector and Alloy), and a HIB alert group (critical events, auth failures, denial bursts, sandbox unavailable)
 - "HIB daemon not running" alert from HIB's `daemon.alive` heartbeats
-- `scripts/test-coding-agent-rules.sh`: runtime test of the coding agent Falco rules (7 positive, 6 negative cases) with live kernel events
+- `scripts/test-coding-agent-rules.sh`: runtime test of the coding agent Falco rules (13 positive, 9 negative cases) with live kernel events
 
 ### Changed
 - Falco 0.45.2 on the SIB server and fleet hosts (was 0.44.1, whose modern eBPF probe doesn't load on Linux 7.2 aarch64)
@@ -18,6 +18,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - "Coding Agent Write Repository or Agent Hook" no longer fires on the `*.sample` hooks `git init`/`git clone` write
 - The opt-in `cloud_rules.yaml` and `webserver_rules.yaml` packs failed to load (priority `HIGH` doesn't exist in Falco, now `ERROR`; `not in` operator), so enabling them stopped Falco
+- Coding agent rules (code review): files renamed or linked into place (`mv`, `sed -i`, `ln`) are caught like direct writes; a git hook alerts whoever writes it; the CLI is also recognised by executable path (Claude Code's `Bun Pool` threads), and so is HIB's daemon; credential stores read by their own tool (`gh`, git helpers, gpg, docker, kubectl, `aws`, psql) no longer alert; more shell startup files (`.zshenv`, fish, `/etc/profile.d`, …); cheaper condition order. The runtime test has 22 cases and fails cases whose command didn't run. Documented limit: Claude Code's own Write/Edit tool writes through `/proc/self/fd/<n>/` paths that Falco doesn't resolve, so where the CLI itself writes is invisible to path rules (HIB's `protected.reverted` covers the workspace's hooks and agent config, nothing in the home folder)
+- `make test-rules` never validated anything (missing `falco.yaml` in the mount, exit status masked); it now loads all packs together and fails on errors
+- `hib_events_dir` must be an existing absolute directory, checked before deploying, so Docker can't create it as root; Alloy's path is quoted, and its Docker/native default matches the rest of the template
+- Docs: Alloy can read all of `~/.hib` through its host mount, not only the events directory
 
 ---
 

@@ -6,6 +6,28 @@
     msg: "Deploying Alloy using: {{ effective_deployment | trim }} method"
   tags: alloy
 
+- name: Check hib_events_dir
+  when: hib_events_dir | default('') | length > 0
+  tags: alloy
+  block:
+    - name: Look up hib_events_dir
+      ansible.builtin.stat:
+        path: "{{ hib_events_dir }}"
+      register: hib_events_dir_stat
+
+    # A missing directory would be created by Docker (bind mount) as root,
+    # which locks HIB out of its own folder; odd characters break the mount spec.
+    - name: Require hib_events_dir to be an existing absolute directory
+      ansible.builtin.assert:
+        that:
+          - hib_events_dir is match('^/[A-Za-z0-9._@+/-]+$')
+          - hib_events_dir_stat.stat.isdir | default(false)
+        fail_msg: >-
+          hib_events_dir ({{ hib_events_dir }}) must be an absolute path
+          (letters, digits and . _ @ + - /) to an existing directory. Start HIB
+          once on this host so it creates the directory, then deploy again.
+        quiet: true
+
 - name: Create Alloy config directory
   ansible.builtin.file:
     path: /etc/alloy
