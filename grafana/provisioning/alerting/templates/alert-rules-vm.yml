@@ -711,9 +711,10 @@ groups:
         to: 0
       datasourceUid: victorialogs
       model:
-        expr: source:hib event:in(daemon.alive, daemon.stop) | stats by (hostname) count() if (event:daemon.alive)
-          as beats, count() if (event:daemon.alive _time:15m) as recent, count() if (event:daemon.stop) as stops
-          | filter beats:>0 recent:=0 stops:=0 | stats by (hostname) count() as down
+        expr: 'source:hib event:in(daemon.alive, daemon.start, daemon.stop) | math _time as t | stats by (hostname)
+          max(t) if (event:in(daemon.alive, daemon.start)) as last_seen, max(t) if (event:daemon.stop) as last_stop,
+          count() if (event:in(daemon.alive, daemon.start) _time:15m) as recent | filter last_seen:>0 recent:=0 | math
+          last_seen - (last_stop default 0) as gap | filter gap:>0 | stats by (hostname) count() as down'
         queryType: stats
         datasource:
           type: victoriametrics-logs-datasource
@@ -740,8 +741,8 @@ groups:
     for: 0s
     annotations:
       summary: HIB on {{ $labels.hostname }} stopped sending heartbeats
-      description: 'HIB sent daemon.alive heartbeats in the last 24 hours but none for 15 minutes, and it never
-        logged a clean daemon.stop: it crashed, was killed, or its events stopped reaching SIB. Agents may now run
+      description: 'HIB''s last heartbeat or start in the last 24 hours is more than 15 minutes old, and no clean
+        daemon.stop came after it: it crashed, was killed, or its events stopped reaching SIB. Agents may now run
         without HIB''s guard.'
     labels:
       severity: warning
