@@ -37,7 +37,7 @@ nav_order: 9
 
 ## Version-specific notes
 
-### Unreleased: Falco 0.45.2
+### 0.8.0: Falco 0.45.2
 
 Falco moves from 0.44.1 to 0.45.2 everywhere (`FALCO_VERSION` in `.env`,
 `falco_version` in `ansible/inventory/group_vars/all.yml`). 0.44.1's modern
