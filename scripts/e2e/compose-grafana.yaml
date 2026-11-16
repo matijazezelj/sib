@@ -1,0 +1,56 @@
+# End-to-end test stack, Grafana flavour (Loki + Alloy); see compose-vm.yaml.
+name: sib-e2e
+
+services:
+  loki:
+    extends: {file: ../../storage/compose-grafana.yaml, service: loki}
+    container_name: sib-e2e-loki
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:${E2E_LOGS_PORT}:3100"
+    networks: !override
+      e2e: {aliases: [sib-loki]}
+
+  grafana:
+    extends: {file: ../../grafana/compose.yaml, service: grafana}
+    container_name: sib-e2e-grafana
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:${E2E_GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${E2E_GRAFANA_PASSWORD}
+    volumes: !override
+      - ${E2E_DIR}/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ${E2E_DIR}/grafana/alerting:/etc/grafana/provisioning/alerting:ro
+    networks: !override
+      e2e: {}
+
+  # One Alloy per simulated host. The Docker deployment reads HIB's folder under
+  # /host<path>; here only that folder is mounted there, not the whole host.
+  collector-hib: &alloy
+    image: ${E2E_ALLOY_IMAGE}
+    container_name: sib-e2e-alloy-hib
+    command: [run, /etc/alloy/config.alloy, --storage.path=/tmp/alloy]
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-hib.alloy:/etc/alloy/config.alloy:ro
+      - ${E2E_DIR}/hosts/e2e-hib:/host${E2E_DIR}/hosts/e2e-hib:ro
+    networks: [e2e]
+  collector-replay:
+    <<: *alloy
+    container_name: sib-e2e-alloy-replay
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-replay.alloy:/etc/alloy/config.alloy:ro
+      - ${E2E_DIR}/hosts/e2e-replay:/host${E2E_DIR}/hosts/e2e-replay:ro
+  collector-stopped:
+    <<: *alloy
+    container_name: sib-e2e-alloy-stopped
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-stopped.alloy:/etc/alloy/config.alloy:ro
+      - ${E2E_DIR}/hosts/e2e-stopped:/host${E2E_DIR}/hosts/e2e-stopped:ro
+
+networks:
+  e2e: {}
+
+volumes:
+  loki-data: {}
+  grafana-data: {}

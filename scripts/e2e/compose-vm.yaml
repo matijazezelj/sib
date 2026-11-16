@@ -1,0 +1,61 @@
+# End-to-end test stack, VM flavour (scripts/e2e/run.sh). Services extend the
+# real ones so images and settings stay in step; only names, ports, networks
+# and volumes differ, so it never touches a running SIB install.
+name: sib-e2e
+
+services:
+  victorialogs:
+    extends: {file: ../../storage/compose-vm.yaml, service: victorialogs}
+    container_name: sib-e2e-victorialogs
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:${E2E_LOGS_PORT}:9428"
+    networks: !override
+      e2e: {aliases: [sib-victorialogs]}
+
+  grafana:
+    extends: {file: ../../grafana/compose.yaml, service: grafana}
+    container_name: sib-e2e-grafana
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:${E2E_GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${E2E_GRAFANA_PASSWORD}
+    volumes: !override
+      - ${E2E_DIR}/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ${E2E_DIR}/grafana/alerting:/etc/grafana/provisioning/alerting:ro
+    networks: !override
+      e2e: {}
+
+  # One collector per simulated host, each rendered from the Ansible template
+  # with its own inventory_hostname and given only that host's events folder.
+  collector-hib: &vector
+    image: ${E2E_VECTOR_IMAGE}
+    container_name: sib-e2e-vector-hib
+    environment: {VECTOR_CONFIG: /etc/vector/vector.toml}
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-hib.toml:/etc/vector/vector.toml:ro
+      - ${E2E_DIR}/hosts/e2e-hib:/hib-events:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # as in production: the rendered config's docker_logs source needs it
+    networks: [e2e]
+  collector-replay:
+    <<: *vector
+    container_name: sib-e2e-vector-replay
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-replay.toml:/etc/vector/vector.toml:ro
+      - ${E2E_DIR}/hosts/e2e-replay:/hib-events:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # as in production: the rendered config's docker_logs source needs it
+  collector-stopped:
+    <<: *vector
+    container_name: sib-e2e-vector-stopped
+    volumes:
+      - ${E2E_DIR}/collectors/e2e-stopped.toml:/etc/vector/vector.toml:ro
+      - ${E2E_DIR}/hosts/e2e-stopped:/hib-events:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # as in production: the rendered config's docker_logs source needs it
+
+networks:
+  e2e: {}
+
+volumes:
+  victorialogs-data: {}
+  grafana-data: {}

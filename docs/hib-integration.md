@@ -140,6 +140,11 @@ What the collector can read:
 The `hostname` is the inventory name, the same as for the host's other logs
 and metrics; HIB's own `host` field is kept as `hib_host`.
 
+Both collectors store an event at its own `ts`. Loki silently drops lines more
+than about an hour older than the stream's newest line, so when Alloy first
+starts on a host where HIB has been running for a while, the older history in
+`events.jsonl` doesn't reach Loki (VictoriaLogs keeps it).
+
 ## Alerts
 
 `make install-grafana` provisions a **HIB** group in the SIB alert folder
@@ -162,6 +167,40 @@ prompt; only its `warning` lines (`rejected`, `timeout`) are worth a look, e.g.
 heartbeats. Only a stop that is HIB's last word silences it: after a clean stop
 and a restart, a later crash fires as usual. A host that last ran HIB more than
 24 hours ago is forgotten.
+
+## End-to-end test
+
+`make e2e` checks the whole chain, from HIB's event log through the collector
+and storage to Grafana's alert rules:
+
+```bash
+make e2e                 # Vector -> VictoriaLogs
+make e2e STACK=grafana   # Alloy -> Loki
+```
+
+It runs an isolated Docker project (`sib-e2e`: own network, volumes and
+ports), built from SIB's real compose services, generated alert rules and
+datasources, and the collector configs rendered from the Ansible templates. A
+running SIB install isn't touched and `.env` isn't read, so no test alert can
+reach a real Slack or Telegram. It simulates three hosts:
+
+- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; needs bun)
+  with 5-second heartbeats, requests with a wrong token, clean stops and a
+  refused `events.key`.
+- **`e2e-replay`:** recorded HIB events for what needs an agent session:
+  `protected.reverted`, a burst of denials, `sandbox.unavailable`, and
+  heartbeats that stopped 20 minutes ago.
+- **`e2e-stopped`:** heartbeats followed by a clean `daemon.stop`.
+
+It then checks, in order: the events were written; they reached storage under
+the right `hostname`; and every HIB alert rule is healthy, has evaluated since
+the data arrived, and fires for exactly the expected hosts (18 checks per
+stack). `KEEP=1 make e2e` leaves the stack up for a look (Grafana's address and
+password are printed); remove it with `docker compose -p sib-e2e down -v`.
+
+Not covered yet: Falco through Falcosidekick into storage (the Falco rules have
+their own test, `scripts/test-coding-agent-rules.sh`), and HIB's agent-session
+events from a real session; they are replayed.
 
 ## Privacy of the event log
 
