@@ -35,8 +35,8 @@ This page is the contract both sides implement against. Schema version: **1**.
 | `mode` | string | `router`, `workspace` or `daemon` |
 | `session_id` | string? | workspace/agent session, when there is one |
 | `run_id` | string? | router/engine run, when there is one |
-| `workspace` | string? | workspace root path (absolute); with hib's `[events] workspace = "name"` only its last folder, with `"hash"` a 16-hex keyed hash (stable per machine) |
-| `account` | string? | `<provider>@<account>`; with `[events] account = "hash"` the account part is a 16-hex keyed hash |
+| `workspace` | string? | workspace root path (absolute); with `[events] workspace = "name"` only its last folder, with `"hash"` a 16-hex keyed hash (stable per machine). See [Coarsening](#coarsening) |
+| `account` | string? | `<provider>@<account>`; with `[events] account = "hash"` the account part is a 16-hex keyed hash (`claude@<16 hex>`) |
 | `model` | string? | |
 | `route` | string? | |
 
@@ -49,10 +49,52 @@ vault values or placeholders' originals. Any field below that can carry
 user-controlled text (`command`, `url`, `reasons`) is passed through HIB's
 redactor at `minimal` level or stricter before logging and truncated to 300
 characters (`…` appended). Paths inside a workspace are logged relative to
-`workspace`. hib can coarsen further (`[events]` settings, all off by default):
-`net_host = "domain"` logs `net_host` as its registrable domain and `url` as
-`scheme://domain`; `command = "program"` logs only the program's name;
-`remote = false` leaves `remote` out of `auth.failure`.
+`workspace`.
+
+## Coarsening
+
+HIB can log less detail. `[events] profile` picks the defaults:
+
+- `"local"` (default): every field is logged whole.
+- `"siem"`: `workspace = "hash"`, `account = "hash"`, `net_host = "domain"`,
+  `command = "program"`, `remote = false`.
+
+A setting given on its own overrides the profile.
+
+| Setting | Values | Effect |
+|---------|--------|--------|
+| `workspace` | `path` (default), `name`, `hash` | `name`: last folder only; `hash`: 16 hex chars |
+| `account` | `name` (default), `hash` | `<provider>@<16 hex>` |
+| `net_host` | `full` (default), `domain` | see below; `url` is cut to `scheme://<net_host value>` |
+| `command` | `full` (default), `program` | a best-effort program label, e.g. `curl`; `[COMMAND]` when it can't be told safely (unbalanced quotes, `$(…)` or backticks before the program, a leading redirection) |
+| `remote` | `true` (default), `false` | `false` leaves `remote` out of `auth.failure` |
+
+With `net_host = "domain"`, `net_host` is one of:
+
+- the registrable domain under an ICANN public suffix
+  (`acme-payroll.s3.amazonaws.com` → `amazonaws.com`, `you.github.io` →
+  `github.io`); internationalised names as punycode;
+- `localhost`;
+- `[IP-INTERNAL]`: private and other non-public ranges, including
+  `169.254.0.0/16` (cloud metadata), `100.64.0.0/10`, `0.0.0.0/8`, IPv6 ULA,
+  link-local and multicast;
+- `[IP-EXTERNAL]`: any other IP address;
+- `[INTERNAL]`: a name under no ICANN suffix (`.corp`, `.local`, `.internal`,
+  `.arpa`, single labels);
+- `[HOST]`: the host could not be parsed; `url` is `[URL]` when it has no
+  parseable host.
+
+A redaction placeholder in the host keeps only its category (e.g.
+`[IP-INTERNAL]`), so `net_host` and `url` of one request agree.
+
+The program label is not an executable's identity: for what actually ran,
+Falco (or auditd) is authoritative.
+
+Hashes are an HMAC-SHA256 keyed by `~/.hib/events.key`, outside the events
+directory. HIB uses the key only if it is a regular file (not a symlink) owned
+by the user, with no group or other permission bits, holding exactly 64
+lowercase hex characters (plus an optional newline). Otherwise the event line
+is dropped, never written with the field whole.
 
 ## Event types
 
@@ -65,7 +107,7 @@ characters (`…` appended). Paths inside a workspace are logged relative to
 | `guard.decision` | info, or warning when `action` is `rejected`/`timeout` | every guard decision | `action` (`redacted`, `approved`, `rejected`, `timeout`), `decided_by` (`policy`, `user`), `findings` (object: category → count), `reasons` (string array) |
 | `approval.pending` | info | a request waits for human approval | `kind` (`guard`, `tool`, `network`), `timeout_sec` |
 | `tool.permission` | info, or warning on `deny` | a tool call is allowed or denied | `tool`, `decision` (`allow`, `always`, `deny`), `decided_by` (`user`, `policy`, `auto`), `command`? , `path`?, `url`?/`net_host`? |
-| `data.block` | warning | sensitive-workspace policy blocks a raw data read | `command`?, `path`?, `reason` |
+| `data.block` | warning | sensitive-workspace policy blocks a raw data read | `command`?, `path`?, `reason`: the full (redacted) sentence, which may name the file or script; with `command = "program"` one of `it reads a data file directly`, `it runs inline code that could read data files`, `it runs a script from outside this folder` |
 | `sandbox.network` | info, or warning on `deny` | a sandboxed command asks to reach a new host | `net_host`, `decision` (`allow`, `deny`) |
 | `sandbox.unavailable` | warning | sandbox probe failed, auto mode disabled | `reason` |
 | `protected.reverted` | critical | unapproved changes to git hooks/config or agent config were put back | `changes` (array of `{path, change}`), `failed` (paths that could not be reverted) |

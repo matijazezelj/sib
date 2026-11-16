@@ -136,22 +136,33 @@ they touch. Treat the HIB stream in VictoriaLogs/Loki like the rest of SIB's
 security data: restrict who can query it and keep the retention short for
 sensitive workloads.
 
-HIB can coarsen that metadata before it leaves the machine (`[events]` in
-HIB's `config.toml`, all off by default; see the
-[event log spec](hib-events-spec.md)):
+HIB can coarsen that metadata before it leaves the machine. For a host that
+ships its log to SIB, the `siem` profile in HIB's `config.toml` is the short
+way (default `local`, which logs every field whole):
 
 ```toml
 [events]
-workspace = "hash"    # or "name" (last folder only); default "path"
-account = "hash"      # claude@<hash>; default "name"
-net_host = "domain"   # registrable domain only, url cut to scheme://domain
-command = "program"   # program name only, e.g. "curl"
-remote = false        # leave remote out of auth.failure
+profile = "siem"      # workspace and account hashed, net_host cut to the domain,
+                      # command cut to the program, remote left out
+# Each setting can still be set on its own and overrides the profile, e.g.:
+# workspace = "name"  # last folder instead of a hash
 ```
 
 Hashes are a keyed HMAC, the same for the same value on one machine, so
-grouping and correlation still work. None of SIB's alerts depend on these
-fields, so any combination is safe to turn on.
+grouping and correlation still work. With `net_host = "domain"`, internal
+addresses show up as `[IP-INTERNAL]` (including cloud metadata,
+`169.254.169.254`) and private names as `[INTERNAL]`; details in the
+[event log spec](hib-events-spec.md#coarsening). None of SIB's alerts depend on
+these fields, so any combination is safe to turn on.
+
+HIB drops an event rather than log a field whole when its hash key
+(`~/.hib/events.key`) is unusable: wrong owner or permissions, a symlink, or
+bad content. Only events that carry `workspace` or `account` are dropped
+(`session.*`, `tool.*`, `guard.decision`, `data.block`); heartbeats and
+`auth.failure` keep arriving, so *HIB daemon not running* doesn't notice, and
+the only other trace is an error on the daemon's stderr. After turning hashing
+on, run an agent session and check that its events arrive
+(`source:hib hostname:<host> event:session.start` in the Events Explorer).
 
 ## What to look at when one fires
 
