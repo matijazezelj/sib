@@ -93,8 +93,11 @@ Falco (or auditd) is authoritative.
 Hashes are an HMAC-SHA256 keyed by `~/.hib/events.key`, outside the events
 directory. HIB uses the key only if it is a regular file (not a symlink) owned
 by the user, with no group or other permission bits, holding exactly 64
-lowercase hex characters (plus an optional newline). Otherwise the event line
-is dropped, never written with the field whole.
+lowercase hex characters (plus an optional newline). Otherwise every event
+that carries `workspace` or `account` is dropped, never written with the field
+whole, and HIB writes one `events.key_refused` per daemon run. When a setting
+is `"hash"`, HIB loads the key (or creates it if missing) at daemon start, so a
+bad key shows up right after `daemon.start`.
 
 ## Event types
 
@@ -110,6 +113,7 @@ is dropped, never written with the field whole.
 | `data.block` | warning | sensitive-workspace policy blocks a raw data read | `command`?, `path`?, `reason`: the full (redacted) sentence, which may name the file or script; with `command = "program"` one of `it reads a data file directly`, `it runs inline code that could read data files`, `it runs a script from outside this folder` |
 | `sandbox.network` | info, or warning on `deny` | a sandboxed command asks to reach a new host | `net_host`, `decision` (`allow`, `deny`) |
 | `sandbox.unavailable` | warning | sandbox probe failed, auto mode disabled | `reason` |
+| `events.key_refused` | warning | the hash key (`[events]` setting `"hash"`) is unusable; at most once per daemon run, mode `daemon`, no `workspace`/`account`. Events carrying those fields are dropped until the key is fixed and the daemon restarted | `reason` (`symlink`, `not_regular`, `not_owner`, `mode`, `format`, `unreadable`); never the path |
 | `protected.reverted` | critical | unapproved changes to git hooks/config or agent config were put back | `changes` (array of `{path, change}`), `failed` (paths that could not be reverted) |
 | `terminal.open` | warning | browser terminal session started | `workspace` |
 | `session.start` / `session.end` | info | agent session starts/ends | `agent` (`claude`, `codex`), `sensitive` (bool) |
