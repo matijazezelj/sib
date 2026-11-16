@@ -152,16 +152,16 @@ and metrics; HIB's own `host` field is kept as `hib_host`.
 | HIB agent denials burst | more than 5 denied tool calls or blocked data reads in 15 minutes (a denied network request is a denied tool call too; `sandbox.network` isn't counted again) | warning |
 | HIB sandbox unavailable | `sandbox.unavailable` in the last hour | warning |
 | HIB event hash key refused | `events.key_refused` in the last 24 hours: HIB drops session, tool, guard and data events until the key is fixed and HIB restarted (it reports this once per run, hence the long window) | warning |
-| HIB daemon not running | heartbeats (`daemon.alive`, every 5 min) in the last 24 hours, none for 15 minutes, and no clean `daemon.stop` in those 24 hours: a crash, a kill, or events no longer reaching SIB | warning |
+| HIB daemon not running | HIB's last heartbeat (`daemon.alive`, every 5 min) or `daemon.start` in the last 24 hours is more than 15 minutes old, and no clean `daemon.stop` came after it: a crash, a kill, or events no longer reaching SIB | warning |
 
 They stay quiet on hosts without HIB. `guard.decision` is written for every
 prompt; only its `warning` lines (`rejected`, `timeout`) are worth a look, e.g.
 `source:hib event:guard.decision severity:warning` in the Events Explorer.
 
 *HIB daemon not running* needs a HIB version that writes `daemon.alive`
-heartbeats. A clean stop suppresses it for 24 hours, so a crash within a day
-of a deliberate stop and restart is only noticed once the 24-hour window
-moves past that stop.
+heartbeats. Only a stop that is HIB's last word silences it: after a clean stop
+and a restart, a later crash fires as usual. A host that last ran HIB more than
+24 hours ago is forgotten.
 
 ## Privacy of the event log
 

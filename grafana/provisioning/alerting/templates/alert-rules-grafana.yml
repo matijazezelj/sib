@@ -711,9 +711,7 @@ groups:
         to: 0
       datasourceUid: loki
       model:
-        expr: count by (hostname) (count_over_time({source="hib", event="daemon.alive"}[24h])) unless on(hostname)
-          count by (hostname) (count_over_time({source="hib", event="daemon.alive"}[15m])) unless on(hostname) count
-          by (hostname) (count_over_time({source="hib", event="daemon.stop"}[24h]))
+        expr: '((max by (hostname) (max_over_time({source="hib", event=~"daemon[.](alive|start)"} | label_format t=`{{ __timestamp__ | unixEpoch }}` | unwrap t [24h])) > on(hostname) max by (hostname) (max_over_time({source="hib", event="daemon.stop"} | label_format t=`{{ __timestamp__ | unixEpoch }}` | unwrap t [24h]))) or (max by (hostname) (max_over_time({source="hib", event=~"daemon[.](alive|start)"} | label_format t=`{{ __timestamp__ | unixEpoch }}` | unwrap t [24h])) unless on(hostname) max by (hostname) (max_over_time({source="hib", event="daemon.stop"} | label_format t=`{{ __timestamp__ | unixEpoch }}` | unwrap t [24h])))) unless on(hostname) count by (hostname) (count_over_time({source="hib", event=~"daemon[.](alive|start)"}[15m]))'
         queryType: instant
         datasource:
           type: loki
@@ -740,8 +738,8 @@ groups:
     for: 0s
     annotations:
       summary: HIB on {{ $labels.hostname }} stopped sending heartbeats
-      description: 'HIB sent daemon.alive heartbeats in the last 24 hours but none for 15 minutes, and it never
-        logged a clean daemon.stop: it crashed, was killed, or its events stopped reaching SIB. Agents may now run
+      description: 'HIB''s last heartbeat or start in the last 24 hours is more than 15 minutes old, and no clean
+        daemon.stop came after it: it crashed, was killed, or its events stopped reaching SIB. Agents may now run
         without HIB''s guard.'
     labels:
       severity: warning
