@@ -69,9 +69,9 @@ loki.process "docker" {
 // HIB security events (docs/hib-events-spec.md). The Docker deployment sees the
 // host filesystem under /host. Only the current file: loki.source.file tracks by
 // path, so a rotated events.jsonl.1 would be read again in full.
-{% set hib_root = '' if (effective_deployment | default('docker') | trim) == 'native' else '/host' %}
+{% set hib_root = '/host' if (effective_deployment | default('native') | trim) == 'docker' else '' %}
 local.file_match "hib" {
-  path_targets = [{"__path__" = "{{ hib_root }}{{ hib_events_dir }}/events.jsonl"}]
+  path_targets = [{"__path__" = {{ (hib_root ~ hib_events_dir ~ '/events.jsonl') | to_json }}}]
 }
 
 loki.source.file "hib" {

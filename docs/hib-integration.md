@@ -25,15 +25,35 @@ everything they start:
 
 | Rule | Priority | Fires when |
 |------|----------|------------|
-| Coding Agent Read Credential Store | WARNING | an agent or its child reads `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.kube`, `.netrc`, `.git-credentials`, `~/.docker/config.json`, `.pgpass` (git/ssh reading `~/.ssh` excepted) |
+| Coding Agent Read Credential Store | WARNING | an agent or its child reads `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.kube`, `.netrc`, `.git-credentials`, `~/.docker/config.json` or `.pgpass` with something other than that store's own tool (ssh/git for `~/.ssh`, `gh`, git's credential helpers, gpg, docker, kubectl/helm, `aws`, psql are expected; `cat`, a script or the agent CLI are not) |
 | Coding Agent Subprocess Read Agent Credentials | CRITICAL | a child of an agent (not the CLI itself) reads `~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.hib/token` or `~/.hib/vault.key` |
-| Coding Agent Write Shell or Login Persistence | CRITICAL | an agent or its child writes a shell rc file, `authorized_keys`, a crontab, or a user systemd/autostart unit |
-| Coding Agent Write Repository or Agent Hook | WARNING | a child of an agent writes `.git/hooks/*` (not git's inert `*.sample` templates), `.mcp.json`, `.claude/settings*` or `.codex/config.toml` |
+| Coding Agent Write Shell or Login Persistence | CRITICAL | an agent or its child writes a shell startup file (bash, zsh, fish, `/etc/profile.d`, …), `authorized_keys`, a crontab, or a systemd/autostart unit, or moves or links a file there |
+| Coding Agent Write Repository or Agent Hook | WARNING | an agent (the CLI itself included) or its child writes or moves/links a file into `.git/hooks/` (not git's inert `*.sample` templates); a child of an agent writes `.mcp.json`, `.claude/settings*` or `.codex/config.toml` |
 | HIB Secrets Read by Unexpected Process | WARNING | anything other than the HIB daemon (`bun`) reads HIB's token or vault key |
 
-The agents' own CLIs legitimately read their config and credentials, so most
-rules only flag the agents' *children*. HIB's sandbox denies these paths to
-agents, so a hit usually means an unsandboxed agent or a sandbox bypass.
+The agents' own CLIs legitimately read their credentials and write their
+settings, so those rules only flag the agents' *children*; a git hook is
+flagged whoever writes it. HIB's sandbox denies these paths to agents, so a
+hit usually means an unsandboxed agent or a sandbox bypass.
+
+Agents are recognised by process name and executable path (`claude`, `codex`;
+Claude Code does part of its file I/O on threads named `Bun Pool N`, which the
+path catches). Not covered: Claude Code installed through npm and running
+under `node`, and anything that detaches from the agent (`setsid`, `nohup`,
+reparented to init) or runs more than 8 levels below it.
+
+**What Falco can't see:** Claude Code's own Write and Edit tools don't write
+to a file by its path. They open the directory, then create and rename the
+file through `/proc/self/fd/<n>/<name>`, which Falco reports as is. So these
+rules see where the agent's *children* write (a shell, `sed -i`, `mv`, `ln`,
+`git`) but not where the CLI itself writes: a hook or `~/.bashrc` written by
+the Write tool doesn't alert. (Its reads use real paths and are covered.) When
+the agent runs under HIB, HIB's `protected.reverted` event covers the CLI
+planting git hooks or agent config; shell startup files written by the CLI
+itself remain a gap.
+
+The exemptions for a store's own tool match on the process name, so a binary
+renamed to `gh` would be exempt too.
 
 Enable it:
 
@@ -57,11 +77,14 @@ standard *Burst of Critical/Error events* alert covers them.
 ### Testing the rules on a host
 
 `scripts/test-coding-agent-rules.sh` runs Falco privileged with the modern
-eBPF probe for a minute and plays 7 cases that must alert and 6 that must not,
-with stand-in processes named `claude`, `codex` and `bun` against a throwaway
-fake home (never real credentials). The negative cases include `ssh` reading
-`~/.ssh`, an agent CLI reading its own credentials, HIB's daemon reading its
-vault key, and `git init` writing its sample hooks. Run it from a normal shell,
+eBPF probe for a minute and plays 13 cases that must alert and 9 that must
+not, with stand-in processes named `claude`, `codex`, `bun` and `gh` against a
+throwaway fake home (never real credentials). The positive cases include
+files moved, hard-linked and symlinked into place; the negative cases include `ssh` reading `~/.ssh`, `gh` reading its own
+config, git's credential helper reading `.git-credentials`, an agent CLI reading its own credentials or writing its settings, HIB's
+daemon reading its vault key, and `git init` writing its sample hooks. A case
+whose command fails (a missing tool) fails too, so a negative case can't pass
+without having run. Run it from a normal shell,
 not from inside Claude Code or Codex: the rules key on agent ancestry, so
 everything started from an agent's own terminal counts as agent activity.
 
@@ -73,7 +96,7 @@ FALCO_VERSION=0.44.1 ./scripts/test-coding-agent-rules.sh   # another Falco rele
 It ends with `PASS`/`FAIL` per case and lists any other coding-agent alerts the
 host raised meanwhile (real activity), which is a quick false-positive check.
 
-All 13 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
+All 22 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
 Falco 0.44.1's modern eBPF probe doesn't load at all: the kernel's verifier
 rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 
@@ -89,8 +112,19 @@ devbox:
   hib_events_dir: /home/alice/.hib/events
 ```
 
-then `make deploy-fleet LIMIT=devbox`. Only that directory is given to the
-collector, never `~/.hib` itself (which holds HIB's token and vault key).
+then `make deploy-fleet LIMIT=devbox`. The directory must already exist:
+start HIB once on the host first (otherwise the deploy stops, rather than let
+Docker create it as root and lock HIB out).
+
+What the collector can read:
+
+- **Vector:** only that directory is mounted, never `~/.hib` itself (which
+  holds HIB's token and vault key).
+- **Alloy:** it already reads the whole host filesystem read-only (Docker
+  mounts `/` at `/host`; native Alloy runs as root) for its other logs and
+  metrics, so it could read `~/.hib/token` and `vault.key` too. On a host where
+  that matters, use the VM stack, or keep Alloy's access in mind when deciding
+  who may change its config.
 
 - **VM stack (Vector):** the directory is mounted read-only into the Vector
   container; events go to VictoriaLogs with stream fields `hostname`,
