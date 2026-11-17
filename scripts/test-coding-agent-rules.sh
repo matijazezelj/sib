@@ -19,6 +19,11 @@
 
 set -u
 
+# Same for HIB_SESSION: processes carrying it count as agent activity.
+if [ -n "${HIB_SESSION:-}" ]; then
+    echo "HIB_SESSION is set: this shell runs under a HIB agent session. Run the test from a plain shell."; exit 2
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 FALCO_IMAGE="falcosecurity/falco:${FALCO_VERSION:-0.45.2}"
@@ -36,9 +41,13 @@ trap cleanup EXIT
 # --- fixtures -------------------------------------------------------------------
 H="$FX/home"
 mkdir -p "$H/.ssh" "$H/.aws" "$H/.claude" "$H/.codex" "$H/.hib" "$H/.config/gh" "$H/repo/.git/hooks" "$H/repo/.claude" "$H/repo/src" "$FX/bin"
+# A second home for the HIB_SESSION cases, so their alerts can't be mistaken
+# for the first home's cases on the same file names.
+H2="$FX/home2"; mkdir -p "$H2/.claude" "$H2/.codex"
+for f in .claude/.credentials.json .codex/auth.json; do echo "fake test content, not a secret" > "$H2/$f"; done
 # A git template with a real (non-.sample) hook: git init copies it, which must alert.
 mkdir -p "$FX/tpl/hooks" && printf '#!/bin/sh\nexit 0\n' > "$FX/tpl/hooks/post-checkout" && chmod +x "$FX/tpl/hooks/post-checkout"
-for f in .ssh/id_case1 .ssh/id_case3 .ssh/config .ssh/known_hosts .aws/credentials_case2 .claude/.credentials.json \
+for f in .ssh/id_case1 .ssh/id_case3 .ssh/id_case14 .aws/credentials_case17 .aws/credentials_case18 .ssh/config .ssh/known_hosts .aws/credentials_case2 .claude/.credentials.json \
          .codex/auth.json .hib/token .hib/vault.key .bashrc .aws/credentials_case12 .config/gh/hosts.yml .git-credentials; do
     echo "fake test content, not a secret" > "$H/$f"
 done
@@ -60,7 +69,21 @@ cp "$FX/bin/claude-self" "$FX/bin/gh"
 cp "$FX/bin/claude-self" "$FX/bin/git-credential-store"
 # The CLI writing a file itself (its Write/Edit tool), no child process.
 mkdir -p "$FX/selfw" && printf '#!/bin/sh\necho x > "$1"\n' > "$FX/selfw/claude"
-chmod +x "$FX/bin/"* "$FX/self/claude" "$FX/selfw/claude"
+# HIB_SESSION stand-ins: an agent CLI under another name (Claude Code from npm
+# runs as node), and HIB's daemon (bun) starting it.
+cp "$FX/bin/claude" "$FX/bin/node"
+mkdir -p "$FX/hibd" && cp "$FX/bin/claude" "$FX/hibd/bun"
+cp "$FX/bin/claude-self" "$FX/self/node"
+chmod +x "$FX/bin/"* "$FX/self/claude" "$FX/self/node" "$FX/selfw/claude" "$FX/hibd/bun"
+SID="w_5e55105e55105e55"   # a made-up HIB session id
+# Falco keeps only the first 4096 bytes of a process's environment. bash
+# re-exports variables in its own order, so the variable's place can't be
+# relied on in a big environment (HIB gives its CLIs a small one).
+# sess runs a command with a small environment (a server, HIB started by
+# systemd), where Falco sees it; sess_late appends it after 5000 bytes, out of
+# Falco's sight (N12: the known limit).
+sess() { env -i PATH="$PATH" HOME="$HOME" HIB_SESSION="$SID" "$@"; }
+sess_late() { env SIB_TEST_PAD="$(printf '%05000d' 0)" HIB_SESSION="$SID" "$@"; }
 
 # --- Falco -----------------------------------------------------------------------
 docker rm -f "$NAME" >/dev/null 2>&1
@@ -107,6 +130,18 @@ cases=(
   "N7|-|$FX/bin/claude $FX/bin/gh $H/.config/gh/hosts.yml"
   "N9|-|$FX/bin/claude $FX/bin/git-credential-store $H/.git-credentials"
   "N8|-|$FX/selfw/claude $H/repo/.claude/settings.local.json"
+  # HIB_SESSION: no claude/codex process anywhere in the ancestry.
+  # The stand-ins are shell scripts: the variable survives the shells that
+  # re-export the environment to their children.
+  "P14|Coding Agent Read Credential Store|sess $FX/bin/node cat $H/.ssh/id_case14"
+  "P15|Coding Agent Subprocess Read Agent Credentials|sess $FX/hibd/bun $FX/bin/node cat $H2/.codex/auth.json"
+  "P17|Coding Agent Read Credential Store|sess $FX/bin/node bash -c 'zsh -c \"cat $H/.aws/credentials_case17\"'"
+  "N10|-|sess $FX/hibd/bun $FX/self/node $H2/.claude/.credentials.json"
+  "N12|-|sess_late cat $H/.aws/credentials_case18"
+  # Detached: the agent exits, its child is reparented, then writes. Only the
+  # variable still ties it to the agent (N11, without it, is the known gap).
+  "P16|Coding Agent Write Shell or Login Persistence|sess $FX/bin/claude setsid -f sh -c 'sleep 2; echo x >> $H/.zprofile'"
+  "N11|-|$FX/bin/claude setsid -f sh -c 'sleep 2; echo x >> $H/.zlogout'"
 )
 # A case whose command fails (a missing tool, a typo) didn't exercise the rule,
 # so it fails too, rather than passing a negative case vacuously.
@@ -117,7 +152,7 @@ for c in "${cases[@]}"; do
     RC[$id]=$?
     sleep 0.5
 done
-sleep 5
+sleep 5   # also lets the detached cases (sleep 2) write
 docker logs "$NAME" 2>/dev/null | grep '^{' > "$OUT"
 
 # --- check -----------------------------------------------------------------------
@@ -137,6 +172,9 @@ target_of() { # the fixture path a case touches
         N1) echo "$H/.codex/auth.json" ;; N2) echo "$H/.ssh/config" ;; N4) echo "$H/.hib/vault.key" ;;
         N5) echo "$H/repo/src/app.ts" ;;
         N6) echo "$H/repo/.git/" ;;
+        P14) echo "$H/.ssh/id_case14" ;; P15) echo "$H2/.codex/auth.json" ;; N10) echo "$H2/.claude/.credentials.json" ;;
+        P16) echo "$H/.zprofile" ;; N11) echo "$H/.zlogout" ;;
+        P17) echo "$H/.aws/credentials_case17" ;; N12) echo "$H/.aws/credentials_case18" ;;
     esac
 }
 
@@ -152,6 +190,12 @@ for c in "${cases[@]}"; do
     else
         if hits "$rule" | grep -qF "$t"; then echo "PASS $id $rule"; else echo "FAIL $id expected '$rule' for $t"; FAILED=1; fi
     fi
+done
+
+# The HIB_SESSION cases must name the session in the alert.
+for id in P14 P15 P16 P17; do
+    if agent_hits_for "$(target_of "$id")" | grep -qF "session=$SID"; then echo "PASS $id names session=$SID"
+    else echo "FAIL $id alert doesn't name session=$SID"; FAILED=1; fi
 done
 
 others=$(grep -E '"rule":"(Coding Agent|HIB Secrets)' "$OUT" | grep -vcF "$FX" || true)
