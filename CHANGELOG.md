@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md)
 
+- Coding agent Falco rules: a process carrying HIB's `HIB_SESSION` variable counts as agent activity (best effort: Falco reads only the first 4 KB of the environment; HIB's minimal CLI environment keeps it in range, a heavy shell rc or `env -i` doesn't), and every alert names the HIB session (`session=`). The runtime test has 29 cases, including a CLI under another name, a detached writer and the 4 KB limit
+
 ### Fixed
 - Alloy shipped no HIB events on a host with `alloy_collect_logs: false`: the HIB block and the Loki writer sat inside the host-logs section (found by `make e2e`)
 

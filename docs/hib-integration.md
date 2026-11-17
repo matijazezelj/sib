@@ -38,9 +38,24 @@ hit usually means an unsandboxed agent or a sandbox bypass.
 
 Agents are recognised by process name and executable path (`claude`, `codex`;
 Claude Code does part of its file I/O on threads named `Bun Pool N`, which the
-path catches). Not covered: Claude Code installed through npm and running
-under `node`, and anything that detaches from the agent (`setsid`, `nohup`,
-reparented to init) or runs more than 8 levels below it.
+path catches). Not covered by that: Claude Code installed through npm and
+running under `node`, and anything that detaches from the agent (`setsid`,
+`nohup`, reparented to init) or runs more than 8 levels below it.
+
+Under HIB (0.2.0+) there is a second, best-effort signal: HIB starts the CLIs
+with `HIB_SESSION=<session id>`, which every process they start inherits, so
+the rules also count a process carrying it as agent activity, and each alert's
+`session=` field names the HIB session. Falco only reads the first 4096 bytes
+of a process's environment, and shells re-export variables in their own order
+(bash moved a `HIB_SESSION` set first to byte 10495 of an 11.5 KB desktop
+environment). In practice HIB keeps it in range: it gives the CLIs a minimal
+environment (`PATH`, `HOME`, locale, CA settings and the account's own
+variables, not the desktop's `LS_COLORS` or theme variables). Measured in live
+sessions, `HIB_SESSION` sat at byte 974–1553 of at most 4.6 KB in Claude
+Code's CLI, zsh and `sh`, and at 374–1477 in Codex and its `bash`. A shell rc
+file that exports a lot can still push it past 4 KB, and `env -i` clears it, so
+it is best effort: it adds coverage, never removes any, and the name and
+ancestry check still applies.
 
 **What Falco can't see:** Claude Code's own Write and Edit tools don't write
 to a file by its path. They open the directory, then create and rename the
@@ -99,7 +114,7 @@ FALCO_VERSION=0.44.1 ./scripts/test-coding-agent-rules.sh   # another Falco rele
 It ends with `PASS`/`FAIL` per case and lists any other coding-agent alerts the
 host raised meanwhile (real activity), which is a quick false-positive check.
 
-All 22 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
+All 29 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
 Falco 0.44.1's modern eBPF probe doesn't load at all: the kernel's verifier
 rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 

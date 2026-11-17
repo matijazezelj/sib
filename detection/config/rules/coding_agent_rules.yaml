@@ -15,15 +15,20 @@
 # or by renaming or linking a file into place. HIB's sandbox denies most of this,
 # so a hit usually means a sandbox bypass or an unsandboxed agent.
 #
-# Limits: agents are recognised by process name and executable path (claude,
-# codex), so an npm install that runs Claude Code under `node` isn't covered,
-# and a process that detaches from the agent (setsid, nohup, reparented to init)
-# or sits more than 8 levels below it is no longer counted as agent activity.
+# Agents are recognised by process name and executable path (claude, codex) and
+# up to 8 levels of ancestry, so on their own these miss an npm install running
+# under `node`, a process that detaches (setsid, nohup, reparented to init) and
+# a deeper tree. Best effort on top: the HIB_SESSION variable HIB (0.2.0+) sets
+# on the CLIs it starts and every process they start inherits; the alert's
+# session= field names the HIB session. Falco only sees the first 4096 bytes of
+# a process's environment and shells reorder it; HIB gives the CLIs a minimal
+# environment, which keeps the variable in range (measured at 374-1553 bytes),
+# but a shell rc exporting a lot can push it out, and `env -i` clears it.
 # Claude Code's own Write/Edit tool writes through /proc/self/fd/<dirfd>/name
 # and renames into place there, a path Falco doesn't resolve, so where the CLI
 # itself writes is invisible to these rules (what its children write is not);
-# HIB's protected.reverted event covers the CLI changing the workspace's git
-# hooks/config or its .claude/, .codex/, .mcp.json; nothing in the home folder.
+# under HIB, its protected.reverted (workspace hooks and agent config) and
+# home.changed (shell startup files, user agent config) events cover the CLI.
 # The own-tool exemptions match on process name, so a binary renamed to e.g.
 # "gh" is exempt too.
 # See docs/hib-integration.md.
@@ -66,8 +71,24 @@
      or proc.aname[5] in (coding_agent_binaries) or proc.aname[6] in (coding_agent_binaries)
      or proc.aname[7] in (coding_agent_binaries) or proc.aname[8] in (coding_agent_binaries))
 
+# Started by HIB for an agent session, or a descendant of such a process:
+# HIB_SESSION=<session id> is inherited through fork and exec.
+- macro: hib_session_proc
+  condition: proc.env contains "HIB_SESSION="
+
+# The agent CLI HIB started (its parent is HIB's daemon, which runs on bun),
+# as opposed to what that CLI started. Covers a CLI under any process name.
+- macro: hib_session_cli
+  condition: (hib_session_proc and (proc.pname = bun or proc.pexepath endswith "/bun"))
+
 - macro: coding_agent_activity
-  condition: (coding_agent_proc or coding_agent_descendant)
+  condition: (coding_agent_proc or coding_agent_descendant or hib_session_proc)
+
+# Something an agent started, never the CLI itself.
+- macro: coding_agent_child
+  condition: >
+    ((coding_agent_descendant and not coding_agent_proc)
+     or (hib_session_proc and not coding_agent_proc and not hib_session_cli))
 
 # A file put into place by rename (mv, sed -i, editors' atomic saves): the new
 # name is fs.path.target. A hard or symbolic link: the new name is
@@ -193,7 +214,7 @@
   output: >
     Coding agent read a credential store (file=%fd.name process=%proc.name
     cmdline=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2]>%proc.aname[3]
-    exe=%proc.exepath user=%user.name container=%container.name)
+    exe=%proc.exepath user=%user.name session=%proc.env[HIB_SESSION] container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_credential_access, T1552.001]
 
@@ -203,11 +224,10 @@
     agent's or HIB's own credentials. The CLIs read these legitimately; their
     children never need to.
   condition: >
-    open_read and agent_credential_file and coding_agent_descendant
-    and not coding_agent_proc
+    open_read and agent_credential_file and coding_agent_child
   output: >
     Coding agent subprocess read agent credentials (file=%fd.name process=%proc.name
-    cmdline=%proc.cmdline parent=%proc.pname user=%user.name container=%container.name)
+    cmdline=%proc.cmdline parent=%proc.pname user=%user.name session=%proc.env[HIB_SESSION] container=%container.name)
   priority: CRITICAL
   tags: [coding_agent, hib, mitre_credential_access, T1552.001]
 
@@ -224,7 +244,7 @@
   output: >
     Coding agent wrote a persistence file (file=%fd.name new=%fs.path.source>%fs.path.target
     syscall=%evt.type process=%proc.name cmdline=%proc.cmdline parent=%proc.pname
-    user=%user.name container=%container.name)
+    user=%user.name session=%proc.env[HIB_SESSION] container=%container.name)
   priority: CRITICAL
   tags: [coding_agent, hib, mitre_persistence, T1546.004]
 
@@ -245,11 +265,11 @@
     or (((open_write and agent_config_file)
          or (coding_agent_rename and agent_config_target)
          or (coding_agent_link and agent_config_source))
-        and coding_agent_descendant and not coding_agent_proc)
+        and coding_agent_child)
   output: >
     Coding agent wrote a hook or agent config (file=%fd.name new=%fs.path.source>%fs.path.target
     syscall=%evt.type process=%proc.name cmdline=%proc.cmdline parent=%proc.pname
-    user=%user.name container=%container.name)
+    user=%user.name session=%proc.env[HIB_SESSION] container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_persistence, T1546]
 
@@ -264,6 +284,6 @@
   output: >
     HIB secret read by unexpected process (file=%fd.name process=%proc.name
     cmdline=%proc.cmdline parent=%proc.pname exe=%proc.exepath user=%user.name
-    container=%container.name)
+    session=%proc.env[HIB_SESSION] container=%container.name)
   priority: WARNING
   tags: [coding_agent, hib, mitre_credential_access, T1552.001]
