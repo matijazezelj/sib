@@ -8,7 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
-- `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md)
+- `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md). The real daemon also runs a scripted agent session (HIB 0.2.0's test agent), so denials, a reverted git hook and a changed `~/.bashrc` arrive as real events
+- HIB 0.2.0 events: `home.changed` (an agent turn changed shell startup files or user agent config) raises "HIB critical security event"; spec and docs updated, and the known limits no longer list the home folder as a gap when the agent runs under HIB
+- "HIB running in test mode" alert: `daemon.start` with `script_driver: true` (HIB started with `[testing] script_dir`)
 
 ### Fixed
 - Alloy shipped no HIB events on a host with `alloy_collect_logs: false`: the HIB block and the Loki writer sat inside the host-logs section (found by `make e2e`)

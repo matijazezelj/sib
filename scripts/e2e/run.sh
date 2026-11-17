@@ -11,8 +11,10 @@
 # or Telegram).
 #
 # Three simulated hosts, one collector each:
-#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib): heartbeats, wrong-
-#                token requests, clean stops, a refused events.key
+#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib; 0.2.0 or later):
+#                heartbeats, wrong-token requests, a scripted agent session
+#                (HIB's test agent: denials, a reverted git hook, a changed
+#                ~/.bashrc), clean stops, a refused events.key
 #   e2e-replay   recorded HIB events: protected.reverted, a denial burst,
 #                sandbox.unavailable, heartbeats that stopped 20 minutes ago
 #   e2e-stopped  recorded heartbeats followed by a clean daemon.stop
@@ -107,10 +109,15 @@ E2E_HIB=1
 if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>&1); then
     step "Real HIB daemon ($HIB_DIR) -> e2e-hib"
     HH="$E2E_DIR/hibhome"; mkdir -m 700 -p "$HH"
-    hib_config() { printf '[events]\ndir = "%s"\nheartbeat_sec = 5\n%s' "$E2E_DIR/hosts/e2e-hib" "$1" > "$HH/config.toml"; }
+    # A throwaway home folder: HIB's home watch and the scripted agent's
+    # ~/.bashrc write land there, never in the real one.
+    UH="$E2E_DIR/userhome"; mkdir -m 700 -p "$UH"
+    # bun's own path, found from HIB's folder (where a version manager such as
+    # mise picks its version), so the daemon can run with the throwaway HOME.
+    BUN="$(cd "$HIB_DIR" && bun -e 'console.log(process.execPath)')"
+    hib_config() { printf '%s\n[events]\ndir = "%s"\nheartbeat_sec = 5\n%s' "${2:-}" "$E2E_DIR/hosts/e2e-hib" "$1" > "$HH/config.toml"; }
     hib_start() {
-        # From HIB's folder: a version manager (mise, asdf) picks bun's version there.
-        (cd "$HIB_DIR" && exec env HIB_HOME="$HH" bun src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
+        (cd "$HIB_DIR" && exec env HOME="$UH" HIB_HOME="$HH" "$BUN" src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
         HIB_PID=$!
         for _ in $(seq 60); do
             [ -s "$HH/token" ] && curl -sf -o /dev/null -H "Authorization: Bearer $(cat "$HH/token")" \
@@ -128,9 +135,17 @@ if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>
     hib_config ""; hib_start; sleep 11
     for _ in $(seq 8); do curl -s -o /dev/null -H "Authorization: Bearer wrong" "http://127.0.0.1:$HIB_PORT/hib/info"; done
     hib_stop
-    # Run 2: the siem profile creates events.key. Run 3: the key readable by
-    # others is refused (events.key_refused), then a clean stop.
-    hib_config "$(printf 'profile = "siem"\n')"; hib_start; hib_stop
+    # Run 2: the siem profile (it creates events.key) and HIB's scripted test
+    # agent ([testing] script_dir; daemon.start says script_driver: true). One
+    # agent turn through HIB's real permission, protected-file and home checks.
+    WS="$E2E_DIR/workspace"; mkdir -p "$WS"; git -C "$WS" init -q
+    hib_config "$(printf 'profile = "siem"\n')" "$(printf '[testing]\nscript_dir = "%s"\n' "$E2E_DIR/hib-scripts")"
+    mkdir -p "$E2E_DIR/hib-scripts"; hib_start
+    python3 "$ROOT/scripts/e2e/e2e.py" session "$HIB_PORT" "$HH/token" "$E2E_DIR/hib-scripts" "$WS"
+    hib_stop
+    # Run 3: the key readable by others is refused (events.key_refused), then a
+    # clean stop.
+    hib_config "$(printf 'profile = "siem"\n')"
     chmod 644 "$HH/events.key"
     hib_start; sleep 2; hib_stop
     echo "  $(wc -l < "$E2E_DIR/hosts/e2e-hib/events.jsonl") events written"

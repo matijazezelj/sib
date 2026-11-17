@@ -701,6 +701,51 @@ groups:
       severity: warning
       source: sib
     isPaused: false
+  - uid: sib-hib-test-mode
+    title: HIB running in test mode
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 86400
+        to: 0
+      datasourceUid: victorialogs
+      model:
+        expr: 'source:hib event:daemon.start script_driver:true | stats by (hostname) count()'
+        queryType: stats
+        datasource:
+          type: victoriametrics-logs-datasource
+          uid: victorialogs
+        refId: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        datasource:
+          type: __expr__
+          uid: __expr__
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    annotations:
+      summary: HIB on {{ $labels.hostname }} runs its scripted test agent
+      description: HIB started with [testing] script_dir set (daemon.start with script_driver true), so a message
+        naming hib-script:<name> replays scripted tool calls instead of running an agent. That belongs on test
+        machines only. Remove [testing] from ~/.hib/config.toml and restart HIB, or silence this alert for hosts
+        that run SIB's or HIB's acceptance tests. The alert stays up for 24 hours after the start.
+    labels:
+      severity: warning
+      source: sib
+    isPaused: false
   - uid: sib-hib-not-running
     title: HIB daemon not running
     condition: C

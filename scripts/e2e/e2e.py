@@ -2,11 +2,13 @@
 """SIB end-to-end test helpers (stdlib only), driven by scripts/e2e/run.sh.
 
   e2e.py replay <dir> <host>          write recorded HIB events for a simulated host
+  e2e.py session <port> <token file> <script dir> <workspace>
+                                      run one scripted agent turn on a HIB daemon
   e2e.py check <stack> <e2e dir>      verify storage, then Grafana's alert states
 
 Hosts:
-  e2e-hib      a real HIB daemon (run.sh): heartbeats, auth failures, clean stops,
-               a refused hash key
+  e2e-hib      a real HIB daemon (run.sh): heartbeats, auth failures, a scripted
+               agent session, clean stops, a refused hash key
   e2e-replay   recorded events: protected.reverted, a denial burst,
                sandbox.unavailable, heartbeats that stopped 20 minutes ago
   e2e-stopped  recorded events: heartbeats then a clean daemon.stop, long enough
@@ -25,12 +27,17 @@ HOSTS = ["e2e-hib", "e2e-replay", "e2e-stopped"]
 # Expected state per HIB rule and host: True = firing, False = silent.
 # e2e-hib's sandbox row is filled in from its own daemon.start line.
 EXPECT = {
-    "sib-hib-critical":            {"e2e-hib": False, "e2e-replay": True,  "e2e-stopped": False},
+    "sib-hib-critical":            {"e2e-hib": True,  "e2e-replay": True,  "e2e-stopped": False},
     "sib-hib-auth-failures":       {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
-    "sib-hib-denials":             {"e2e-hib": False, "e2e-replay": True,  "e2e-stopped": False},
+    "sib-hib-denials":             {"e2e-hib": True,  "e2e-replay": True,  "e2e-stopped": False},
     "sib-hib-sandbox-unavailable": {"e2e-hib": None,  "e2e-replay": True,  "e2e-stopped": False},
     "sib-hib-not-running":         {"e2e-hib": False, "e2e-replay": True,  "e2e-stopped": False},
     "sib-hib-events-key-refused":  {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
+    "sib-hib-test-mode":           {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
+}
+# For rules grouped by event: the events each must fire for, per host.
+EXPECT_EVENTS = {
+    ("sib-hib-critical", "e2e-hib"): {"protected.reverted", "home.changed"},
 }
 # Every rule must fire for at least one host: Grafana's VictoriaLogs plugin
 # reports a failing query as "no data" with the rule healthy, so a rule that is
@@ -39,7 +46,8 @@ assert all(any(v) for v in EXPECT.values())
 
 # Which events prove each rule's input reached storage, per host.
 NEEDS = {
-    "e2e-hib": ["daemon.start", "daemon.alive", "auth.failure", "daemon.stop", "events.key_refused"],
+    "e2e-hib": ["daemon.start", "daemon.alive", "auth.failure", "daemon.stop", "events.key_refused",
+                "session.start", "tool.permission", "sandbox.network", "protected.reverted", "home.changed"],
     "e2e-replay": ["daemon.alive", "protected.reverted", "tool.permission", "sandbox.unavailable"],
     "e2e-stopped": ["daemon.alive", "daemon.stop"],
 }
@@ -86,6 +94,63 @@ def cmd_replay(directory, host):
         for e in replay_events(host):
             f.write(json.dumps(e, separators=(",", ":")) + "\n")
     os.chmod(path, 0o600)
+
+
+# --- a scripted agent turn on a real HIB daemon --------------------------------
+
+# Steps for HIB's scripted test agent (HIB 0.2.0+, [testing] script_dir). Every
+# command and the network request are denied: six denials make the burst alert
+# fire. The two writes go past HIB's permission prompt, like a swapped symlink.
+SCRIPT = [
+    {"say": "SIB end-to-end test"},
+    {"edit": "notes.md", "content": "e2e\n"},
+    *[{"command": f"cat data-{i}.csv"} for i in range(6)],
+    {"network": "exfil.example.com"},
+    {"fetch": "https://example.com/e2e"},
+    {"write": ".git/hooks/pre-commit", "content": "#!/bin/sh\necho e2e\n"},
+    {"write": "~/.bashrc", "content": "# e2e\n"},
+]
+
+
+def cmd_session(port, token_file, script_dir, root):
+    token = open(token_file).read().strip()
+    base = f"http://127.0.0.1:{port}"
+
+    def call(path, body=None, timeout=15):
+        req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode())
+        req.add_header("Authorization", f"Bearer {token}")
+        if body is not None:
+            req.add_header("Content-Type", "application/json")
+        return urllib.request.urlopen(req, timeout=timeout)
+
+    with open(os.path.join(script_dir, "e2e.json"), "w") as f:
+        json.dump(SCRIPT, f)
+    root = json.load(call("/hib/workspaces", {"root": root}))["root"]
+    q = "?root=" + urllib.parse.quote(root)
+    started = json.load(call("/ws/turn" + q, {"model": "script/replay", "text": "hib-script:e2e"}))
+    if "sessionId" not in started:
+        raise SystemExit(f"HIB refused the turn: {started}")
+    sid = started["sessionId"]
+    answered = {}
+    with call(f"/ws/sessions/{sid}/stream" + q, timeout=60) as stream:
+        for raw in stream:
+            line = raw.decode().rstrip("\n")
+            if not line.startswith("data: "):
+                continue
+            e = json.loads(line[6:])
+            if e.get("type") == "error":
+                raise SystemExit(f"scripted turn failed: {e.get('message')}")
+            if e.get("type") == "permission":
+                name = e["call"]["name"]
+                choice = "deny" if name in ("Bash", "SandboxNetworkAccess") else "allow"
+                call("/ws/permission" + q, {"sessionId": sid, "id": e["id"], "choice": choice}).read()
+                answered[name] = answered.get(name, 0) + 1
+            if e.get("type") == "turn_end":
+                break
+    want = {"Write": 1, "Bash": 6, "SandboxNetworkAccess": 1, "WebFetch": 1}
+    if answered != want:
+        raise SystemExit(f"scripted turn asked {answered}, expected {want}")
+    print(f"  scripted session {sid}: {sum(answered.values())} prompts answered")
 
 
 # --- checks ------------------------------------------------------------------
@@ -142,6 +207,13 @@ def cmd_check(stack, d):
         print(f"  {host:12} {len(file_events(d, host)):3} lines" + (f"  MISSING {missing}" if missing else ""))
         if missing:
             failures.append(f"{host}: not written: {missing}")
+    if hib_real:
+        starts = [e for e in file_events(d, "e2e-hib") if e["event"] == "daemon.start"]
+        if not any(e.get("script_driver") is True for e in starts):
+            failures.append("e2e-hib: no daemon.start with script_driver true (HIB older than 0.2.0?)")
+        home = [e for e in file_events(d, "e2e-hib") if e["event"] == "home.changed"]
+        if home and not any(c.get("path") == "~/.bashrc" for e in home for c in e.get("changes", [])):
+            failures.append(f"e2e-hib: home.changed doesn't name ~/.bashrc: {home}")
     if failures:
         return finish(failures)
 
@@ -203,9 +275,16 @@ def cmd_check(stack, d):
             got = host in r["firing"]
             src = "real HIB" if host == "e2e-hib" else "recorded"
             ok = got == want
+            want_events = EXPECT_EVENTS.get((uid, host))
+            if ok and got and want_events:
+                fired = r["events"].get(host, set())
+                if not want_events <= fired:
+                    ok = False
+                    failures.append(f"{uid} on {host}: fires for {sorted(fired)}, expected {sorted(want_events)}")
             print(f"  {'PASS' if ok else 'FAIL'} {uid:30} {host:12} {'fires' if got else 'silent':6}"
-                  f" (expected {'fires' if want else 'silent'}; {src} events)")
-            if not ok:
+                  f" (expected {'fires' if want else 'silent'}; {src} events"
+                  + (f": {', '.join(sorted(want_events))}" if want_events else "") + ")")
+            if got != want:
                 why = " (the query returned no data: broken query, or nothing matched)" if r["nodata"] else ""
                 failures.append(f"{uid} on {host}: {'fires' if got else 'silent'}, expected the opposite{why}")
     return finish(failures)
@@ -232,12 +311,17 @@ def grafana_rules(port, auth, titles):
             if not uid:
                 continue
             alerts = rule.get("alerts") or []
-            firing = {a["labels"].get("hostname") for a in alerts
-                      if a.get("state", "").lower() in ("alerting", "firing")}
+            live = [a for a in alerts if a.get("state", "").lower() in ("alerting", "firing")]
+            firing = {a["labels"].get("hostname") for a in live}
+            events = {}
+            for a in live:
+                if "event" in a["labels"]:
+                    events.setdefault(a["labels"].get("hostname"), set()).add(a["labels"]["event"])
             nodata = any("nodata" in a.get("state", "").lower().replace(" ", "") for a in alerts)
             last = rule.get("lastEvaluation") or "1970-01-01T00:00:00Z"
             out[uid] = {"health": rule.get("health"), "error": rule.get("lastError", ""),
                         "evaluated": 0 if last.startswith("0001") else rfc3339(last), "firing": firing,
+                        "events": events,
                         "nodata": nodata}
     return out
 
@@ -255,6 +339,8 @@ def finish(failures):
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "replay":
         cmd_replay(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 6 and sys.argv[1] == "session":
+        cmd_session(*sys.argv[2:])
     elif len(sys.argv) == 4 and sys.argv[1] == "check":
         sys.exit(cmd_check(sys.argv[2], sys.argv[3]))
     else:
