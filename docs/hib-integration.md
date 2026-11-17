@@ -48,12 +48,19 @@ file through `/proc/self/fd/<n>/<name>`, which Falco reports as is. So these
 rules see where the agent's *children* write (a shell, `sed -i`, `mv`, `ln`,
 `git`) but not where the CLI itself writes: a hook or `~/.bashrc` written by
 the Write tool doesn't alert. (Its reads use real paths and are covered.) When
-the agent runs under HIB, HIB's `protected.reverted` event covers the CLI
-changing the workspace's git hooks and git config, its `.claude/`, `.codex/`
-and `.hib/` folders and `.mcp.json` (HIB snapshots them around each agent turn
-and puts back unapproved changes). Nothing outside the workspace is covered:
-shell startup files and `~/.claude`/`~/.codex` settings written by the CLI
-itself remain a gap.
+the agent runs under HIB, HIB covers what the CLI writes after each agent turn:
+
+- `protected.reverted`: the workspace's git hooks and git config, its
+  `.claude/`, `.codex/` and `.hib/` folders and `.mcp.json`. Unapproved
+  changes are put back.
+- `home.changed` (HIB 0.2.0+): shell startup files, Claude and Codex settings,
+  instructions, hooks, agents, commands and skills in `~/.claude`, `~/.codex`
+  and each account's config folder, `~/.gitconfig`, ssh config,
+  `authorized_keys` and `rc`, autostart entries and systemd user units. These
+  are reported, never put back.
+
+Both compare snapshots around a turn, so a file changed and restored within
+one turn goes unseen, and an agent outside HIB isn't covered at all.
 
 The exemptions for a store's own tool match on the process name, so a binary
 renamed to `gh` would be exempt too.
@@ -106,7 +113,9 @@ rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 ## 2. HIB's security event log
 
 HIB writes JSON lines to `~/.hib/events/` (format:
-[HIB security event log](hib-events-spec.md)). On a fleet host that runs HIB,
+[HIB security event log](hib-events-spec.md)). Use HIB 0.2.0 or later: older
+versions don't write `home.changed`, so shell startup files and the user's agent
+config changed by the CLI go unreported. On a fleet host that runs HIB,
 point the collector at that directory:
 
 ```yaml
@@ -152,11 +161,12 @@ starts on a host where HIB has been running for a while, the older history in
 
 | Rule | Fires when | Severity |
 |------|------------|----------|
-| HIB critical security event | any `critical` HIB event in 10 minutes (`protected.reverted`: an agent changed git hooks or agent config without approval) | critical |
+| HIB critical security event | any `critical` HIB event in 10 minutes: `protected.reverted` (an agent changed the workspace's git hooks or agent config without approval; put back) or `home.changed` (an agent turn changed a shell startup file or the user's agent config without approval; reported only) | critical |
 | HIB authentication failures | more than 5 failed requests in 15 minutes (sum of the events' `count`; HIB aggregates repeats within 60 s into one line) | warning |
 | HIB agent denials burst | more than 5 denied tool calls or blocked data reads in 15 minutes (a denied network request is a denied tool call too; `sandbox.network` isn't counted again) | warning |
 | HIB sandbox unavailable | `sandbox.unavailable` in the last hour | warning |
 | HIB event hash key refused | `events.key_refused` in the last 24 hours: HIB drops session, tool, guard and data events until the key is fixed and HIB restarted (it reports this once per run, hence the long window) | warning |
+| HIB running in test mode | `daemon.start` with `script_driver: true` in the last 24 hours: HIB was started with `[testing] script_dir`, its scripted agent for acceptance tests. Silence it for test hosts | warning |
 | HIB daemon not running | HIB's last heartbeat (`daemon.alive`, every 5 min) or `daemon.start` in the last 24 hours is more than 15 minutes old, and no clean `daemon.stop` came after it: a crash, a kill, or events no longer reaching SIB | warning |
 
 They stay quiet on hosts without HIB. `guard.decision` is written for every
@@ -184,23 +194,29 @@ datasources, and the collector configs rendered from the Ansible templates. A
 running SIB install isn't touched and `.env` isn't read, so no test alert can
 reach a real Slack or Telegram. It simulates three hosts:
 
-- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; needs bun)
-  with 5-second heartbeats, requests with a wrong token, clean stops and a
-  refused `events.key`.
-- **`e2e-replay`:** recorded HIB events for what needs an agent session:
-  `protected.reverted`, a burst of denials, `sandbox.unavailable`, and
-  heartbeats that stopped 20 minutes ago.
+- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; HIB 0.2.0 or
+  later and bun) with 5-second heartbeats, requests with a wrong token, clean
+  stops and a refused `events.key`. One run uses the `siem` profile and HIB's
+  scripted test agent: an agent turn whose six commands and one network request
+  are denied, which adds a git hook (put back) and changes `~/.bashrc` in a
+  throwaway home folder. These are real `session.*`, `tool.permission`,
+  `sandbox.network`, `protected.reverted` and `home.changed` events; no agent
+  CLI runs and no command is executed.
+- **`e2e-replay`:** recorded HIB events, so the session alerts are also checked
+  without HIB: `protected.reverted`, a burst of denials, `sandbox.unavailable`,
+  and heartbeats that stopped 20 minutes ago.
 - **`e2e-stopped`:** heartbeats followed by a clean `daemon.stop`.
 
 It then checks, in order: the events were written; they reached storage under
 the right `hostname`; and every HIB alert rule is healthy, has evaluated since
-the data arrived, and fires for exactly the expected hosts (18 checks per
-stack). `KEEP=1 make e2e` leaves the stack up for a look (Grafana's address and
+the data arrived, and fires for exactly the expected hosts (21 checks per
+stack); the critical-event alert must fire for both `protected.reverted` and
+`home.changed`. `KEEP=1 make e2e` leaves the stack up for a look (Grafana's address and
 password are printed); remove it with `docker compose -p sib-e2e down -v`.
 
 Not covered yet: Falco through Falcosidekick into storage (the Falco rules have
-their own test, `scripts/test-coding-agent-rules.sh`), and HIB's agent-session
-events from a real session; they are replayed.
+their own test, `scripts/test-coding-agent-rules.sh`), `data.block` (it needs a
+sensitive workspace), and events from a real agent CLI.
 
 ## Privacy of the event log
 
@@ -247,6 +263,13 @@ restart HIB.
 - **protected.reverted:** the event's `changes` list shows what the agent tried
   to change. A new git hook or `.mcp.json` entry is a persistence attempt;
   check the session that produced it in HIB.
+- **home.changed:** `changes` lists each file (`~/.bashrc`,
+  `[CLI home]/settings.json`, …) with `added`, `changed` or `removed` and
+  whether you approved that edit. HIB didn't undo it: look at the file now. A
+  change you made yourself in another session during the turn (e.g. `/model`
+  rewriting `~/.claude/settings.json`) shows up here too.
+- **Test mode:** a production host has `[testing]` in `~/.hib/config.toml`;
+  remove it and restart HIB.
 - **Credential reads (Falco):** the `cmdline` and ancestors show which agent
   command did it. HIB's own logs for that session show whether a human approved
   the command.
