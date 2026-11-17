@@ -11,10 +11,11 @@
 # or Telegram).
 #
 # Three simulated hosts, one collector each:
-#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib; 0.2.0 or later):
+#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib; 0.3.0 or later):
 #                heartbeats, wrong-token requests, a scripted agent session
 #                (HIB's test agent: denials, a reverted git hook, a changed
-#                ~/.bashrc), clean stops, a refused events.key
+#                ~/.bashrc; ~/.claude/settings.json changed twice: model
+#                only, then a hook), clean stops, a refused events.key
 #   e2e-replay   recorded HIB events: protected.reverted, a denial burst,
 #                sandbox.unavailable, heartbeats that stopped 20 minutes ago
 #   e2e-stopped  recorded heartbeats followed by a clean daemon.stop
@@ -117,7 +118,7 @@ if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>
     BUN="$(cd "$HIB_DIR" && bun -e 'console.log(process.execPath)')"
     hib_config() { printf '%s\n[events]\ndir = "%s"\nheartbeat_sec = 5\n%s' "${2:-}" "$E2E_DIR/hosts/e2e-hib" "$1" > "$HH/config.toml"; }
     hib_start() {
-        (cd "$HIB_DIR" && exec env HOME="$UH" HIB_HOME="$HH" "$BUN" src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
+        (cd "$HIB_DIR" && exec env -u CLAUDE_CONFIG_DIR -u CODEX_HOME HOME="$UH" HIB_HOME="$HH" "$BUN" src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
         HIB_PID=$!
         for _ in $(seq 60); do
             [ -s "$HH/token" ] && curl -sf -o /dev/null -H "Authorization: Bearer $(cat "$HH/token")" \
@@ -141,7 +142,7 @@ if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>
     WS="$E2E_DIR/workspace"; mkdir -p "$WS"; git -C "$WS" init -q
     hib_config "$(printf 'profile = "siem"\n')" "$(printf '[testing]\nscript_dir = "%s"\n' "$E2E_DIR/hib-scripts")"
     mkdir -p "$E2E_DIR/hib-scripts"; hib_start
-    python3 "$ROOT/scripts/e2e/e2e.py" session "$HIB_PORT" "$HH/token" "$E2E_DIR/hib-scripts" "$WS"
+    python3 "$ROOT/scripts/e2e/e2e.py" session "$HIB_PORT" "$HH/token" "$E2E_DIR/hib-scripts" "$WS" "$UH"
     hib_stop
     # Run 3: the key readable by others is refused (events.key_refused), then a
     # clean stop.
