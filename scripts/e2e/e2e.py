@@ -2,8 +2,8 @@
 """SIB end-to-end test helpers (stdlib only), driven by scripts/e2e/run.sh.
 
   e2e.py replay <dir> <host>          write recorded HIB events for a simulated host
-  e2e.py session <port> <token file> <script dir> <workspace>
-                                      run one scripted agent turn on a HIB daemon
+  e2e.py session <port> <token file> <script dir> <workspace> <home>
+                                      run scripted agent turns on a HIB daemon
   e2e.py check <stack> <e2e dir>      verify storage, then Grafana's alert states
 
 Hosts:
@@ -98,21 +98,31 @@ def cmd_replay(directory, host):
 
 # --- a scripted agent turn on a real HIB daemon --------------------------------
 
-# Steps for HIB's scripted test agent (HIB 0.2.0+, [testing] script_dir). Every
-# command and the network request are denied: six denials make the burst alert
-# fire. The two writes go past HIB's permission prompt, like a swapped symlink.
-SCRIPT = [
-    {"say": "SIB end-to-end test"},
-    {"edit": "notes.md", "content": "e2e\n"},
-    *[{"command": f"cat data-{i}.csv"} for i in range(6)],
-    {"network": "exfil.example.com"},
-    {"fetch": "https://example.com/e2e"},
-    {"write": ".git/hooks/pre-commit", "content": "#!/bin/sh\necho e2e\n"},
-    {"write": "~/.bashrc", "content": "# e2e\n"},
-]
+# Turns for HIB's scripted test agent (HIB 0.3.0+, [testing] script_dir), one
+# turn per script, in order. In "e2e" every command and the network request
+# are denied: six denials make the burst alert fire. The writes go past HIB's
+# permission prompt, like a swapped symlink. "model" and "hook" rewrite
+# ~/.claude/settings.json (created before them as SETTINGS): a model change
+# only is a prefs_only warning, a hook added is critical.
+SETTINGS = {"model": "opus", "permissions": {"allow": []}}
+SCRIPTS = {
+    "e2e": [
+        {"say": "SIB end-to-end test"},
+        {"edit": "notes.md", "content": "e2e\n"},
+        *[{"command": f"cat data-{i}.csv"} for i in range(6)],
+        {"network": "exfil.example.com"},
+        {"fetch": "https://example.com/e2e"},
+        {"write": ".git/hooks/pre-commit", "content": "#!/bin/sh\necho e2e\n"},
+        {"write": "~/.bashrc", "content": "# e2e\n"},
+    ],
+    "model": [{"write": "~/.claude/settings.json", "content": json.dumps({**SETTINGS, "model": "haiku"})}],
+    "hook": [{"write": "~/.claude/settings.json", "content": json.dumps(
+        {**SETTINGS, "model": "haiku", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo e2e"}]}]}})}],
+}
+PROMPTS = {"e2e": {"Write": 1, "Bash": 6, "SandboxNetworkAccess": 1, "WebFetch": 1}, "model": {}, "hook": {}}
 
 
-def cmd_session(port, token_file, script_dir, root):
+def cmd_session(port, token_file, script_dir, root, home):
     token = open(token_file).read().strip()
     base = f"http://127.0.0.1:{port}"
 
@@ -123,11 +133,20 @@ def cmd_session(port, token_file, script_dir, root):
             req.add_header("Content-Type", "application/json")
         return urllib.request.urlopen(req, timeout=timeout)
 
-    with open(os.path.join(script_dir, "e2e.json"), "w") as f:
-        json.dump(SCRIPT, f)
+    for name, steps in SCRIPTS.items():
+        with open(os.path.join(script_dir, f"{name}.json"), "w") as f:
+            json.dump(steps, f)
+    os.makedirs(os.path.join(home, ".claude"), exist_ok=True)
+    with open(os.path.join(home, ".claude", "settings.json"), "w") as f:
+        json.dump(SETTINGS, f)
     root = json.load(call("/hib/workspaces", {"root": root}))["root"]
+    for name in SCRIPTS:
+        turn(call, root, name)
+
+
+def turn(call, root, name):
     q = "?root=" + urllib.parse.quote(root)
-    started = json.load(call("/ws/turn" + q, {"model": "script/replay", "text": "hib-script:e2e"}))
+    started = json.load(call("/ws/turn" + q, {"model": "script/replay", "text": f"hib-script:{name}"}))
     if "sessionId" not in started:
         raise SystemExit(f"HIB refused the turn: {started}")
     sid = started["sessionId"]
@@ -141,16 +160,15 @@ def cmd_session(port, token_file, script_dir, root):
             if e.get("type") == "error":
                 raise SystemExit(f"scripted turn failed: {e.get('message')}")
             if e.get("type") == "permission":
-                name = e["call"]["name"]
-                choice = "deny" if name in ("Bash", "SandboxNetworkAccess") else "allow"
+                tool = e["call"]["name"]
+                choice = "deny" if tool in ("Bash", "SandboxNetworkAccess") else "allow"
                 call("/ws/permission" + q, {"sessionId": sid, "id": e["id"], "choice": choice}).read()
-                answered[name] = answered.get(name, 0) + 1
+                answered[tool] = answered.get(tool, 0) + 1
             if e.get("type") == "turn_end":
                 break
-    want = {"Write": 1, "Bash": 6, "SandboxNetworkAccess": 1, "WebFetch": 1}
-    if answered != want:
-        raise SystemExit(f"scripted turn asked {answered}, expected {want}")
-    print(f"  scripted session {sid}: {sum(answered.values())} prompts answered")
+    if answered != PROMPTS[name]:
+        raise SystemExit(f"scripted turn {name} asked {answered}, expected {PROMPTS[name]}")
+    print(f"  scripted turn {name} (session {sid}): {sum(answered.values())} prompts answered")
 
 
 # --- checks ------------------------------------------------------------------
@@ -211,9 +229,22 @@ def cmd_check(stack, d):
         starts = [e for e in file_events(d, "e2e-hib") if e["event"] == "daemon.start"]
         if not any(e.get("script_driver") is True for e in starts):
             failures.append("e2e-hib: no daemon.start with script_driver true (HIB older than 0.2.0?)")
-        home = [e for e in file_events(d, "e2e-hib") if e["event"] == "home.changed"]
-        if home and not any(c.get("path") == "~/.bashrc" for e in home for c in e.get("changes", [])):
-            failures.append(f"e2e-hib: home.changed doesn't name ~/.bashrc: {home}")
+        def version(e):
+            try:
+                return tuple(int(x) for x in e.get("hib_version", "0").split("+")[0].split("."))
+            except ValueError:
+                return (0,)
+        if not any(version(e) >= (0, 3, 0) for e in starts):
+            failures.append("e2e-hib: HIB older than 0.3.0 (prefs_only); update HIB_DIR")
+        # home.changed per turn: ~/.bashrc critical, a model-only settings.json
+        # change a prefs_only warning, a hook added to it critical.
+        home = [(e["severity"], [(c.get("path"), c.get("prefs_only", False)) for c in e.get("changes", [])])
+                for e in file_events(d, "e2e-hib") if e["event"] == "home.changed"]
+        want = [("critical", [("~/.bashrc", False)]),
+                ("warning", [("~/.claude/settings.json", True)]),
+                ("critical", [("~/.claude/settings.json", False)])]
+        if home != want:
+            failures.append(f"e2e-hib: home.changed {home}, expected {want}")
     if failures:
         return finish(failures)
 
@@ -339,7 +370,7 @@ def finish(failures):
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "replay":
         cmd_replay(sys.argv[2], sys.argv[3])
-    elif len(sys.argv) == 6 and sys.argv[1] == "session":
+    elif len(sys.argv) == 7 and sys.argv[1] == "session":
         cmd_session(*sys.argv[2:])
     elif len(sys.argv) == 4 and sys.argv[1] == "check":
         sys.exit(cmd_check(sys.argv[2], sys.argv[3]))

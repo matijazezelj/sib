@@ -115,12 +115,13 @@ bad key shows up right after `daemon.start`.
 | `sandbox.unavailable` | warning | sandbox probe failed, auto mode disabled | `reason` |
 | `events.key_refused` | warning | the hash key (`[events]` setting `"hash"`) is unusable; at most once per daemon run, mode `daemon`, no `workspace`/`account`. Events carrying those fields are dropped until the key is fixed and the daemon restarted | `reason` (`symlink`, `not_regular`, `not_owner`, `mode`, `format`, `unreadable`); never the path |
 | `protected.reverted` | critical | unapproved changes to git hooks/config or agent config were put back | `changes` (array of `{path, change}`), `failed` (paths that could not be reverted) |
-| `home.changed` | critical, or warning when every change was an edit the user approved | an agent turn changed files outside the workspace that steer later sessions: shell startup files, Claude/Codex settings, instructions, hooks, agents, commands and skills, `~/.gitconfig`, ssh config, `authorized_keys`/`rc`, autostart entries, systemd user units (HIB 0.2.0+). Reported, never put back | `changes` (array of `{path, change, approved}`; `change` is `added`, `changed` or `removed`; `path` is `~/…` or `[CLI home]/…` for a Claude/Codex config folder, `(link target)` appended when a symlink's target changed) |
+| `home.changed` | critical, or warning when every change was approved or `prefs_only` | an agent turn changed files outside the workspace that steer later sessions: shell startup files, Claude/Codex settings, instructions, hooks, agents, commands and skills, `~/.gitconfig`, ssh config, `authorized_keys`/`rc`, autostart entries, systemd user units (HIB 0.2.0+). Reported, never put back | `changes` (array of `{path, change, approved, prefs_only?}`; `change` is `added`, `changed` or `removed`; `path` is `~/…` or `[CLI home]/…` for a Claude/Codex config folder, `(link target)` appended when a symlink's target changed; `prefs_only: true` (HIB 0.3.0+) when a CLI settings file changed only in preference keys: `model`, `advisorModel`, `theme`, `tui`, `agentPushNotifEnabled` in Claude's `settings.json`/`settings.local.json`, `model`, `model_reasoning_effort` in Codex's `config.toml`. Any other key (`hooks`, `permissions`, `env`, MCP servers, …), a new, removed or unparseable file stays critical) |
 | `terminal.open` | warning | browser terminal session started | `workspace` |
 | `session.start` / `session.end` | info | agent session starts/ends | `agent` (`claude`, `codex`), `sensitive` (bool) |
 
-HIB 0.2.0 is the first version with `home.changed` and `script_driver`;
-the `hib_version` field says which version wrote a line.
+HIB 0.2.0 is the first version with `home.changed` and `script_driver`, 0.3.0
+the first with `prefs_only`; the `hib_version` field says which version wrote a
+line.
 
 Unknown event types must be tolerated by consumers; new optional fields can be
 added without bumping `schema`.

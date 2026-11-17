@@ -10,8 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md). The real daemon also runs a scripted agent session (HIB 0.2.0's test agent), so denials, a reverted git hook and a changed `~/.bashrc` arrive as real events
 - HIB 0.2.0 events: `home.changed` (an agent turn changed shell startup files or user agent config) raises "HIB critical security event"; spec and docs updated, and the known limits no longer list the home folder as a gap when the agent runs under HIB
+- HIB 0.3.0: `home.changed`'s `prefs_only` (a settings change limited to preference keys such as `model` is a warning, not critical) in the spec and docs; `make e2e` checks a model-only change (warning) and a hook added (critical), and needs HIB 0.3.0
 - "HIB running in test mode" alert: `daemon.start` with `script_driver: true` (HIB started with `[testing] script_dir`)
-
 - Coding agent Falco rules: a process carrying HIB's `HIB_SESSION` variable counts as agent activity (best effort: Falco reads only the first 4 KB of the environment; HIB's minimal CLI environment keeps it in range, a heavy shell rc or `env -i` doesn't), and every alert names the HIB session (`session=`). The runtime test has 29 cases, including a CLI under another name, a detached writer and the 4 KB limit
 
 ### Fixed

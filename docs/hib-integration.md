@@ -128,9 +128,10 @@ rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 ## 2. HIB's security event log
 
 HIB writes JSON lines to `~/.hib/events/` (format:
-[HIB security event log](hib-events-spec.md)). Use HIB 0.2.0 or later: older
-versions don't write `home.changed`, so shell startup files and the user's agent
-config changed by the CLI go unreported. On a fleet host that runs HIB,
+[HIB security event log](hib-events-spec.md)). Use HIB 0.3.0 or later: before
+0.2.0 there is no `home.changed`, so shell startup files and the user's agent
+config changed by the CLI go unreported, and before 0.3.0 switching the model
+with `/model` in another session raises a critical alert. On a fleet host that runs HIB,
 point the collector at that directory:
 
 ```yaml
@@ -209,12 +210,13 @@ datasources, and the collector configs rendered from the Ansible templates. A
 running SIB install isn't touched and `.env` isn't read, so no test alert can
 reach a real Slack or Telegram. It simulates three hosts:
 
-- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; HIB 0.2.0 or
+- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; HIB 0.3.0 or
   later and bun) with 5-second heartbeats, requests with a wrong token, clean
   stops and a refused `events.key`. One run uses the `siem` profile and HIB's
   scripted test agent: an agent turn whose six commands and one network request
   are denied, which adds a git hook (put back) and changes `~/.bashrc` in a
-  throwaway home folder. These are real `session.*`, `tool.permission`,
+  throwaway home folder, then two turns that change `~/.claude/settings.json`:
+  the model only (a `prefs_only` warning) and a hook (critical). These are real `session.*`, `tool.permission`,
   `sandbox.network`, `protected.reverted` and `home.changed` events; no agent
   CLI runs and no command is executed.
 - **`e2e-replay`:** recorded HIB events, so the session alerts are also checked
@@ -281,8 +283,11 @@ restart HIB.
 - **home.changed:** `changes` lists each file (`~/.bashrc`,
   `[CLI home]/settings.json`, …) with `added`, `changed` or `removed` and
   whether you approved that edit. HIB didn't undo it: look at the file now. A
-  change you made yourself in another session during the turn (e.g. `/model`
-  rewriting `~/.claude/settings.json`) shows up here too.
+  change you made yourself in another session during the turn shows up here
+  too. From HIB 0.3.0, a CLI settings change that touches only preferences
+  (`/model`, theme) is marked `prefs_only` and logged as a warning, so it
+  doesn't raise the critical alert; a hook, permission or MCP server change
+  still does.
 - **Test mode:** a production host has `[testing]` in `~/.hib/config.toml`;
   remove it and restart HIB.
 - **Credential reads (Falco):** the `cmdline` and ancestors show which agent
