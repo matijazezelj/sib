@@ -67,11 +67,17 @@ download_feed "blocklist_all" "https://lists.blocklist.de/lists/all.txt"
 # CINSscore - CI Army (threat intel)
 download_feed "ci_army" "https://cinsscore.com/list/ci-badguys.txt"
 
+# NetAPI - IPs that attacked its honeypot sensors in the last 48 hours (CC BY 4.0)
+download_feed "netapi_honeypot" "https://netapi.com/api2/?method=compromised&dataset_type=ip&header=0"
+
 echo ""
 echo -e "${CYAN}Combining feeds...${NC}"
 
-# Combine all feeds, extract IPs, remove comments and duplicates
-cat "$INTEL_DIR"/*.txt 2>/dev/null | \
+# Combine all feeds, extract IPs, remove comments and duplicates.
+# awk 1 ends every file with a newline: some feeds end without one (Feodo's
+# "# END n entries", blocklist.de), and plain cat glued the next file's first
+# line onto it, so that address was lost or merged into a bogus entry.
+awk 1 "$INTEL_DIR"/*.txt 2>/dev/null | \
     grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | \
     grep -v '^#' | \
     cut -d' ' -f1 | \

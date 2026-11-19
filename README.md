@@ -836,6 +836,7 @@ make update-threatintel
 | **Spamhaus DROP** | Spam/DDoS | spamhaus.org |
 | **Blocklist.de** | Attack IPs | blocklist.de |
 | **CINSscore** | Bad reputation | cinsscore.com |
+| **NetAPI** | Honeypot attack IPs | netapi.com |
 
 ### Generated Files
 
