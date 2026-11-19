@@ -38,6 +38,7 @@ This downloads feeds, combines them, and generates Falco rules.
 | **Spamhaus DROP** | Hijacked IPs | Don't Route Or Peer list |
 | **Blocklist.de** | Attack IPs | Brute force and attack sources |
 | **CINSscore** | Threat scoring | Collective Intelligence Network Security |
+| **NetAPI** | Attack IPs | Addresses that attacked NetAPI honeypot sensors in the last 48 hours |
 
 ---
 
@@ -54,7 +55,8 @@ threatintel/
 │   ├── spamhaus_drop.txt
 │   ├── blocklist_de_ssh.txt
 │   ├── blocklist_de_all.txt
-│   └── cinsscore.txt
+│   ├── cinsscore.txt
+│   └── netapi_honeypot.txt
 ├── combined_blocklist.txt      # Unified blocklist (deduplicated)
 ├── falco_threatintel_rules.yaml # Generated Falco rules
 └── lookup-ip.sh                # IP lookup utility
@@ -220,6 +222,10 @@ CIDR notation is also supported:
 ### CINSscore
 
 - [CI Army List](https://cinsscore.com/) - Collective intelligence
+
+### NetAPI
+
+- [Compromised IPs](https://netapi.com/compromised-ips/) - Honeypot attack sources, CC BY 4.0
 
 ---
 

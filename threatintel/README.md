@@ -18,6 +18,7 @@ SIB includes threat intelligence feed integration to enrich security events with
 | [Spamhaus DROP](https://www.spamhaus.org/drop/) | Don't Route Or Peer list | Daily |
 | [Blocklist.de](https://www.blocklist.de/) | SSH bruteforce, attacks | Hourly |
 | [CINSscore](https://cinsscore.com/) | CI Army threat intel | Daily |
+| [NetAPI](https://netapi.com/compromised-ips/) | IPs that attacked NetAPI honeypot sensors in the last 48 hours | Hourly |
 
 ## Usage
 
