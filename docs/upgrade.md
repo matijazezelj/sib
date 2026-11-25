@@ -37,6 +37,33 @@ nav_order: 9
 
 ## Version-specific notes
 
+### 0.9.0
+
+**HIB hosts:** upgrade HIB to 0.4.0 or later and turn on session scopes
+(`session_scope = true` under `[events]` in `~/.hib/config.toml`), then
+restart it. Then:
+
+- `make install-grafana`: adds *HIB running in test mode* and *HIB session
+  scope unavailable*; *HIB critical security event* now also covers
+  `home.changed`.
+- `make update-rules` for fleet hosts with `coding_agent_rules.yaml` (or
+  `make install-detection` on the SIB server): the pack now recognises
+  session scopes and `HIB_SESSION`, and its alerts carry `session=` and
+  `cgroups=`.
+
+**Threat intel:** the generated rules never loaded before (they used fields
+Falco doesn't have), so they are effectively new. Rules renamed or changed:
+*Connection to Known Malicious IP* is gone, *Connection to Known C2 Server*
+fires only on the C2 feeds, and inbound hits are NOTICE. To use them, run
+`make update-threatintel`, copy `threatintel/falco_threatintel_rules.yaml` to
+`detection/config/rules/` and enable it in `rules_files` (see
+[Threat Intelligence](threat-intel.md)). The generated files are now
+gitignored.
+
+**Sigma:** if you converted rules that use `SourceIp`, `DestinationIp` or
+`DestinationPort`, run `make convert-sigma` again: they mapped to fields Falco
+doesn't have.
+
 ### 0.8.0: Falco 0.45.2
 
 Falco moves from 0.44.1 to 0.45.2 everywhere (`FALCO_VERSION` in `.env`,

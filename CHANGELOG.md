@@ -7,13 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.9.0] - 2026-11-25
+
+Monitoring coding agents under HIB 0.2–0.4, an end-to-end test of the HIB pipeline, and threat intel rules that work. HIB 0.4.0 or later is recommended, with session scopes on.
+
 ### Added
-- HIB 0.4.0 session scopes: the coding agent Falco rules count a process in a HIB session scope (`thread.cgroups` containing `/hib-w_`) as agent activity, which survives `env -i`, `setsid` and any shell; alerts carry `cgroups=` naming the scope. "HIB session scope unavailable" alert on `scope.unavailable`. Spec: `session_scope`, `scope`, `scope.unavailable`. The runtime test has 33 cases (4 in real transient user scopes); `make e2e` needs HIB 0.4.0 and checks a real `scope.unavailable` (24 checks per stack)
-- `make e2e` (`STACK=vm|grafana`): end-to-end test from HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project, with a real HIB daemon and recorded events (docs/hib-integration.md). The real daemon also runs a scripted agent session (HIB 0.2.0's test agent), so denials, a reverted git hook and a changed `~/.bashrc` arrive as real events
-- HIB 0.2.0 events: `home.changed` (an agent turn changed shell startup files or user agent config) raises "HIB critical security event"; spec and docs updated, and the known limits no longer list the home folder as a gap when the agent runs under HIB
-- HIB 0.3.0: `home.changed`'s `prefs_only` (a settings change limited to preference keys such as `model` is a warning, not critical) in the spec and docs; `make e2e` checks a model-only change (warning) and a hook added (critical), and needs HIB 0.3.0
-- "HIB running in test mode" alert: `daemon.start` with `script_driver: true` (HIB started with `[testing] script_dir`)
-- Coding agent Falco rules: a process carrying HIB's `HIB_SESSION` variable counts as agent activity (best effort: Falco reads only the first 4 KB of the environment; HIB's minimal CLI environment keeps it in range, a heavy shell rc or `env -i` doesn't), and every alert names the HIB session (`session=`). The runtime test has 29 cases, including a CLI under another name, a detached writer and the 4 KB limit
+- HIB events (docs/hib-events-spec.md):
+  - `home.changed` (HIB 0.2.0): an agent turn changed shell startup files or the user's agent config. Raises "HIB critical security event". The known limits no longer list the home folder as a gap when the agent runs under HIB
+  - `prefs_only` (HIB 0.3.0): a settings change limited to preference keys such as `model` is a warning, so `/model` in another session doesn't raise the critical alert
+  - `daemon.start` `script_driver`, `session_scope`; `session.start` `scope`; `scope.unavailable` (HIB 0.2.0–0.4.0)
+- Alerts, both stacks: "HIB running in test mode" (`script_driver: true`) and "HIB session scope unavailable" (`scope.unavailable`)
+- Coding agent Falco rules, two more ways to tie a process to an agent session under HIB:
+  - session scopes (HIB 0.4.0+, `[events] session_scope = true`): a process in a `hib-w_…` systemd user scope counts as agent activity, through `env -i`, `setsid` and any shell. Alerts carry `cgroups=` naming the scope
+  - `HIB_SESSION` (best effort: Falco reads only the first 4 KB of a process's environment). Alerts carry `session=`
+  - the runtime test has 33 cases, 4 of them in real transient user scopes
+- `make e2e` (`STACK=vm|grafana`): HIB's event log through Vector/Alloy and VictoriaLogs/Loki to Grafana's HIB alert rules, in an isolated Docker project. A real HIB daemon (0.4.0+) runs scripted agent turns (denials, a reverted git hook, `~/.bashrc` and `settings.json` changes), a refused hash key and unavailable scopes; recorded events cover the rest. Every HIB rule must fire for exactly the expected hosts (24 checks per stack)
 
 ### Fixed
 - Threat intel rules (`make update-threatintel`) never loaded in Falco: they used `fd.dip`/`fd.dport`, which Falco doesn't have, and an `inbound` macro its default rules no longer define. They now match by direction (`fd.sip`/`fd.cip`, ranges via `fd.snet`/`fd.cnet`) and were checked firing on live connections. "Connection to Known C2 Server" now covers only the C2 feeds; the duplicate "Connection to Known Malicious IP" is gone; inbound hits are NOTICE (mostly scanners)
