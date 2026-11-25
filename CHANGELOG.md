@@ -15,6 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Coding agent Falco rules: a process carrying HIB's `HIB_SESSION` variable counts as agent activity (best effort: Falco reads only the first 4 KB of the environment; HIB's minimal CLI environment keeps it in range, a heavy shell rc or `env -i` doesn't), and every alert names the HIB session (`session=`). The runtime test has 29 cases, including a CLI under another name, a detached writer and the 4 KB limit
 
 ### Fixed
+- Threat intel rules (`make update-threatintel`) never loaded in Falco: they used `fd.dip`/`fd.dport`, which Falco doesn't have, and an `inbound` macro its default rules no longer define. They now match by direction (`fd.sip`/`fd.cip`, ranges via `fd.snet`/`fd.cnet`) and were checked firing on live connections. "Connection to Known C2 Server" now covers only the C2 feeds; the duplicate "Connection to Known Malicious IP" is gone; inbound hits are NOTICE (mostly scanners)
+- Threat intel feeds: the address cap keeps feeds in priority order (C2 first) instead of the first 10,000 of a sorted list; Spamhaus DROP ranges are kept as ranges (were cut to their first address); Feodo's CRLF line ends no longer leave every C2 address unmatchable; feeds without a final newline no longer glue lines together (as found in #37); the combined list no longer reads itself back; only public IPv4 addresses and ranges are kept; a failed download keeps the previous copy instead of stopping the update. Docs: the rules must be copied and enabled in `rules_files` (commented entry added)
+- Sigma converter: `SourceIp`/`DestinationIp`/`DestinationPort` map to `fd.cip`/`fd.sip`/`fd.sport` (were the nonexistent `fd.dip`/`fd.dport`)
 - Alloy shipped no HIB events on a host with `alloy_collect_logs: false`: the HIB block and the Loki writer sat inside the host-logs section (found by `make e2e`)
 
 ---

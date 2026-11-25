@@ -78,3 +78,9 @@ grafana/provisioning/dashboards/loki/events-explorer.json
 
 # Generated scrape config (scripts/generate-scrape-config.sh)
 storage/config/generated/
+
+# Threat intel: downloaded feeds and generated files (make update-threatintel)
+threatintel/feeds/
+threatintel/falco_threatintel_rules.yaml
+threatintel/lookup-ip.sh
+detection/config/rules/falco_threatintel_rules.yaml

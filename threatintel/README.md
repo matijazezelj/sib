@@ -89,14 +89,14 @@ After running `update-feeds.sh`:
 ```
 threatintel/
 ├── feeds/
-│   ├── feodotracker.txt       # Feodo Tracker IPs
-│   ├── sslbl.txt              # SSL Blacklist IPs
+│   ├── feodotracker.txt       # Feodo Tracker IPs (C2)
+│   ├── sslbl.txt              # SSL Blacklist IPs (C2)
 │   ├── et_compromised.txt     # Emerging Threats IPs
-│   ├── spamhaus_drop.txt      # Spamhaus DROP
+│   ├── ci_army.txt            # CINSscore CI Army
+│   ├── spamhaus_drop.txt      # Spamhaus DROP (ranges)
 │   ├── blocklist_ssh.txt      # Blocklist.de SSH
 │   ├── blocklist_all.txt      # Blocklist.de All
-│   ├── ci_army.txt            # CINSscore CI Army
-│   └── combined_blocklist.txt # All feeds combined
+│   └── combined_blocklist.txt # All feeds combined (addresses and ranges)
 ├── falco_threatintel_rules.yaml  # Generated Falco rules
 ├── lookup-ip.sh               # IP lookup script
 └── update-feeds.sh            # Feed updater
@@ -108,11 +108,18 @@ The feed updater generates Falco rules for:
 
 | Rule | Priority | Description |
 |------|----------|-------------|
-| Connection to Threat Intel IP (Outbound) | WARNING | Outbound connections to blocklisted IPs |
-| Connection from Threat Intel IP (Inbound) | WARNING | Inbound connections from blocklisted IPs |
-| Connection to Known C2 Server | ERROR | Connections on common C2 ports |
-| Connection to Crypto Mining Pool | CRITICAL | Connections to mining pool ports |
-| Connection to Known Malicious IP | WARNING | Any outbound connection to an IP in the blocklist |
+| Connection to Known C2 Server | ERROR | Outbound connection to an address from a C2 feed (Feodo Tracker, SSL Blacklist) |
+| Connection to Threat Intel IP (Outbound) | WARNING | Outbound connection to any other blocklisted address or range |
+| Connection from Threat Intel IP (Inbound) | NOTICE | Accepted connection from a blocklisted address or range (mostly scanners: noisy on internet-facing hosts) |
+| Connection to Crypto Mining Pool | CRITICAL | Outbound connection to a common mining pool port |
+
+The lists are `threatintel_ips` (addresses, at most `MAX_THREATINTEL_IPS`,
+default 10000), `threatintel_nets` (ranges such as Spamhaus DROP, at most
+`MAX_THREATINTEL_NETS`, default 2000) and `threatintel_c2_ips`. When the cap
+cuts a list, it keeps the feeds in priority order: the C2 feeds first, then
+Emerging Threats, CINSscore, Spamhaus, blocklist.de. Only public IPv4
+addresses and ranges are kept. The rules are generated, not loaded: see
+[docs/threat-intel.md](../docs/threat-intel.md) for adding them to Falco.
 
 ## CrowdSec Integration (Optional)
 

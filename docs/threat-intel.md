@@ -48,14 +48,14 @@ After running `make update-threatintel`:
 ```
 threatintel/
 ├── feeds/                      # Individual feed downloads
-│   ├── feodo_ipblocklist.txt
-│   ├── sslbl_aggressive.txt
-│   ├── emerging_threats.txt
+│   ├── feodotracker.txt
+│   ├── sslbl.txt
+│   ├── et_compromised.txt
+│   ├── ci_army.txt
 │   ├── spamhaus_drop.txt
-│   ├── blocklist_de_ssh.txt
-│   ├── blocklist_de_all.txt
-│   └── cinsscore.txt
-├── combined_blocklist.txt      # Unified blocklist (deduplicated)
+│   ├── blocklist_ssh.txt
+│   ├── blocklist_all.txt
+│   └── combined_blocklist.txt  # Unified blocklist (deduplicated)
 ├── falco_threatintel_rules.yaml # Generated Falco rules
 └── lookup-ip.sh                # IP lookup utility
 ```
@@ -66,12 +66,27 @@ threatintel/
 
 ### Add to Falco Detection
 
-The `update-feeds.sh` script now auto-populates the `threat_intel_ips` list directly in the Falco rule file — no manual concatenation needed. Just run:
+`make update-threatintel` writes `threatintel/falco_threatintel_rules.yaml`
+with the address lists filled in. Falco doesn't load it until you add it:
 
-```bash
-make update-threatintel
-make restart
-```
+1. Copy it next to SIB's other rule packs:
+   `cp threatintel/falco_threatintel_rules.yaml detection/config/rules/`
+2. Uncomment `/etc/falco/rules/falco_threatintel_rules.yaml` under
+   `rules_files` in `detection/config/falco.yaml.template` (it must come after
+   `falco_rules.yaml`, whose `outbound` macro it uses).
+3. `make install-detection`. `make test-rules` checks that it loads.
+
+For fleet hosts, add `falco_threatintel_rules.yaml` to the host's
+`falco_custom_rules` and run `make update-rules`.
+
+Each update needs the copy again (step 1); Falco reloads a changed rules
+file by itself.
+
+When a list is longer than its cap (`MAX_THREATINTEL_IPS`, default 10000;
+`MAX_THREATINTEL_NETS`, default 2000), the feeds are kept in priority order:
+the C2 feeds first, then Emerging Threats, CINSscore, Spamhaus, blocklist.de.
+Only public IPv4 addresses and ranges are kept; private, loopback, link-local
+and reserved ones in a feed are dropped.
 
 ### Look Up an IP
 
@@ -85,35 +100,52 @@ Output:
 ```
 Checking 1.2.3.4 against threat intel feeds...
 
-[✓] Found in: feodo_ipblocklist.txt
-[✓] Found in: emerging_threats.txt
-[ ] Not in: spamhaus_drop.txt
-[ ] Not in: blocklist_de_all.txt
+  ⚠️  FOUND in feodotracker
+  ⚠️  FOUND in et_compromised
 
-Result: IP 1.2.3.4 is MALICIOUS (found in 2 feeds)
+  🚨 IP is in combined blocklist!
 ```
+
+It matches exact addresses; an address inside a listed range (Spamhaus DROP)
+isn't reported.
 
 ---
 
 ## Generated Falco Rules
 
-The threat intel script generates rules like:
+The threat intel script generates three lists and four rules:
+
+| Rule | Priority | Fires on |
+|------|----------|----------|
+| Connection to Known C2 Server | ERROR | outbound connection to an address from a C2 feed (Feodo Tracker, SSL Blacklist) |
+| Connection to Threat Intel IP (Outbound) | WARNING | outbound connection to any other listed address or range |
+| Connection from Threat Intel IP (Inbound) | NOTICE | an accepted connection from a listed address or range. Most are scanners, so on an internet-facing host this is background noise |
+| Connection to Crypto Mining Pool | CRITICAL | outbound connection to a common mining pool port |
 
 ```yaml
-- list: threat_intel_ips
-  items: [1.2.3.4, 5.6.7.8, ...]
+- list: threatintel_ips
+  items:
+    - "1.2.3.4"
+- list: threatintel_nets
+  items:
+    - "1.10.16.0/20"
 
-- rule: Connection to Threat Intel IP
-  desc: Outbound connection to known malicious IP
+- macro: threatintel_server
+  condition: (fd.sip in (threatintel_ips) or fd.snet in (threatintel_nets))
+
+- rule: Connection to Threat Intel IP (Outbound)
   condition: >
-    outbound and 
-    fd.rip in (threat_intel_ips)
+    outbound and fd.typechar = 4 and threatintel_server
+    and not fd.sip in (threatintel_c2_ips)
   output: >
-    Connection to threat intel IP 
-    (proc=%proc.name ip=%fd.rip user=%user.name)
-  priority: CRITICAL
-  tags: [network, mitre_command_and_control, threat_intel]
+    Outbound connection to a blocklisted address
+    (ip=%fd.sip port=%fd.sport connection=%fd.name command=%proc.cmdline ...)
+  priority: WARNING
 ```
+
+The rules match by connection direction (`fd.sip` is the server, `fd.cip` the
+client), not `fd.rip`: Falco tells local from remote by the host's network
+interfaces, which a Falco container without the host network can't see.
 
 ---
 
@@ -128,7 +160,7 @@ Add to crontab to update feeds daily:
 crontab -e
 
 # Add this line (updates at 2 AM daily)
-0 2 * * * cd /path/to/sib && make update-threatintel && make restart
+0 2 * * * cd /path/to/sib && make update-threatintel && cp threatintel/falco_threatintel_rules.yaml detection/config/rules/
 ```
 
 ### Systemd Timer
@@ -157,7 +189,7 @@ Description=SIB Threat Intel Update
 Type=oneshot
 WorkingDirectory=/path/to/sib
 ExecStart=/usr/bin/make update-threatintel
-ExecStartPost=/usr/bin/make restart
+ExecStartPost=/usr/bin/cp threatintel/falco_threatintel_rules.yaml detection/config/rules/
 ```
 
 Enable the timer:

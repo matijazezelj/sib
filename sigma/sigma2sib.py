@@ -46,9 +46,11 @@ SIGMA_TO_FALCO_FIELDS = {
     'ParentImage': 'proc.pname',
     'User': 'user.name',
     'TargetFilename': 'fd.name',
-    'SourceIp': 'fd.sip',
-    'DestinationIp': 'fd.dip',
-    'DestinationPort': 'fd.dport',
+    # Sysmon network events describe the connection's initiator: source is the
+    # client, destination the server (Falco has no fd.dip/fd.dport).
+    'SourceIp': 'fd.cip',
+    'DestinationIp': 'fd.sip',
+    'DestinationPort': 'fd.sport',
     'ProcessName': 'proc.name',
     'CurrentDirectory': 'proc.cwd',
 }
@@ -60,8 +62,8 @@ SIGMA_TO_LOGSQL_FIELDS = {
     'User': 'user.name',
     'ProcessName': 'proc.name',
     'TargetFilename': 'fd.name',
-    'SourceIp': 'fd.sip',
-    'DestinationIp': 'fd.dip',
+    'SourceIp': 'fd.cip',
+    'DestinationIp': 'fd.sip',
 }
 
 
