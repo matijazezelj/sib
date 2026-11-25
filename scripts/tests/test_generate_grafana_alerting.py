@@ -268,4 +268,4 @@ def test_both_stacks_define_the_same_rules(sib):
         run(sib, STACK=stack)
         uids[stack] = sorted(r["uid"] for r in all_rules(sib))
     assert uids["vm"] == uids["grafana"]
-    assert {"sib-hib-events-key-refused", "sib-hib-test-mode"} <= set(uids["vm"])
+    assert {"sib-hib-events-key-refused", "sib-hib-test-mode", "sib-hib-scope-unavailable"} <= set(uids["vm"])

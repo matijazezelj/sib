@@ -7,8 +7,8 @@
   e2e.py check <stack> <e2e dir>      verify storage, then Grafana's alert states
 
 Hosts:
-  e2e-hib      a real HIB daemon (run.sh): heartbeats, auth failures, a scripted
-               agent session, clean stops, a refused hash key
+  e2e-hib      a real HIB daemon (run.sh): heartbeats, auth failures, scripted
+               agent turns, clean stops, a refused hash key, scopes unavailable
   e2e-replay   recorded events: protected.reverted, a denial burst,
                sandbox.unavailable, heartbeats that stopped 20 minutes ago
   e2e-stopped  recorded events: heartbeats then a clean daemon.stop, long enough
@@ -34,6 +34,7 @@ EXPECT = {
     "sib-hib-not-running":         {"e2e-hib": False, "e2e-replay": True,  "e2e-stopped": False},
     "sib-hib-events-key-refused":  {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
     "sib-hib-test-mode":           {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
+    "sib-hib-scope-unavailable":   {"e2e-hib": True,  "e2e-replay": False, "e2e-stopped": False},
 }
 # For rules grouped by event: the events each must fire for, per host.
 EXPECT_EVENTS = {
@@ -47,7 +48,8 @@ assert all(any(v) for v in EXPECT.values())
 # Which events prove each rule's input reached storage, per host.
 NEEDS = {
     "e2e-hib": ["daemon.start", "daemon.alive", "auth.failure", "daemon.stop", "events.key_refused",
-                "session.start", "tool.permission", "sandbox.network", "protected.reverted", "home.changed"],
+                "session.start", "tool.permission", "sandbox.network", "protected.reverted", "home.changed",
+                "scope.unavailable"],
     "e2e-replay": ["daemon.alive", "protected.reverted", "tool.permission", "sandbox.unavailable"],
     "e2e-stopped": ["daemon.alive", "daemon.stop"],
 }
@@ -234,8 +236,10 @@ def cmd_check(stack, d):
                 return tuple(int(x) for x in e.get("hib_version", "0").split("+")[0].split("."))
             except ValueError:
                 return (0,)
-        if not any(version(e) >= (0, 3, 0) for e in starts):
-            failures.append("e2e-hib: HIB older than 0.3.0 (prefs_only); update HIB_DIR")
+        if not any(version(e) >= (0, 4, 0) for e in starts):
+            failures.append("e2e-hib: HIB older than 0.4.0 (session scopes); update HIB_DIR")
+        if not any(e.get("session_scope") == "unavailable" for e in starts):
+            failures.append("e2e-hib: no daemon.start with session_scope unavailable")
         # home.changed per turn: ~/.bashrc critical, a model-only settings.json
         # change a prefs_only warning, a hook added to it critical.
         home = [(e["severity"], [(c.get("path"), c.get("prefs_only", False)) for c in e.get("changes", [])])

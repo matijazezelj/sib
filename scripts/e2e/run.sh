@@ -11,11 +11,12 @@
 # or Telegram).
 #
 # Three simulated hosts, one collector each:
-#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib; 0.3.0 or later):
+#   e2e-hib      a real HIB daemon (HIB_DIR, default ../hib; 0.4.0 or later):
 #                heartbeats, wrong-token requests, a scripted agent session
 #                (HIB's test agent: denials, a reverted git hook, a changed
 #                ~/.bashrc; ~/.claude/settings.json changed twice: model
-#                only, then a hook), clean stops, a refused events.key
+#                only, then a hook), clean stops, a refused events.key,
+#                session scopes unavailable
 #   e2e-replay   recorded HIB events: protected.reverted, a denial burst,
 #                sandbox.unavailable, heartbeats that stopped 20 minutes ago
 #   e2e-stopped  recorded heartbeats followed by a clean daemon.stop
@@ -118,7 +119,7 @@ if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>
     BUN="$(cd "$HIB_DIR" && bun -e 'console.log(process.execPath)')"
     hib_config() { printf '%s\n[events]\ndir = "%s"\nheartbeat_sec = 5\n%s' "${2:-}" "$E2E_DIR/hosts/e2e-hib" "$1" > "$HH/config.toml"; }
     hib_start() {
-        (cd "$HIB_DIR" && exec env -u CLAUDE_CONFIG_DIR -u CODEX_HOME HOME="$UH" HIB_HOME="$HH" "$BUN" src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
+        (cd "$HIB_DIR" && exec env -u CLAUDE_CONFIG_DIR -u CODEX_HOME ${HIB_UNSET:+-u "$HIB_UNSET"} HOME="$UH" HIB_HOME="$HH" "$BUN" src/cli.ts daemon run --port "$HIB_PORT") >>"$E2E_DIR/hib.log" 2>&1 &
         HIB_PID=$!
         for _ in $(seq 60); do
             [ -s "$HH/token" ] && curl -sf -o /dev/null -H "Authorization: Bearer $(cat "$HH/token")" \
@@ -144,11 +145,12 @@ if [ -f "$HIB_DIR/src/cli.ts" ] && (cd "$HIB_DIR" && bun --version >/dev/null 2>
     mkdir -p "$E2E_DIR/hib-scripts"; hib_start
     python3 "$ROOT/scripts/e2e/e2e.py" session "$HIB_PORT" "$HH/token" "$E2E_DIR/hib-scripts" "$WS" "$UH"
     hib_stop
-    # Run 3: the key readable by others is refused (events.key_refused), then a
-    # clean stop.
-    hib_config "$(printf 'profile = "siem"\n')"
+    # Run 3: the key readable by others is refused (events.key_refused), and
+    # session scopes can't start without XDG_RUNTIME_DIR (scope.unavailable,
+    # HIB 0.4.0+); then a clean stop.
+    hib_config "$(printf 'profile = "siem"\nsession_scope = true\n')"
     chmod 644 "$HH/events.key"
-    hib_start; sleep 2; hib_stop
+    HIB_UNSET=XDG_RUNTIME_DIR hib_start; sleep 2; hib_stop
     echo "  $(wc -l < "$E2E_DIR/hosts/e2e-hib/events.jsonl") events written"
 else
     E2E_HIB=0
