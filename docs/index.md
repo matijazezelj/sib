@@ -201,6 +201,7 @@ SIB pulls IOC feeds automatically:
 | **Spamhaus DROP** | Hijacked IP ranges |
 | **Blocklist.de** | Brute force attackers |
 | **CINSscore** | Threat intelligence scoring |
+| **NetAPI** | Honeypot attackers of the last 48 hours |
 
 Run `make update-threatintel` and your detection rules are enriched with fresh indicators.
 

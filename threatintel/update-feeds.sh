@@ -36,6 +36,7 @@ FEEDS=(
     "et_compromised|https://rules.emergingthreats.net/blockrules/compromised-ips.txt|ip"
     "ci_army|https://cinsscore.com/list/ci-badguys.txt|ip"
     "spamhaus_drop|https://www.spamhaus.org/drop/drop.txt|ip"
+    "netapi_honeypot|https://netapi.com/api2/?method=compromised&dataset_type=ip&header=0|ip"
     "blocklist_ssh|https://lists.blocklist.de/lists/ssh.txt|ip"
     "blocklist_all|https://lists.blocklist.de/lists/all.txt|ip"
 )
