@@ -88,6 +88,8 @@ When a list is longer than its cap (`MAX_THREATINTEL_IPS`, default 10000;
 `MAX_THREATINTEL_NETS`, default 2000), the feeds are kept in priority order:
 the C2 feeds first, then Emerging Threats, CINSscore, Spamhaus, NetAPI,
 blocklist.de.
+The NetAPI feed alone has tens of thousands of addresses, so at the default
+cap it doesn't make it in; raise `MAX_THREATINTEL_IPS` to load it.
 Only public IPv4 addresses and ranges are kept; private, loopback, link-local
 and reserved ones in a feed are dropped.
 
