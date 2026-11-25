@@ -38,6 +38,7 @@ This downloads feeds, combines them, and generates Falco rules.
 | **Spamhaus DROP** | Hijacked IPs | Don't Route Or Peer list |
 | **Blocklist.de** | Attack IPs | Brute force and attack sources |
 | **CINSscore** | Threat scoring | Collective Intelligence Network Security |
+| **NetAPI** | Attack IPs | Addresses that attacked NetAPI honeypot sensors in the last 48 hours |
 
 ---
 
@@ -53,6 +54,7 @@ threatintel/
 │   ├── et_compromised.txt
 │   ├── ci_army.txt
 │   ├── spamhaus_drop.txt
+│   ├── netapi_honeypot.txt
 │   ├── blocklist_ssh.txt
 │   ├── blocklist_all.txt
 │   └── combined_blocklist.txt  # Unified blocklist (deduplicated)
@@ -84,7 +86,8 @@ file by itself.
 
 When a list is longer than its cap (`MAX_THREATINTEL_IPS`, default 10000;
 `MAX_THREATINTEL_NETS`, default 2000), the feeds are kept in priority order:
-the C2 feeds first, then Emerging Threats, CINSscore, Spamhaus, blocklist.de.
+the C2 feeds first, then Emerging Threats, CINSscore, Spamhaus, NetAPI,
+blocklist.de.
 Only public IPv4 addresses and ranges are kept; private, loopback, link-local
 and reserved ones in a feed are dropped.
 
@@ -252,6 +255,10 @@ CIDR notation is also supported:
 ### CINSscore
 
 - [CI Army List](https://cinsscore.com/) - Collective intelligence
+
+### NetAPI
+
+- [Compromised IPs](https://netapi.com/compromised-ips/) - Honeypot attack sources, CC BY 4.0
 
 ---
 

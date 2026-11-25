@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Threat intel feed: NetAPI honeypot attackers (`netapi_honeypot`, IPv4 addresses that attacked NetAPI's honeypot sensors in the last 48 hours, CC BY 4.0), kind `ip`, after Spamhaus DROP and before blocklist.de in the feed order
+
 ---
 
 ## [0.9.0] - 2026-11-25
