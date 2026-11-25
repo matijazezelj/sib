@@ -42,20 +42,32 @@ path catches). Not covered by that: Claude Code installed through npm and
 running under `node`, and anything that detaches from the agent (`setsid`,
 `nohup`, reparented to init) or runs more than 8 levels below it.
 
-Under HIB (0.2.0+) there is a second, best-effort signal: HIB starts the CLIs
-with `HIB_SESSION=<session id>`, which every process they start inherits, so
-the rules also count a process carrying it as agent activity, and each alert's
-`session=` field names the HIB session. Falco only reads the first 4096 bytes
-of a process's environment, and shells re-export variables in their own order
-(bash moved a `HIB_SESSION` set first to byte 10495 of an 11.5 KB desktop
-environment). In practice HIB keeps it in range: it gives the CLIs a minimal
-environment (`PATH`, `HOME`, locale, CA settings and the account's own
-variables, not the desktop's `LS_COLORS` or theme variables). Measured in live
-sessions, `HIB_SESSION` sat at byte 974–1553 of at most 4.6 KB in Claude
-Code's CLI, zsh and `sh`, and at 374–1477 in Codex and its `bash`. A shell rc
-file that exports a lot can still push it past 4 KB, and `env -i` clears it, so
-it is best effort: it adds coverage, never removes any, and the name and
-ancestry check still applies.
+Under HIB there are two more signals, and the rules use both:
+
+- **Session scopes** (HIB 0.4.0+, Linux, opt-in). With
+  `[events] session_scope = true` in `~/.hib/config.toml`, HIB starts each
+  Claude Code or Codex CLI in a systemd user scope,
+  `hib-<session_id>-<8 hex>.scope`, and everything the agent starts stays in
+  that cgroup: through `env -i`, `setsid`, any shell, any depth. The rules
+  count a process in such a scope as agent activity, and each alert's
+  `cgroups=` field names the scope, so the session is in the alert. Only an
+  unsandboxed command that starts a new scope itself (`systemd-run --user`)
+  leaves it, and that call shows up inside the session's scope first. Scopes
+  aren't stopped when a session ends, so a leftover background process keeps
+  the scope name. Router one-shots and browser terminals aren't scoped. If HIB
+  can't make scopes, it says so with `scope.unavailable`, which raises *HIB
+  session scope unavailable*. **Turn scopes on where you can.**
+- **`HIB_SESSION`** (HIB 0.2.0+), best effort. HIB starts the CLIs with
+  `HIB_SESSION=<session id>`, which every process they start inherits, and
+  each alert's `session=` field shows it. Falco only reads the first 4096
+  bytes of a process's environment, and shells re-export variables in their
+  own order (bash moved a `HIB_SESSION` set first to byte 10495 of an 11.5 KB
+  desktop environment). HIB keeps it in range by giving the CLIs a minimal
+  environment (measured at byte 374–1553 in live Claude Code and Codex
+  shells), but a shell rc file that exports a lot can push it past 4 KB, and
+  `env -i` clears it.
+
+Both only add coverage: the name and ancestry check still applies.
 
 **What Falco can't see:** Claude Code's own Write and Edit tools don't write
 to a file by its path. They open the directory, then create and rename the
@@ -121,17 +133,19 @@ FALCO_VERSION=0.44.1 ./scripts/test-coding-agent-rules.sh   # another Falco rele
 It ends with `PASS`/`FAIL` per case and lists any other coding-agent alerts the
 host raised meanwhile (real activity), which is a quick false-positive check.
 
-All 29 cases pass with Falco 0.45.2, which SIB runs. (On Linux 7.2 aarch64,
+All 33 cases pass with Falco 0.45.2 (the four session scope cases need a
+user systemd and are skipped without one), which SIB runs. (On Linux 7.2 aarch64,
 Falco 0.44.1's modern eBPF probe doesn't load at all: the kernel's verifier
 rejects its `signal_deliver` program. That's why SIB moved to 0.45.2.)
 
 ## 2. HIB's security event log
 
 HIB writes JSON lines to `~/.hib/events/` (format:
-[HIB security event log](hib-events-spec.md)). Use HIB 0.3.0 or later: before
+[HIB security event log](hib-events-spec.md)). Use HIB 0.4.0 or later: before
 0.2.0 there is no `home.changed`, so shell startup files and the user's agent
-config changed by the CLI go unreported, and before 0.3.0 switching the model
-with `/model` in another session raises a critical alert. On a fleet host that runs HIB,
+config changed by the CLI go unreported; before 0.3.0 switching the model with
+`/model` in another session raises a critical alert; 0.4.0 adds session
+scopes (turn them on with `session_scope = true` under `[events]`). On a fleet host that runs HIB,
 point the collector at that directory:
 
 ```yaml
@@ -182,6 +196,7 @@ starts on a host where HIB has been running for a while, the older history in
 | HIB agent denials burst | more than 5 denied tool calls or blocked data reads in 15 minutes (a denied network request is a denied tool call too; `sandbox.network` isn't counted again) | warning |
 | HIB sandbox unavailable | `sandbox.unavailable` in the last hour | warning |
 | HIB event hash key refused | `events.key_refused` in the last 24 hours: HIB drops session, tool, guard and data events until the key is fixed and HIB restarted (it reports this once per run, hence the long window) | warning |
+| HIB session scope unavailable | `scope.unavailable` in the last 24 hours: `session_scope` is on but HIB couldn't start a systemd user scope, so agent processes are tied to sessions only by ancestry and `HIB_SESSION`. The event's `reason` says why | warning |
 | HIB running in test mode | `daemon.start` with `script_driver: true` in the last 24 hours: HIB was started with `[testing] script_dir`, its scripted agent for acceptance tests. Silence it for test hosts | warning |
 | HIB daemon not running | HIB's last heartbeat (`daemon.alive`, every 5 min) or `daemon.start` in the last 24 hours is more than 15 minutes old, and no clean `daemon.stop` came after it: a crash, a kill, or events no longer reaching SIB | warning |
 
@@ -210,9 +225,9 @@ datasources, and the collector configs rendered from the Ansible templates. A
 running SIB install isn't touched and `.env` isn't read, so no test alert can
 reach a real Slack or Telegram. It simulates three hosts:
 
-- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; HIB 0.3.0 or
+- **`e2e-hib`:** a real HIB daemon (`HIB_DIR`, default `../hib`; HIB 0.4.0 or
   later and bun) with 5-second heartbeats, requests with a wrong token, clean
-  stops and a refused `events.key`. One run uses the `siem` profile and HIB's
+  stops, a refused `events.key` and unavailable session scopes. One run uses the `siem` profile and HIB's
   scripted test agent: an agent turn whose six commands and one network request
   are denied, which adds a git hook (put back) and changes `~/.bashrc` in a
   throwaway home folder, then two turns that change `~/.claude/settings.json`:
@@ -226,7 +241,7 @@ reach a real Slack or Telegram. It simulates three hosts:
 
 It then checks, in order: the events were written; they reached storage under
 the right `hostname`; and every HIB alert rule is healthy, has evaluated since
-the data arrived, and fires for exactly the expected hosts (21 checks per
+the data arrived, and fires for exactly the expected hosts (24 checks per
 stack); the critical-event alert must fire for both `protected.reverted` and
 `home.changed`. `KEEP=1 make e2e` leaves the stack up for a look (Grafana's address and
 password are printed); remove it with `docker compose -p sib-e2e down -v`.

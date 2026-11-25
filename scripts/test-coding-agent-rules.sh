@@ -43,11 +43,13 @@ H="$FX/home"
 mkdir -p "$H/.ssh" "$H/.aws" "$H/.claude" "$H/.codex" "$H/.hib" "$H/.config/gh" "$H/repo/.git/hooks" "$H/repo/.claude" "$H/repo/src" "$FX/bin"
 # A second home for the HIB_SESSION cases, so their alerts can't be mistaken
 # for the first home's cases on the same file names.
-H2="$FX/home2"; mkdir -p "$H2/.claude" "$H2/.codex"
-for f in .claude/.credentials.json .codex/auth.json; do echo "fake test content, not a secret" > "$H2/$f"; done
+H2="$FX/home2"; H3="$FX/home3"; mkdir -p "$H2/.claude" "$H2/.codex" "$H3/.claude" "$H3/.codex"
+for f in .claude/.credentials.json .codex/auth.json; do
+    echo "fake test content, not a secret" > "$H2/$f"; echo "fake test content, not a secret" > "$H3/$f"
+done
 # A git template with a real (non-.sample) hook: git init copies it, which must alert.
 mkdir -p "$FX/tpl/hooks" && printf '#!/bin/sh\nexit 0\n' > "$FX/tpl/hooks/post-checkout" && chmod +x "$FX/tpl/hooks/post-checkout"
-for f in .ssh/id_case1 .ssh/id_case3 .ssh/id_case14 .aws/credentials_case17 .aws/credentials_case18 .ssh/config .ssh/known_hosts .aws/credentials_case2 .claude/.credentials.json \
+for f in .ssh/id_case1 .ssh/id_case3 .ssh/id_case14 .ssh/id_case18 .aws/credentials_case17 .aws/credentials_case18 .ssh/config .ssh/known_hosts .aws/credentials_case2 .claude/.credentials.json \
          .codex/auth.json .hib/token .hib/vault.key .bashrc .aws/credentials_case12 .config/gh/hosts.yml .git-credentials; do
     echo "fake test content, not a secret" > "$H/$f"
 done
@@ -84,6 +86,16 @@ SID="w_5e55105e55105e55"   # a made-up HIB session id
 # Falco's sight (N12: the known limit).
 sess() { env -i PATH="$PATH" HOME="$HOME" HIB_SESSION="$SID" "$@"; }
 sess_late() { env SIB_TEST_PAD="$(printf '%05000d' 0)" HIB_SESSION="$SID" "$@"; }
+# A HIB session scope, as HIB 0.4.0+ makes them (a transient systemd user
+# scope, removed when its processes end). No HIB_SESSION: the cgroup alone.
+scoped() {
+    systemd-run --user --scope --quiet --collect \
+        --unit="hib-$SID-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n').scope" -- "$@"
+}
+SCOPES=1
+if ! systemd-run --user --scope --quiet --collect -- true >/dev/null 2>&1; then
+    SCOPES=0; echo "NOTE: no user systemd (systemd-run --user --scope failed): skipping the session scope cases"
+fi
 
 # --- Falco -----------------------------------------------------------------------
 docker rm -f "$NAME" >/dev/null 2>&1
@@ -143,6 +155,14 @@ cases=(
   "P16|Coding Agent Write Shell or Login Persistence|sess $FX/bin/claude setsid -f sh -c 'sleep 2; echo x >> $H/.zprofile'"
   "N11|-|$FX/bin/claude setsid -f sh -c 'sleep 2; echo x >> $H/.zlogout'"
 )
+# Session scopes: the cgroup ties a process to the session through env -i and
+# setsid, where neither ancestry nor HIB_SESSION is left.
+if [ "$SCOPES" = 1 ]; then cases+=(
+  "P18|Coding Agent Read Credential Store|scoped $FX/bin/node cat $H/.ssh/id_case18"
+  "P19|Coding Agent Write Shell or Login Persistence|scoped $FX/bin/claude env -i /usr/bin/setsid -f /bin/sh -c 'sleep 2; echo x >> $H/.bash_login'"
+  "P20|Coding Agent Subprocess Read Agent Credentials|scoped $FX/hibd/bun $FX/bin/node cat $H3/.codex/auth.json"
+  "N13|-|scoped $FX/hibd/bun $FX/self/node $H3/.claude/.credentials.json"
+); fi
 # A case whose command fails (a missing tool, a typo) didn't exercise the rule,
 # so it fails too, rather than passing a negative case vacuously.
 declare -A RC
@@ -175,6 +195,8 @@ target_of() { # the fixture path a case touches
         P14) echo "$H/.ssh/id_case14" ;; P15) echo "$H2/.codex/auth.json" ;; N10) echo "$H2/.claude/.credentials.json" ;;
         P16) echo "$H/.zprofile" ;; N11) echo "$H/.zlogout" ;;
         P17) echo "$H/.aws/credentials_case17" ;; N12) echo "$H/.aws/credentials_case18" ;;
+        P18) echo "$H/.ssh/id_case18" ;; P19) echo "$H/.bash_login" ;; P20) echo "$H3/.codex/auth.json" ;;
+        N13) echo "$H3/.claude/.credentials.json" ;;
     esac
 }
 
@@ -197,6 +219,11 @@ for id in P14 P15 P16 P17; do
     if agent_hits_for "$(target_of "$id")" | grep -qF "session=$SID"; then echo "PASS $id names session=$SID"
     else echo "FAIL $id alert doesn't name session=$SID"; FAILED=1; fi
 done
+# The scope cases must name the scope.
+if [ "$SCOPES" = 1 ]; then for id in P18 P19 P20; do
+    if agent_hits_for "$(target_of "$id")" | grep -qF "/hib-$SID-"; then echo "PASS $id names the scope hib-$SID-"
+    else echo "FAIL $id alert doesn't name the scope hib-$SID-"; FAILED=1; fi
+done; fi
 
 others=$(grep -E '"rule":"(Coding Agent|HIB Secrets)' "$OUT" | grep -vcF "$FX" || true)
 echo "Other coding-agent alerts on this host during the test (real activity, not fixtures): $others"

@@ -103,7 +103,7 @@ bad key shows up right after `daemon.start`.
 
 | `event` | `severity` | When | Extra fields |
 |---------|-----------|------|--------------|
-| `daemon.start` | info | daemon listening | `bind`, `port`, `sandbox` (`available` / `unavailable`), `script_driver` (`true` only when `[testing] script_dir` turns on the scripted test agent; HIB 0.2.0+) |
+| `daemon.start` | info | daemon listening | `bind`, `port`, `sandbox` (`available` / `unavailable`), `script_driver` (`true` only when `[testing] script_dir` turns on the scripted test agent; HIB 0.2.0+), `session_scope` (`available` / `unavailable`, only with `[events] session_scope = true`; HIB 0.4.0+) |
 | `daemon.stop` | info | clean shutdown (`/hib/shutdown`, SIGTERM/SIGINT); pending `auth.failure` counts are written first | `signal`? |
 | `daemon.alive` | info | heartbeat every `[events] heartbeat_sec` (default 300, `0` = off) while the daemon runs | `uptime_sec` |
 | `auth.failure` | warning | request rejected: bad/missing token, Host or Origin mismatch | `reason` (`token`, `host`, `origin`), `path`, `remote` (peer address). At most one line per `reason`+`remote` per 60 s, with `count` |
@@ -113,14 +113,16 @@ bad key shows up right after `daemon.start`.
 | `data.block` | warning | sensitive-workspace policy blocks a raw data read | `command`?, `path`?, `reason`: the full (redacted) sentence, which may name the file or script; with `command = "program"` one of `it reads a data file directly`, `it runs inline code that could read data files`, `it runs a script from outside this folder` |
 | `sandbox.network` | info, or warning on `deny` | a sandboxed command asks to reach a new host | `net_host`, `decision` (`allow`, `deny`) |
 | `sandbox.unavailable` | warning | sandbox probe failed, auto mode disabled | `reason` |
+| `scope.unavailable` | warning | `[events] session_scope = true`, but HIB can't start a systemd user scope (checked once, at daemon start; HIB 0.4.0+). Agent CLIs then run unscoped | `reason` (e.g. `systemd-run not found`, `XDG_RUNTIME_DIR isn't set…`, `systemd-run --user --scope failed…`) |
 | `events.key_refused` | warning | the hash key (`[events]` setting `"hash"`) is unusable; at most once per daemon run, mode `daemon`, no `workspace`/`account`. Events carrying those fields are dropped until the key is fixed and the daemon restarted | `reason` (`symlink`, `not_regular`, `not_owner`, `mode`, `format`, `unreadable`); never the path |
 | `protected.reverted` | critical | unapproved changes to git hooks/config or agent config were put back | `changes` (array of `{path, change}`), `failed` (paths that could not be reverted) |
 | `home.changed` | critical, or warning when every change was approved or `prefs_only` | an agent turn changed files outside the workspace that steer later sessions: shell startup files, Claude/Codex settings, instructions, hooks, agents, commands and skills, `~/.gitconfig`, ssh config, `authorized_keys`/`rc`, autostart entries, systemd user units (HIB 0.2.0+). Reported, never put back | `changes` (array of `{path, change, approved, prefs_only?}`; `change` is `added`, `changed` or `removed`; `path` is `~/…` or `[CLI home]/…` for a Claude/Codex config folder, `(link target)` appended when a symlink's target changed; `prefs_only: true` (HIB 0.3.0+) when a CLI settings file changed only in preference keys: `model`, `advisorModel`, `theme`, `tui`, `agentPushNotifEnabled` in Claude's `settings.json`/`settings.local.json`, `model`, `model_reasoning_effort` in Codex's `config.toml`. Any other key (`hooks`, `permissions`, `env`, MCP servers, …), a new, removed or unparseable file stays critical) |
 | `terminal.open` | warning | browser terminal session started | `workspace` |
-| `session.start` / `session.end` | info | agent session starts/ends | `agent` (`claude`, `codex`), `sensitive` (bool) |
+| `session.start` / `session.end` | info | agent session starts/ends | `agent` (`claude`, `codex`), `sensitive` (bool); on `session.start`, `scope`: the systemd unit the CLI runs in, `hib-<session_id>-<8 hex>.scope` (with session scopes on; HIB 0.4.0+) |
 
 HIB 0.2.0 is the first version with `home.changed` and `script_driver`, 0.3.0
-the first with `prefs_only`; the `hib_version` field says which version wrote a
+the first with `prefs_only`, 0.4.0 the first with session scopes
+(`session_scope`, `scope`, `scope.unavailable`); the `hib_version` field says which version wrote a
 line.
 
 Unknown event types must be tolerated by consumers; new optional fields can be
