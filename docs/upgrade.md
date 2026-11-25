@@ -37,6 +37,14 @@ nav_order: 9
 
 ## Version-specific notes
 
+### 0.9.1
+
+Nothing to change. `make update-threatintel` now also downloads the NetAPI
+honeypot feed. It only reaches the Falco rules if you raise
+`MAX_THREATINTEL_IPS` above the default 10000 (the feed alone has about
+46,000 addresses); then copy the regenerated rules file as usual (see
+[Threat Intelligence](threat-intel.md)).
+
 ### 0.9.0
 
 **HIB hosts:** upgrade HIB to 0.4.0 or later and turn on session scopes

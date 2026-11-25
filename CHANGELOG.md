@@ -7,8 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.9.1] - 2026-11-25
+
+A new threat intel feed, contributed by Slava Olesik (@slavaolesik) in #37: SIB's first external contribution. Thanks, Slava!
+
 ### Added
-- Threat intel feed: NetAPI honeypot attackers (`netapi_honeypot`, IPv4 addresses that attacked NetAPI's honeypot sensors in the last 48 hours, CC BY 4.0), kind `ip`, after Spamhaus DROP and before blocklist.de in the feed order
+- Threat intel feed: NetAPI honeypot attackers (`netapi_honeypot`, IPv4 addresses that attacked NetAPI's honeypot sensors in the last 48 hours, CC BY 4.0), kind `ip`, after Spamhaus DROP and before blocklist.de in the feed order. It is large (about 46,000 addresses), so with the default `MAX_THREATINTEL_IPS=10000` the higher-priority feeds fill the cap; raise the cap to load it into Falco. `lookup-ip.sh` checks it either way (#37, @slavaolesik)
 
 ---
 
