@@ -12,6 +12,9 @@ services:
       - ../secrets:/app/secrets:ro
     networks:
       - sib-network
+    # Lets OLLAMA_URL reach an Ollama on the Docker host (Linux needs this mapping)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PYTHONUNBUFFERED=1
       - STACK=${STACK:-vm}
@@ -20,6 +23,11 @@ services:
       - ANALYSIS_API_TOKEN_FILE=${ANALYSIS_API_TOKEN_FILE:-}
       # Comma-separated origins allowed to call the API cross-origin (default: none)
       - ANALYSIS_CORS_ORIGINS=${ANALYSIS_CORS_ORIGINS:-}
+      # How long an analysis stays cached, in seconds (default 24h)
+      - ANALYSIS_CACHE_TTL=${ANALYSIS_CACHE_TTL:-86400}
+      # Log storage the API reads events from (config.yaml defaults when empty)
+      - LOKI_URL=${LOKI_URL:-http://sib-loki:3100}
+      - VICTORIALOGS_URL=${VICTORIALOGS_URL:-http://sib-victorialogs:9428}
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_API_KEY_FILE=${ANTHROPIC_API_KEY_FILE:-}
