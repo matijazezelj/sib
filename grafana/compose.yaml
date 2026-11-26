@@ -12,7 +12,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3000
-      - GF_INSTALL_PLUGINS=victoriametrics-logs-datasource
+      - GF_INSTALL_PLUGINS=victoriametrics-logs-datasource 0.34.0
       # Anonymous access (for demo purposes, disable in production)
       - GF_AUTH_ANONYMOUS_ENABLED=false
       # Logging
