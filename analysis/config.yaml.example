@@ -16,7 +16,7 @@ analysis:
   
   # Ollama (local) - recommended for privacy
   ollama:
-    url: ${OLLAMA_URL:-http://localhost:11434}
+    url: ${OLLAMA_URL:-http://host.docker.internal:11434}
     model: ${OLLAMA_MODEL:-llama3.1:8b}
     # Alternative models: mistral, mixtral, qwen2.5
   
