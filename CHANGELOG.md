@@ -7,8 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.10.0] - 2026-11-26
+
+A dashboard for coding agents under HIB, documentation rebuilt and checked against the code, and fixes for the bugs that audit turned up.
+
+### Added
+- **Coding Agents (HIB)** dashboard on both stacks: HIB daemons and sessions per host, HIB events by type and severity, critical and security events, and Falco coding-agent alerts by rule and by HIB session and scope (#70)
+- `scripts/tests/test_dashboards.py`: every dashboard's JSON, uids and datasources, and the HIB dashboards' parity and hostname filtering (#70)
+- docs: a "How it looks" section for the HIB integration, with screenshots from a real Claude Code turn under HIB (#70)
+
 ### Changed
-- Documentation: the README is now a short overview, and the detail lives in `docs/`, with new pages for architecture, configuration (every `.env` setting), commands (every `make` target), dashboards and detection rules. The existing pages and component READMEs were checked against the code and corrected. The dashboard screenshots were retaken on the VictoriaLogs stack.
+- Documentation: the README is now a short overview, and the detail lives in `docs/`, with new pages for architecture, configuration (every `.env` setting), commands (every `make` target), dashboards and detection rules. The existing pages and component READMEs were checked against the code and corrected. The dashboard screenshots were retaken on the VictoriaLogs stack (#69)
+- The VictoriaLogs Grafana plugin is pinned to 0.34.0 (#68)
+- MITRE ATT&CK (VictoriaLogs): *Top Detected Techniques* follows the hostname filter (#68)
+
+### Fixed
+- VictoriaLogs dashboards: *Security Posture* and *Host Risk Assessment* (Host Risk Scores) and *Top Detected Techniques* (MITRE) were broken by the plugin's per-series frames: a posture score of 0, one host or rule behind a frame dropdown (#66, #68)
+- mTLS: `.env.example`'s `http://` `SIDEKICK_URL` overrode the https default, so Falco couldn't deliver to an mTLS Sidekick. The example no longer sets it, and an `http://` URL is switched to `https://` when mTLS is on (#42, #49)
+- `make install`'s first-alert check and `test-pipeline.sh` checked Sidekick by a container name the host can't resolve, and not over mTLS; both now check from inside Falco, with its client certificate when mTLS is on (#43, #50)
+- `make install-analysis`: the Grafana links now get their token from `ANALYSIS_API_TOKEN_FILE` when it's set; `make doctor` no longer reports the token as unset then (#44, #51)
+- `make rotate-certs` left the `local` and `metrics-scraper` client certificates on the old CA; it now renews `local`, and storage installs reissue a scraper certificate that doesn't match the CA (#45, #52)
+- `collectors/scripts/deploy.sh` (VM stack) didn't pass the server address, so vmagent sent metrics to the collector's own `localhost`; it now writes `SIB_SERVER` to the collector's `.env` and validates the address (#46, #53)
+- AI analysis: `ANALYSIS_CACHE_TTL`, `LOKI_URL` and `VICTORIALOGS_URL` are passed into the container, and `host.docker.internal` reaches an Ollama on the Docker host on Linux too (#47, #54)
+- `make demo` prints LogsQL example queries on the VictoriaLogs stack (#48, #55)
+
+### Known issues
+- AI analysis: paranoid obfuscation leaves user names in paths and dotless host names in what goes to the LLM (#59)
+- The Alloy collector (`STACK=grafana`) listens on 0.0.0.0:12345 on collector hosts (#64)
+- `make remove-fleet` removes the wrong Falco container and doesn't ask for confirmation (#61)
+- The coding-agent rules raise false positives for Claude Code's sandbox setup and the CLI's own credential-file reads (#71)
 
 ---
 

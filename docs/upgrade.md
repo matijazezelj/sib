@@ -42,6 +42,24 @@ nav_order: 9
 
 ## Version-specific notes
 
+### 0.10.0
+
+- **Grafana:** `make install-grafana` (or `make install`) loads the new
+  Coding Agents (HIB) dashboard and the fixed VictoriaLogs dashboards, and
+  installs the pinned VictoriaLogs plugin (0.34.0).
+- **mTLS:** if your `.env` came from an older `.env.example`, it has
+  `SIDEKICK_URL=http://sib-sidekick:2801/`. With `MTLS_ENABLED=true` it is now
+  switched to https by itself; you can also delete the line.
+  `make install-detection` applies it.
+- **Fleet collectors deployed with `deploy.sh` on the VM stack** sent their
+  metrics to their own `localhost`. Run `make deploy-collector` (or
+  `deploy.sh`) for each again, or add `SIB_SERVER=<sib-server>` to
+  `~/sib-collector/.env` on the host and run `docker compose up -d` there.
+- **AI analysis:** `make install-analysis` picks up the new compose settings
+  (cache TTL, storage URLs, Ollama on the host).
+- **After `make rotate-certs`**, reinstall storage (`make install-storage-vm`
+  or `install-storage-grafana`) to reissue the metrics scraper's certificate.
+
 ### 0.9.1
 
 Nothing to change. `make update-threatintel` now also downloads the NetAPI
