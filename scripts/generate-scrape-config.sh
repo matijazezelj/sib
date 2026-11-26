@@ -58,7 +58,11 @@ if [ "$MTLS_ENABLED" = "true" ]; then
         echo "MTLS_ENABLED=true but certs/ca/ca.crt is missing: run 'make generate-certs' first." >&2
         exit 1
     fi
-    if [ ! -f "$CERTS/clients/metrics-scraper.crt" ]; then
+    # (Re)issue the scraper's certificate when it's missing or was signed by an
+    # older CA (after make rotate-certs).
+    if [ ! -f "$CERTS/clients/metrics-scraper.crt" ] ||
+       ! openssl verify -CAfile "$CERTS/ca/ca.crt" "$CERTS/clients/metrics-scraper.crt" >/dev/null 2>&1; then
+        rm -f "$CERTS/clients/metrics-scraper.crt" "$CERTS/clients/metrics-scraper.key"
         "$SCRIPT_DIR/generate-client-cert.sh" metrics-scraper >/dev/null
     fi
     # Write into the volume as root, owned by the scraper's user.

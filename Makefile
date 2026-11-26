@@ -1044,13 +1044,16 @@ rotate-certs: ## Regenerate all certificates (CA + server + clients)
 	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 	@./scripts/generate-certs.sh ca
 	@./scripts/generate-certs.sh server
+	@./scripts/generate-certs.sh client
 	@./scripts/generate-fleet-certs.sh --force
 	@echo ""
 	@echo "$(GREEN)✓ All certificates regenerated$(RESET)"
 	@echo "$(CYAN)Next steps:$(RESET)"
 	@echo "  1. Restart alerting: make restart-alerting"
 	@echo "  2. Restart detection: make restart-detection"
-	@echo "  3. Redeploy fleet: make deploy-fleet"
+	@echo "  3. Reinstall storage (reissues the metrics scraper's certificate):"
+	@set -a; . ./.env 2>/dev/null || true; set +a; echo "     make install-storage-$${STACK:-vm}"
+	@echo "  4. Redeploy fleet: make deploy-fleet"
 
 test-mtls: ## Test mTLS connection to Falcosidekick
 	@echo "$(CYAN)🔐 Testing mTLS connection...$(RESET)"
