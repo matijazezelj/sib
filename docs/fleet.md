@@ -44,11 +44,11 @@ SIB supports both **native packages** and **Docker containers**:
 
 | Strategy | Description |
 |----------|-------------|
-| `docker` | Run agents as containers. **Recommended for simplicity.** |
-| `native` | Falco from repo as systemd service |
-| `auto` (default) | Use Docker if available, otherwise native |
+| `docker` | Run agents as containers, installing Docker if it is missing. **Recommended for simplicity.** |
+| `native` | Falco from the Falco package repo as a systemd service (Grafana stack: Alloy as a binary) |
+| `auto` (default) | Docker, installing it if it is missing; native only if Docker is missing and `install_docker_if_missing: false` |
 
-> **Note:** VM stack collectors (Vector, vmagent, node_exporter) always run as Docker containers regardless of strategy. The strategy setting primarily affects Falco deployment.
+> **Note:** VM stack collectors (Vector, vmagent, node_exporter) always run as Docker containers regardless of strategy. `native` doesn't install Docker, so on the VM stack install it first (`make fleet-docker-check`).
 
 > ⚠️ **LXC Limitation:** Falco cannot run in LXC containers due to kernel access restrictions. Use VMs or run Falco on the LXC host itself.
 
@@ -92,7 +92,7 @@ all:
 
 ### 2. Enable Remote Access on SIB Server
 
-Fleet agents need to reach storage endpoints on the SIB server. By default, storage only listens on localhost.
+Fleet agents need to reach the storage endpoints and Falcosidekick on the SIB server. By default, both only listen on localhost.
 
 ```bash
 # On the SIB server
@@ -100,6 +100,14 @@ make enable-remote
 ```
 
 This sets `STORAGE_BIND=0.0.0.0` in `.env` and recreates storage containers so VictoriaLogs (9428) and VictoriaMetrics (8428) — or Loki (3100) and Prometheus (9090) for the Grafana stack — accept remote connections.
+
+It does not expose Falcosidekick, which receives the fleet's Falco events. Set this in `.env`:
+
+```bash
+SIDEKICK_BIND_ADDR=0.0.0.0
+```
+
+and apply it with `make install-alerting`. Restrict the exposed ports with a [firewall](#firewall-configuration), and use [mTLS](#enable-mtls-for-encrypted-fleet-communication) on port 2801.
 
 ### 3. Test Connectivity
 
@@ -110,7 +118,7 @@ make fleet-ping
 ### 4. Deploy to Fleet
 
 ```bash
-# Deploy to all hosts (auto: Docker if available)
+# Deploy to all hosts (auto: Docker, installed if missing)
 make deploy-fleet
 
 # Or target specific hosts
@@ -127,14 +135,14 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 | Command | Description |
 |---------|-------------|
 | `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts |
-| `make update-rules` | Push detection rules to fleet |
+| `make update-rules` | Push custom rules to fleet |
 | `make generate-fleet-certs` | Generate client certificates for every host in the inventory |
 | `make fleet-certs` | Push mTLS certificates to fleet hosts without a full redeploy |
 | `make fleet-health` | Check health of all agents |
 | `make fleet-docker-check` | Check/install Docker on fleet hosts |
 | `make fleet-ping` | Test SSH connectivity |
 | `make fleet-shell` | Open shell in Ansible container |
-| `make remove-fleet` | Remove agents from fleet |
+| `make remove-fleet` | Remove agents from fleet (no confirmation prompt) |
 | `make refresh-alerts` | Update the hosts the Falco liveness alert expects (after editing the inventory) |
 
 ---
@@ -143,6 +151,7 @@ make deploy-fleet ARGS="-e deployment_strategy=docker"
 
 Edit `ansible/inventory/group_vars/all.yml` to customize deployment:
 
+<!-- {% raw %} -->
 ```yaml
 # Stack type: vm (default) or grafana
 sib_stack: vm
@@ -153,6 +162,9 @@ deployment_strategy: auto
 # Falco settings
 falco_version: "0.45.2"   # 0.44+ required; keep in sync with FALCO_VERSION in .env
 falco_priority: notice
+# Rule files pushed from detection/config/rules/
+falco_custom_rules:
+  - custom_rules.yaml
 
 # Docker network name (must match SIB server's network)
 docker_network: sib-network
@@ -161,10 +173,13 @@ docker_network: sib-network
 sib_victorialogs_url: "http://{{ sib_server }}:9428"
 sib_victoriametrics_url: "http://{{ sib_server }}:8428"
 
-# mTLS — encrypt fleet-to-server communication
+# mTLS for Falco → Falcosidekick
 mtls_enabled: false
 mtls_cert_dir: /etc/sib/certs
 ```
+<!-- {% endraw %} -->
+
+Per-host variables in the inventory include `deployment_strategy`, `sib_expected` (see [Falco liveness](#falco-liveness-alert)) and `hib_events_dir` (ship [HIB](hib-integration.md) events).
 
 > **Important:** `sib_server` must be set in your inventory file (`ansible/inventory/hosts.yml`) under `all.vars`. There is no default — deployments will fail without it.
 
@@ -176,32 +191,22 @@ As described in the Quick Start, `make enable-remote` exposes storage endpoints.
 
 ### Firewall Configuration
 
-Restrict access to fleet nodes only:
-
-```bash
-# UFW example (VM stack)
-ufw allow from 192.168.1.0/24 to any port 9428  # VictoriaLogs
-ufw allow from 192.168.1.0/24 to any port 8428  # VictoriaMetrics
-ufw allow from 192.168.1.0/24 to any port 2801  # Sidekick
-
-# iptables example (VM stack)
-iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 9428 -j ACCEPT
-iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 8428 -j ACCEPT
-iptables -A INPUT -p tcp -s 192.168.1.0/24 --dport 2801 -j ACCEPT
-```
+Restrict ports 2801, 9428 and 8428 (Grafana stack: 2801, 3100, 9090) to fleet nodes only. Docker-published ports bypass `ufw` and the `INPUT` chain, so filter in Docker's `DOCKER-USER` chain or on a firewall in front of the host. [Security Hardening](security-hardening.md#4-restrict-fleet-ingress) has the commands.
 
 ---
 
 ## Enable mTLS for Encrypted Fleet Communication
 
-For production deployments, enable mutual TLS (mTLS) to encrypt all communication between fleet agents and the SIB server. This secures:
+For production deployments, enable mutual TLS (mTLS) for Falco events. It covers:
 - **Falco → Falcosidekick** (port 2801): events sent over HTTPS with client certificates
-- **Collectors → Storage** can additionally be secured via firewall rules
+
+Collector traffic to storage (logs and metrics) stays plain HTTP: restrict it with firewall rules.
 
 ### Quick mTLS Setup
 
 > **Fresh Install?** If setting up a new SIB server with mTLS from the start:
 > ```bash
+> [ -f .env ] || cp .env.example .env
 > sed -i 's/MTLS_ENABLED=false/MTLS_ENABLED=true/' .env
 > make generate-certs
 > make install
@@ -238,9 +243,9 @@ make install-storage-vm        # or install-storage-grafana
 make deploy-fleet
 ```
 
-> **Certificate inventory format:** The `make generate-fleet-certs` command parses your `ansible/inventory/hosts.yml` and supports both flat and nested inventory formats (e.g., `fleet:` at root level or under `all.children.fleet.hosts`).
+> **Certificate inventory format:** The `make generate-fleet-certs` command parses your `ansible/inventory/hosts.yml` and supports both flat and nested inventory formats (e.g., `fleet:` at root level or under `all.children.fleet.hosts`). It skips host names containing dots (use `make generate-client-cert HOST=<name>` for those) and may create unused certificates named after per-host variables.
 
-> **Falco driver note:** Fleet hosts with kernel >= 5.8 automatically use the `modern_ebpf` driver, which works on all virtualization types (KVM, VMware, bare metal). No manual driver configuration is needed.
+> **Falco driver note:** Fleet hosts use the `modern_ebpf` driver, which needs kernel 5.8 or later. No manual driver configuration is needed.
 
 ### Per-Host Certificate Generation
 
@@ -273,45 +278,48 @@ See [Security Hardening](security-hardening.md) for complete mTLS documentation.
 
 ## Manual Collector Deployment
 
-If you prefer manual deployment without Ansible:
+If you prefer manual deployment without Ansible. This deploys only the log and metric collectors: no Falco, and no Falco liveness metrics.
 
 ### Using Deploy Script
 
 ```bash
-# Deploy to a single host
+# Deploy to a single host (uses this server's first IP address)
 make deploy-collector HOST=user@remote-host
 
-# Or directly
-./collectors/scripts/deploy.sh user@192.168.1.50 192.168.1.163
+# Or directly: remote host, then SIB server IP
+./collectors/scripts/deploy.sh user@192.0.2.50 192.0.2.10
 ```
 
-The script will:
-1. Copy collector configuration to the remote host
-2. Configure the SIB server address
-3. Start collectors via Docker Compose
-4. Verify the deployment
+The script copies the collector configuration to `~/sib-collector` on the remote host and starts it with Docker Compose, using the `STACK` from your `.env`.
+
+On the VM stack the script does not pass the server address to the containers, so they send to `localhost`. Set it afterwards:
+
+```bash
+ssh user@remote-host 'cd ~/sib-collector && echo "SIB_SERVER=192.0.2.10" > .env && HOSTNAME=$(hostname) docker compose up -d'
+```
 
 ### Full Manual Setup (VM Stack)
 
+Run from the SIB directory, with your SIB server's IP in place of `192.0.2.10`:
+
 ```bash
-# On the remote host
-mkdir -p ~/sib-collector/config
+ssh user@remote-host "mkdir -p ~/sib-collector/config"
 
-# Copy configs
-scp collectors/config/vector.toml user@remote:~/sib-collector/config/
-scp collectors/config/vmagent.yml user@remote:~/sib-collector/config/
-# Edit configs - replace SIB_SERVER_IP with your SIB server IP
+# Copy configs and compose file
+scp collectors/config/vector.toml collectors/config/vmagent.yml user@remote-host:~/sib-collector/config/
+scp collectors/compose-vm.yaml user@remote-host:~/sib-collector/compose.yaml
 
-# Copy compose file
-scp collectors/compose-vm.yaml user@remote:~/sib-collector/compose.yaml
-
-# Start the collectors
-ssh user@remote "cd ~/sib-collector && HOSTNAME=\$(hostname) docker compose up -d"
+# Set the server address and start the collectors
+ssh user@remote-host 'cd ~/sib-collector && echo "SIB_SERVER=192.0.2.10" > .env && HOSTNAME=$(hostname) docker compose up -d'
 ```
+
+Logs from these manual VM collectors carry a `host` field, not `hostname`, so the Fleet Overview log panels don't include them.
 
 ---
 
 ## What Gets Collected
+
+By Ansible-deployed hosts on the VM stack (default):
 
 | Type | Sources | Labels/Fields |
 |------|---------|---------------|
@@ -327,6 +335,8 @@ Data labeling convention:
 - **Metrics** (VictoriaMetrics): tagged with `host` label (set by vmagent's `-remoteWrite.label`)
 - **Logs** (VictoriaLogs): tagged with `hostname` field (set by Vector transform)
 - **Falco events**: tagged with `hostname` field (set by Falcosidekick)
+
+On the Grafana stack, Alloy ships the systemd journal and Docker logs (not the `/var/log` files), labelled `host`.
 
 ---
 
@@ -352,7 +362,8 @@ curl -s "http://localhost:9428/select/logsql/query?query=*" | head
 # Check metrics in VictoriaMetrics (default stack)
 curl -s 'http://localhost:8428/api/v1/query?query=node_uname_info'
 
-# Or for Grafana stack: Loki at :3100, Prometheus at :9090
+# Grafana stack: the same check in Prometheus
+curl -s 'http://localhost:9090/api/v1/query?query=node_uname_info'
 ```
 
 ### Fleet Overview Dashboard
@@ -388,9 +399,9 @@ no Falco, set `sib_expected: false`. See
 make update-rules
 ```
 
-This pushes the latest detection rules from `detection/config/rules/` to all fleet hosts.
+This pushes custom rules from `detection/config/rules/` to all fleet hosts.
 
-It copies the files listed in `falco_custom_rules` (default: `custom_rules.yaml`), validates
+It copies only the files listed in `falco_custom_rules` (default: `custom_rules.yaml`), validates
 them together with Falco's `falco_rules.yaml`, and restarts Falco (the `sib-falco` container
 on Docker hosts, the systemd service on native hosts).
 
@@ -406,8 +417,8 @@ make fleet-health
 
 Checks:
 - Falco is running
-- Collectors are running and shipping data (Vector/vmagent or Alloy)
-- Connectivity to SIB server
+- Collector containers are up (vmagent/node_exporter on the VM stack, Alloy on the Grafana stack); Vector isn't checked, and neither is data arriving
+- VictoriaMetrics (or Loki) and Falcosidekick are reachable from the host
 
 ---
 
@@ -435,10 +446,10 @@ ssh user@remote "uname -r"
 # Check Falco logs
 ssh user@remote "docker logs sib-falco"
 # Or for native install
-ssh user@remote "journalctl -u falco -n 50"
+ssh user@remote "journalctl -u falco-modern-bpf -n 50"   # or -u falco
 ```
 
-> **Common issue:** If Falco enters a restart loop, check the driver type. The `modern_ebpf` driver (used for kernel >= 5.8) works on all platforms including KVM VMs. The legacy `ebpf` driver requires a pre-compiled probe that may not be available in the container image.
+> **Common issue:** If Falco enters a restart loop, check the kernel version: fleet hosts use `modern_ebpf`, which needs 5.8 or later.
 
 ### Ansible "sudo: not found" Error
 
@@ -462,10 +473,11 @@ fleet:
    ```bash
    # From a fleet host, test connectivity to VM stack endpoints
    curl -s http://SIB_SERVER:9428/health      # VictoriaLogs
-   curl -s http://SIB_SERVER:8428/-/healthy    # VictoriaMetrics
+   curl -s http://SIB_SERVER:8428/health      # VictoriaMetrics
+   curl -s http://SIB_SERVER:2801/healthz     # Falcosidekick (https with mTLS)
    ```
    
-   If these fail, run `make enable-remote` on the SIB server to set `STORAGE_BIND=0.0.0.0`.
+   If storage fails, run `make enable-remote` on the SIB server to set `STORAGE_BIND=0.0.0.0`. If Falcosidekick fails, set `SIDEKICK_BIND_ADDR=0.0.0.0` in `.env` and run `make install-alerting`.
 
 2. **Check collectors are running:**
    ```bash
@@ -500,10 +512,16 @@ make remove-fleet
 make remove-fleet LIMIT=webserver
 ```
 
-This stops and removes:
-- Falco (native or Docker)
-- Collectors (Vector/vmagent/node_exporter or Alloy depending on stack)
-- Associated configuration files
+The target runs right away, without asking. It removes:
+- Native Falco and Alloy, and their configuration
+- The `sib-alloy`, `sib-vmagent` and `sib-node-exporter` containers
+- The SIB directories (`/etc/sib`, `/etc/sib-collector`)
+
+It leaves the `sib-falco` and `sib-vector` containers running. Remove them on each host:
+
+```bash
+ssh user@remote "docker rm -f sib-falco sib-vector"
+```
 
 ---
 

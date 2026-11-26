@@ -95,12 +95,13 @@ When using `STACK=vm` (default):
 
 ## VictoriaLogs Dashboards
 
-Dashboards are available under **SIEM in a Box**:
+Dashboards are in the Grafana folder **SIEM in a Box / VictoriaLogs** (see [Dashboards](dashboards.md)):
 - **Events Explorer** — Security events with AI analysis links. Includes a **severity filter dropdown** to quickly filter by priority level (Critical, Error, Warning, Notice).
 - **Security Overview** — High-level security posture
 - **MITRE ATT&CK Coverage** — Detection mapping to ATT&CK
 - **Fleet Overview** — Host metrics and log volumes
 - **Risk Scores** — Host risk assessment
+- **UniFi Logs** — Appliance syslog (see [Syslog Ingestion](#syslog-ingestion))
 
 ---
 
@@ -119,7 +120,7 @@ priority:Critical
 hostname:web-server-01
 
 # Events with a specific rule
-rule:"Read sensitive file trusted after startup"
+rule:"Read sensitive file untrusted"
 
 # Aggregate by rule
 * | stats by (rule) count() as Count
@@ -127,6 +128,20 @@ rule:"Read sensitive file trusted after startup"
 # Time-based filtering
 _time:1h AND priority:Error
 ```
+
+---
+
+## Syslog Ingestion
+
+VictoriaLogs also accepts syslog over UDP, for appliances such as UniFi. It listens on `127.0.0.1:5514` by default. To receive from a device, set in `.env`:
+
+```bash
+SYSLOG_BIND_ADDR=192.0.2.10   # this server's LAN address
+SYSLOG_PORT=5514
+SYSLOG_TIMEZONE=UTC           # timezone of timestamps that carry none
+```
+
+Run `make install-storage-vm`, point the device at that address and port, and allow only approved senders in the firewall. Messages are stored with `source:unifi_syslog`.
 
 ---
 
@@ -154,11 +169,12 @@ docker restart sib-grafana
 To switch from VictoriaMetrics to the Grafana stack (Loki + Prometheus):
 
 ```bash
+# Uninstall first, while .env still says STACK=vm. This deletes all stored data.
+make uninstall
+
 # Edit .env
 STACK=grafana
 
-# Reinstall
-make uninstall
 make install
 ```
 
@@ -171,6 +187,14 @@ make install
 | `STACK` | `vm` | Storage stack: `vm` (VictoriaMetrics) or `grafana` (Loki + Prometheus) |
 | `VICTORIALOGS_RETENTION_PERIOD` | `168h` | Log retention (7 days) |
 | `VICTORIAMETRICS_RETENTION_PERIOD` | `15d` | Metrics retention |
+| `VICTORIALOGS_PORT` | `9428` | VictoriaLogs host port (`make health` and fleet defaults assume 9428) |
+| `VICTORIAMETRICS_PORT` | `8428` | VictoriaMetrics host port (`make health` and fleet defaults assume 8428) |
+| `STORAGE_BIND` | `127.0.0.1` | `0.0.0.0` accepts remote collectors (`make enable-remote`) |
+| `SYSLOG_BIND_ADDR` | `127.0.0.1` | Syslog listen address |
+| `SYSLOG_PORT` | `5514` | Syslog UDP host port |
+| `SYSLOG_TIMEZONE` | `UTC` | Timezone for syslog timestamps |
+| `VICTORIALOGS_VERSION` | `v1.50.0` | VictoriaLogs image tag |
+| `VICTORIAMETRICS_VERSION` | `v1.144.0` | VictoriaMetrics image tag |
 
 ---
 

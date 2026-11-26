@@ -1,4 +1,11 @@
+---
+layout: default
+title: AIB Integration - SIEM in a Box
+---
+
 # AIB Integration — Asset-Enriched Alert Analysis
+
+[← Back to Home](index.md)
 
 > **Optional Feature**: Requires [Assets in a Box (AIB)](https://github.com/matijazezelj/aib) running and accessible from the SIB analysis container.
 
@@ -17,7 +24,7 @@ Without AIB, SIB analyzes Falco alerts purely from the event payload — process
 
 With AIB, before the alert reaches the LLM:
 
-1. **Asset lookup** — SIB extracts the container name + namespace (for Kubernetes) or hostname (for VMs) from the Falco alert and resolves the corresponding AIB node
+1. **Asset lookup** — SIB takes the container name and namespace (for Kubernetes) or the hostname from the alert and looks up the AIB node
 2. **Blast radius fetch** — how many downstream assets are reachable if this node is compromised
 3. **Audit findings fetch** — any pre-existing findings on this asset (misconfigurations, CVEs, compliance gaps)
 4. **Prompt injection** — all of this is appended to the LLM prompt as structured context
@@ -27,39 +34,43 @@ The result: the LLM can reason about *actual impact*, not just the raw event. A 
 ## Data Flow
 
 ```
-Falco alert
+Alert
     │
     ▼
 AlertAnalyzer.analyze_alert()
     │
+    ├─► Obfuscator (alert text)
+    │
     ├─► AIBClient.enrich_alert()
     │       │
-    │       ├─ container.name + namespace → k8s:pod:<ns>/<name>
-    │       │   └─ fallback: host.hostname → vm:host:<hostname>
-    │       │                              → k8s:node:<hostname>
+    │       ├─ k8s:pod:<ns>/<name>
+    │       │   fallback: k8s:node:<hostname>
+    │       │             vm:host:<hostname>
+    │       │             GET /api/v1/graph/nodes/resolve?hostname=
     │       │
-    │       ├─ GET /api/v1/graph/nodes/{node_id}        → asset metadata
+    │       ├─ GET /api/v1/graph/nodes/{node_id}         → asset metadata
     │       ├─ GET /api/v1/impact/{node_id}              → blast radius
-    │       └─ GET /api/v1/graph/analysis/audit?node_id= → audit findings
+    │       └─ GET /api/v1/graph/analysis/audit?node_id= → audit findings (first 5)
     │
-    ├─► Obfuscator (IPs, usernames, paths → tokens)
-    │
-    ├─► LLM prompt (alert + AIB context section)
+    ├─► LLM prompt (alert + AIB context, obfuscated with the same tokens)
     │
     └─► Analysis result (with aib_context field)
 ```
 
 ## Node ID Format
 
-AIB uses a `source:type:identifier` format for node IDs:
+AIB uses a `source:type:identifier` format for node IDs. SIB tries these in order:
 
-| Asset type | Node ID format | Falco fields used |
+| Asset type | Node ID format | Alert fields used |
 |------------|---------------|-------------------|
-| Kubernetes pod | `k8s:pod:<namespace>/<pod-name>` | `container.name` + `kubernetes.namespace.name` |
-| VM / bare-metal host | `vm:host:<hostname>` | `host.hostname` |
-| Kubernetes node | `k8s:node:<nodename>` | `host.hostname` (fallback) |
+| Kubernetes pod | `k8s:pod:<namespace>/<pod-name>` | `container.name` (used as the pod name) + `kubernetes.namespace.name` (else `default`) |
+| Kubernetes node | `k8s:node:<hostname>` | `host.hostname` or `hostname` |
+| VM / bare-metal host | `vm:host:<hostname>` | same |
+| Any other source (`ansible:vm:`, `tf:vm:`, …) | whatever AIB's resolve endpoint returns | same |
 
-The bridge tries K8s pod first. If the container name is empty, `host`, or `<NA>`, it falls back to hostname-based lookups.
+The pod lookup is skipped if the container name is empty, `host`, or `<NA>`.
+
+The Grafana link and the JSON API pass only the hostname, so they get host lookups only. The pod lookup needs a `container.name` field (or a `container_name` label) in the alert, so it can only happen when the CLI analyzes stored alerts.
 
 ## Configuration
 
@@ -72,22 +83,26 @@ AIB_BASE_URL=http://aib:8080       # AIB API endpoint (Docker service name or IP
 AIB_API_TOKEN=your-aib-api-token   # Optional — omit if AIB has no auth
 ```
 
-### 2. Verify `config.yaml`
+The URL must be reachable from the `sib-analysis` container, which is on `sib-network`.
 
-The `aib` block is already present after `make install-analysis`:
+### 2. Check `config.yaml`
+
+The shipped `analysis/config.yaml` already has the `aib` block:
 
 ```yaml
 aib:
   url: ${AIB_BASE_URL:-}       # leave empty to disable
   api_token: ${AIB_API_TOKEN:-}
-  cache_ttl: 300               # seconds — AIB responses are cached per node
+  cache_ttl: 300               # seconds
 ```
 
-### 3. Restart the analysis service
+### 3. Recreate the analysis service
 
 ```bash
-make restart-analysis
+make install-analysis
 ```
+
+`make restart-analysis` does not pick up `.env` changes.
 
 ### Disabling AIB
 
@@ -98,8 +113,8 @@ Leave `AIB_BASE_URL` empty (or unset). The integration is fully opt-in — if th
 AIB enrichment is best-effort at every step:
 
 - **AIB URL not set** → enrichment skipped, alert analyzed normally
-- **AIB unreachable** → exception caught, empty context, analysis proceeds
-- **Node not found in AIB (404)** → null context returned, analysis proceeds
+- **AIB unreachable** → request errors are ignored, analysis proceeds without asset context
+- **Node not found in AIB (404)** → `node` is null, analysis proceeds without asset context
 - **Partial data** (node found, blast radius unavailable) → whatever is available is included
 
 The LLM prompt is constructed only from the fields that are actually populated. A missing blast radius or missing audit findings simply means that section is omitted from the prompt.
@@ -112,15 +127,15 @@ Read sensitive file untrusted: user=appuser file=/etc/shadow
 container=payment-api namespace=production host=k8s-node-3
 ```
 
-The AIB bridge resolves `k8s:pod:production/payment-api` and fetches:
+For a stored alert with these fields, the AIB bridge resolves `k8s:pod:production/payment-api` and adds this to the prompt. E-mail addresses and IPs in it are obfuscated; asset IDs, pod names and team names are sent as they are at the `standard` level.
 
 ```
-Asset Context (AIB graph):
-- Asset ID: k8s:pod:production/payment-api
+**Asset Context (AIB graph):**
+- Asset ID: `k8s:pod:production/payment-api`
 - Environment: production
 - Team: payments
 - Criticality: critical
-- Owner: payments-eng@company.com
+- Owner: [EMAIL-1]
 - Blast radius: 8 downstream assets
   - k8s:pod:production/fraud-detection
   - k8s:pod:production/billing-service
@@ -151,25 +166,24 @@ Compare to the same alert without AIB enrichment, where the LLM would give gener
 
 ## API Response
 
-The `/api/analyze` JSON response includes an `aib_context` field:
+The `/api/analyze` JSON response includes an `aib_context` field with what AIB returned, not obfuscated:
 
 ```json
 {
-  "rule": "Read sensitive file untrusted",
-  "analysis": "...",
+  "success": true,
+  "analysis": { "...": "..." },
+  "obfuscation_mapping": { "...": "..." },
   "aib_context": {
-    "node_id": "k8s:pod:production/payment-api",
+    "node_id": "k8s:node:web-01",
     "node": {
-      "id": "k8s:pod:production/payment-api",
+      "id": "k8s:node:web-01",
       "metadata": {
         "environment": "production",
         "team": "payments",
         "criticality": "critical"
       }
     },
-    "blast_radius": {
-      "affected_nodes": [...]
-    },
+    "blast_radius": { "affected_nodes": 8, "nodes": [] },
     "audit_findings": [
       { "title": "Container running as root", "severity": "high" }
     ]
@@ -177,14 +191,14 @@ The `/api/analyze` JSON response includes an `aib_context` field:
 }
 ```
 
-`aib_context` is `{}` when AIB is not configured or the asset wasn't found.
+`aib_context` is `{}` when AIB is not configured. When the asset isn't found, `node` is null.
 
 ## Caching
 
-AIB responses are cached in memory per `cache_ttl` seconds (default: 300s / 5 minutes). This means:
+AIB responses are cached in memory for `cache_ttl` seconds (default: 300) within one analyzer instance. A CLI run reuses them across its alerts. The API creates a new analyzer for each request, so it asks AIB again every time.
 
-- Repeated alerts from the same pod/host reuse the cached node metadata
-- Blast radius and audit findings are not re-fetched on every alert
-- Cache is per-process — restarts clear it
+The analysis page cache (24 hours by default) stores `aib_context` with the result, so a cached page shows the asset state from the time of the analysis. See [Cache Deduplication](ai-analysis.md#cache-deduplication).
 
-For high-volume environments, increase `cache_ttl` to reduce AIB API load. For incident response where asset state is changing rapidly, set it lower or restart the analysis service to force a refresh.
+---
+
+[← Back to Home](index.md) | [AI Analysis](ai-analysis.md)

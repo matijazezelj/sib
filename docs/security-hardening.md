@@ -19,6 +19,7 @@ Only expose what you need. By default:
 - Storage backends should remain internal:
   - **VictoriaMetrics stack** (default): VictoriaLogs (9428), VictoriaMetrics (8428)
   - **Grafana stack**: Loki (3100), Prometheus (9090)
+- Storage (`STORAGE_BIND`), the syslog listener (`SYSLOG_BIND_ADDR`) and the AI analysis API (`ANALYSIS_BIND`) also bind to 127.0.0.1 by default. [Configuration](configuration.md#bind-addresses-at-a-glance) lists them all.
 
 Use a firewall to restrict access to trusted IP ranges.
 
@@ -33,10 +34,12 @@ To view it:
 grep GRAFANA_ADMIN_PASSWORD .env
 ```
 
-To set a custom password before install:
+To set a custom password before install, put it in `.env`:
 ```bash
 GRAFANA_ADMIN_PASSWORD=your-strong-password
 ```
+
+To change it on a running install, see [Grafana Password](installation.md#grafana-password).
 
 ---
 
@@ -52,19 +55,16 @@ This lets you:
 
 ## 4) Restrict Fleet Ingress
 
-Allow only fleet subnet to reach Sidekick (and storage if remote enabled):
+Fleet hosts need Sidekick (set `SIDEKICK_BIND_ADDR`, then `make install-alerting`) and the storage ports (`make enable-remote`). Allow only the fleet subnet to reach them.
+
+Docker publishes ports with its own iptables rules, so `ufw` rules don't restrict them. Filter in the `DOCKER-USER` chain or on an upstream firewall. Replace `eth0` and the subnet with yours, and make the rules persistent:
 
 ```bash
-# Sidekick (always needed for fleet)
-ufw allow from 192.168.1.0/24 to any port 2801
-
-# VictoriaMetrics stack (default)
-ufw allow from 192.168.1.0/24 to any port 9428  # VictoriaLogs
-ufw allow from 192.168.1.0/24 to any port 8428  # VictoriaMetrics
-
-# Grafana stack (STACK=grafana)
-# ufw allow from 192.168.1.0/24 to any port 3100  # Loki
-# ufw allow from 192.168.1.0/24 to any port 9090  # Prometheus
+# VM stack (default): Sidekick, VictoriaLogs, VictoriaMetrics.
+# Grafana stack: use 2801 3100 9090.
+for port in 2801 9428 8428; do
+  sudo iptables -I DOCKER-USER -i eth0 -p tcp --dport "$port" ! -s 192.0.2.0/24 -j DROP
+done
 ```
 
 ---
@@ -76,15 +76,25 @@ For encrypted and authenticated communication between fleet agents and SIB serve
 ### Quick Setup
 
 ```bash
-# 1. Generate certificates (CA, server, local client)
+# 1. Fresh install only: create .env (keeps an existing one)
+[ -f .env ] || cp .env.example .env
+
+# 2. Generate certificates (CA, server, local client)
 make generate-certs
 
-# 2. Enable mTLS
-echo "MTLS_ENABLED=true" >> .env
+# 3. Enable mTLS: set these two in .env
+#      MTLS_ENABLED=true
+#      SIDEKICK_URL=https://sib-sidekick:2801/
 
-# 3. Reinstall to apply
+# 4. (Re)install to apply
 make install
 ```
+
+`SIDEKICK_URL` matters: `.env.example` sets it to `http://`, and that value overrides the mTLS default.
+
+Fleet hosts verify the server certificate against the address they connect to. It includes the server's detected IPv4 addresses (not `172.*` ones). To name another, generate the certificates with `SIB_SERVER_IP=192.0.2.10 make generate-certs`, or `SERVER_CN=sib.example.com` for a DNS name.
+
+With mTLS on, `./scripts/test-pipeline.sh` and the first-alert check at the end of `make install` can't reach Sidekick. Use `make test-mtls` and `make test-alert`.
 
 With mTLS on, Falcosidekick's listener requires a client certificate, so
 `make install-storage-vm` / `install-storage-grafana` generate a scrape config
@@ -113,6 +123,7 @@ make deploy-fleet  # Uses mtls_enabled from inventory
 | Falco → Falcosidekick | HTTP (plaintext) | HTTPS + client cert |
 | Fleet Falco → Sidekick | HTTP (plaintext) | HTTPS + client cert |
 | Metrics scraper → Sidekick `/metrics` | HTTP (plaintext) | HTTPS + `metrics-scraper` client cert |
+| Fleet collectors → storage (logs, metrics) | HTTP (plaintext) | Unchanged: not covered |
 
 ### Certificate Management
 
@@ -123,7 +134,7 @@ make deploy-fleet  # Uses mtls_enabled from inventory
 | `make generate-fleet-certs` | Generate certs for all fleet hosts |
 | `make fleet-certs` | Push certs to fleet hosts without a full redeploy |
 | `make verify-certs` | Verify certificate chain |
-| `make rotate-certs` | Regenerate all certificates |
+| `make rotate-certs` | Regenerate CA, server and fleet certs (see [certs/README.md](https://github.com/matijazezelj/sib/blob/main/certs/README.md) for the local and scraper certs) |
 | `make test-mtls` | Test mTLS connection |
 
 ### Certificate Locations
@@ -162,11 +173,9 @@ PROMETHEUS_RETENTION_TIME=15d         # 15 days
 PROMETHEUS_RETENTION_SIZE=5GB         # Disk-based limit
 ```
 
-Loki retention is not an `.env` setting; set `retention_period` in `storage/config/loki-config.yml` (default `168h`) and restart Loki.
+Loki retention is not an `.env` setting; set `retention_period` in `storage/config/loki-config.yml` (default `168h`), then run `make restart-storage-grafana`.
 
-Or edit config files directly:
-- Loki: `storage/config/loki-config.yml`
-- Prometheus: `storage/compose-grafana.yaml` (command args)
+Apply `.env` changes with `make install-storage-vm` or `make install-storage-grafana`.
 
 ---
 
@@ -182,11 +191,14 @@ make restore BACKUP=backups/<name>   # Restore from a backup directory
 
 `make backup` saves everything to `backups/sib_backup_<timestamp>/`:
 - Storage volumes (VictoriaLogs/Metrics or Loki/Prometheus data)
-- Grafana volume
-- Custom Falco rules and alerting config
+- Grafana volume and provisioned dashboards
+- `custom_rules.yaml` and the generated alerting config
 - Datasource configuration
+- `.env`, as `dot-env` (contains secrets, so protect the backup)
 
-`make restore` stops services, restores all volumes, then prompts you to review `.env` manually (not auto-restored since it contains secrets).
+`certs/`, `secrets/`, `custom-outputs.yaml` and other rules files are not included.
+
+`make restore` stops services and restores volumes, dashboards, custom rules and alerting config. It doesn't restore `.env` or the datasource config. Run `make start` afterwards.
 
 **Docker volumes to back up:**
 ```bash

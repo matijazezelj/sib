@@ -80,7 +80,7 @@ The two projects are **complementary**, not alternatives:
 | Target | Linux hosts, VMs, bare metal | Kubernetes clusters |
 | Deployment | Docker Compose + Ansible fleet | Helm chart |
 | Audit source | Falco syscall eBPF | Falco syscall + K8s audit API |
-| Alert analyzer | Flask API, polling model | FastAPI, real-time webhook |
+| Alert analyzer | Flask API, analysis on demand | FastAPI, real-time webhook |
 
 A typical setup runs both: **SIB on the underlying nodes** (or your non-K8s servers), **sib-k8s inside the cluster**. The two Grafana instances operate independently — or you can point sib-k8s at an external Loki/VictoriaLogs instance if you want a single pane of glass.
 

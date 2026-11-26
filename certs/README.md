@@ -9,7 +9,7 @@ certs/
 ├── ca/                     # Certificate Authority
 │   ├── ca.crt             # CA certificate (public - safe to distribute)
 │   └── ca.key             # CA private key (SECRET - protect this!)
-├── server/                 # Server certificates (for Falcosidekick, storage)
+├── server/                 # Server certificate (for Falcosidekick)
 │   ├── server.crt         # Server certificate
 │   ├── server.key         # Server private key
 │   └── server.cnf         # OpenSSL config with SANs
@@ -42,6 +42,17 @@ Generate certificates for all hosts in Ansible inventory:
 make generate-fleet-certs
 ```
 
+Creating certificates doesn't enable mTLS. Set `MTLS_ENABLED=true` and
+`SIDEKICK_URL=https://sib-sidekick:2801/` in `.env` and reinstall; see
+[Security Hardening](../docs/security-hardening.md#5-enable-mtls-for-fleet-communication).
+
+The server certificate covers localhost, SIB's container names and the host's
+detected IPv4 addresses (not `172.*`). Set `SIB_SERVER_IP` or `SERVER_CN` (a DNS
+name) when running `make generate-certs` if fleet hosts use another address.
+
+The server key is group-readable (`0640`). Falcosidekick reads it through
+`SIDECAR_CONFIG_GID`, so that must be the key file's group.
+
 ## Security Notes
 
 - **NEVER commit private keys (*.key files) to version control**
@@ -63,7 +74,7 @@ make generate-fleet-certs
 Verify all certificates:
 
 ```bash
-./scripts/generate-certs.sh verify
+make verify-certs
 ```
 
 Or manually verify a certificate:
@@ -83,11 +94,17 @@ openssl x509 -in certs/server/server.crt -noout -dates
 
 If you need to regenerate certificates (e.g., CA compromise, expiration):
 
-1. **Regenerate CA** (invalidates ALL existing certs):
+1. **Regenerate CA** (invalidates ALL existing certs). `make rotate-certs`
+   renews the CA, server and fleet certificates (answer `y` to both prompts; it
+   needs an Ansible inventory). It leaves the `local` and `metrics-scraper`
+   client certificates signed by the old CA, so renew those too:
    ```bash
-   ./scripts/generate-certs.sh ca
-   ./scripts/generate-certs.sh server
-   ./scripts/generate-fleet-certs.sh --force
+   make rotate-certs
+   ./scripts/generate-certs.sh client
+   rm certs/clients/metrics-scraper.crt certs/clients/metrics-scraper.key
+   make install-storage-vm   # or install-storage-grafana
+   make restart-alerting restart-detection
+   make deploy-fleet
    ```
 
 2. **Regenerate server cert only**:

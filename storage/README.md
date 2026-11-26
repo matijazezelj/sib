@@ -57,21 +57,24 @@ Edit `config/loki-config.yml` (retention is set here only; there is no `.env` va
 
 ```logql
 # All Falco events
-{job="falco"}
+{source="syscall"}
 
 # Critical priority events
-{job="falco"} | json | priority = "Critical"
+{source="syscall", priority="Critical"}
 
-# Events from specific container
-{job="falco"} | json | container_name = "nginx"
+# Events mentioning a container
+{source="syscall"} |= "nginx"
 
 # Count by priority
-sum by (priority) (count_over_time({job="falco"} [1h]))
+sum by (priority) (count_over_time({source="syscall"}[1h]))
 ```
 
 ## VictoriaLogs
 
 VictoriaLogs is a high-performance log storage optimized for security events.
+
+Retention is `VICTORIALOGS_RETENTION_PERIOD` in `.env` (default `168h`);
+apply changes with `make install-storage-vm`.
 
 ### Features
 - 10x faster than Loki for full-text search
@@ -83,16 +86,16 @@ VictoriaLogs is a high-performance log storage optimized for security events.
 
 ```
 # All Falco events
-_stream:{job="falco"}
+source:syscall
 
-# Critical priority events  
-_stream:{job="falco"} priority:Critical
+# Critical priority events
+source:syscall priority:Critical
 
 # Events with specific rule
-_stream:{job="falco"} AND rule:~".*shell.*"
+source:syscall rule:~"shell"
 
 # Events from specific host
-_stream:{job="falco"} hostname:production-server-01
+source:syscall hostname:web-01
 
 # UniFi syslog received in the last five minutes
 _time:5m source:=unifi_syslog
@@ -120,7 +123,7 @@ Verify end to end rather than trusting an open socket:
 ```bash
 docker compose --env-file .env -f storage/compose-vm.yaml up -d victorialogs
 ss -lun | grep ':5514 '
-curl -G -s http://192.168.1.25:9428/select/logsql/query \
+curl -G -s http://localhost:9428/select/logsql/query \
   --data-urlencode 'query=_time:5m source:=unifi_syslog' \
   --data-urlencode 'limit=5'
 ```
@@ -179,6 +182,10 @@ VictoriaMetrics is a high-performance Prometheus-compatible metrics storage.
 - Full PromQL compatibility
 
 ### Configuration
+Retention is `VICTORIAMETRICS_RETENTION_PERIOD` in `.env` (default `15d`). On
+the Grafana stack use `PROMETHEUS_RETENTION_TIME` and
+`PROMETHEUS_RETENTION_SIZE`.
+
 Edit `config/prometheus-vm.yml` (VM stack) or `config/prometheus.yml` (Grafana
 stack) for scrape targets, then run `make install-storage-vm` /
 `make install-storage-grafana`. The containers mount
@@ -206,7 +213,7 @@ Then deploy collectors to remote hosts:
 ## Manual Operations
 
 ```bash
-# Start storage manually (based on STACK)
+# Start an installed, stopped storage stack
 make start-storage-grafana   # or make start-storage-vm
 
 # Stop storage

@@ -26,7 +26,7 @@ Deploy and manage SIB security agents across your infrastructure.
 
 Fleet hosts run:
 - **Falco** → Security events → Sidekick (with mTLS)  
-- **vmagent + node_exporter** → Metrics → VictoriaMetrics (VM stack)
+- **vmagent + node_exporter** → Metrics → VictoriaMetrics, **Vector** → Logs → VictoriaLogs (VM stack)
 - **Alloy** → Logs/Metrics → Loki/Prometheus (Grafana stack)
 
 ## Quick Start
@@ -45,6 +45,8 @@ Update the following:
 - `sib_server`: IP of your central SIB server
 - `fleet.hosts`: Add your target hosts
 - SSH credentials
+
+On the SIB server, open the ports the fleet needs: `make enable-remote` for storage, and `SIDEKICK_BIND_ADDR=0.0.0.0` in `.env` followed by `make install-alerting` for Falcosidekick. Both listen on localhost by default. Firewall them (see [Security Notes](#security-notes)).
 
 ### 2. Test Connectivity
 
@@ -76,13 +78,13 @@ make fleet-health
 |---------|-------------|
 | `make fleet-build` | Build Ansible Docker image (auto-runs on first deploy) |
 | `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts, then run `make refresh-alerts` |
-| `make update-rules` | Push updated detection rules to fleet (Docker or native, detected per host) |
+| `make update-rules` | Push custom rules to fleet (Docker or native, detected per host) |
 | `make fleet-certs` | Push mTLS certificates without a full redeploy |
 | `make fleet-health` | Check health of all fleet agents |
 | `make fleet-docker-check` | Check if Docker is installed, install if missing |
 | `make fleet-ping` | Test SSH connectivity to fleet hosts |
 | `make fleet-shell` | Open shell in Ansible container for manual commands |
-| `make remove-fleet` | Remove agents from fleet (requires confirmation) |
+| `make remove-fleet` | Remove agents from fleet (no confirmation prompt, see [Removing Agents](#removing-agents)) |
 
 ### Target Specific Hosts
 
@@ -142,7 +144,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 ### Falco
 - Runtime security detection using eBPF
 - Configured to send events to central Falcosidekick (with optional mTLS)
-- Custom rules from `detection/config/rules/`
+- Custom rules listed in `falco_custom_rules` (default `custom_rules.yaml`), from `detection/config/rules/`
 - Falco `falco_version` 0.45.2 (keep in sync with `FALCO_VERSION`); native installs are pinned to it
 - Falco `/metrics` on `127.0.0.1`, scraped by the host collector; Grafana's "Falco not reporting" alert uses it. Every fleet host is expected unless it sets `sib_expected: false` (see [docs/grafana-alerts.md](../docs/grafana-alerts.md))
 
@@ -153,8 +155,8 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-fleet.yml --ask-pass --
 - Vector for host logs → VictoriaLogs (Falco events still go via Sidekick)
 
 **Grafana stack (`sib_stack: grafana`)**
-- Alloy (Grafana Agent)
-- Logs → Loki, Metrics → Prometheus
+- Grafana Alloy
+- Logs (systemd journal, Docker) → Loki, metrics → Prometheus
 
 ## Configuration
 
@@ -172,7 +174,7 @@ sib_stack: vm
 
 ### Host Labels
 
-Add labels to hosts for filtering in Grafana:
+On the Grafana stack, add labels to hosts for filtering in Grafana (the VM stack ignores them):
 
 ```yaml
 fleet:
@@ -185,7 +187,11 @@ fleet:
         team: platform
 ```
 
-These appear in Loki/Prometheus as labels.
+Alloy adds them to Loki and Prometheus data.
+
+### HIB Events
+
+Set `hib_events_dir` on a host that runs [HIB](../docs/hib-integration.md) to ship its security event log. The directory must already exist.
 
 ### Docker Installation
 
@@ -217,16 +223,16 @@ SIB supports both native package installation and Docker containers. **Docker is
 
 | Strategy | Description |
 |----------|-------------|
-| `auto` (default) | Use Docker if available, otherwise native |
-| `docker` | Run Falco as container |
-| `native` | Install Falco from repo. VM collectors always use Docker. |
+| `auto` (default) | Docker, installing it if missing; native only if Docker is missing and `install_docker_if_missing: false` |
+| `docker` | Run Falco as a container, installing Docker if missing |
+| `native` | Install Falco from the package repo. VM collectors always use Docker, which `native` doesn't install. |
 
 Configure in `inventory/group_vars/all.yml`:
 
 ```yaml
 # Deployment Strategy (for Falco)
-# auto   - Use Docker if available, otherwise native (default)
-# docker - Docker containers (requires Docker)
+# auto   - Docker, installed if missing and install_docker_if_missing is true (default)
+# docker - Docker containers (installs Docker if missing)
 # native - Native packages (better process visibility)
 deployment_strategy: auto
 
@@ -244,12 +250,13 @@ install_docker_if_missing: true
 **Falco does not work in LXC containers** due to kernel access limitations:
 - LXC containers share the host kernel
 - eBPF/kernel module support is not available
-- Falco will be skipped with a warning on LXC hosts
+- With a Docker deployment, Falco is skipped with a warning on LXC hosts
 
 **Recommendations for LXC:**
 - Run Falco on the Proxmox/LXC host itself
 - Use VMs instead of LXC for full security monitoring
-- Alloy (logs/metrics) still works in LXC
+- Set `sib_expected: false` on LXC hosts so the liveness alert doesn't expect them
+- Log and metric collectors still work in LXC
 
 **What happens on deployment:**
 
@@ -257,8 +264,8 @@ install_docker_if_missing: true
 2. **Decide method** → Based on `deployment_strategy` and Docker availability
 3. **Install Docker** → If needed, install static binaries as systemd services
 4. **Deploy agents:**
-   - **Docker mode**: Run Falco and Alloy as containers
-   - **Native mode**: Install Falco from repo, Alloy as static binary
+   - **Docker mode**: Run Falco and the stack's collectors as containers
+   - **Native mode**: Install Falco from the repo; Grafana stack: Alloy as a static binary
 
 ### Per-Host Override
 
@@ -285,7 +292,7 @@ Add custom Falco rules to `detection/config/rules/`, then push to fleet:
 make update-rules
 ```
 
-Rules are copied to the Docker (`/etc/sib/falco/rules.d`) or native (`/etc/falco/rules.d`) location, validated together with `falco_rules.yaml`, and Falco is restarted only if validation passes.
+Only the files listed in `falco_custom_rules` are pushed. They are copied to the Docker (`/etc/sib/falco/rules.d`) or native (`/etc/falco/rules.d`) location, validated together with `falco_rules.yaml`, and Falco is restarted only if validation passes.
 
 ## Troubleshooting
 
@@ -295,7 +302,7 @@ Rules are copied to the Docker (`/etc/sib/falco/rules.d`) or native (`/etc/falco
 ssh user@host "systemctl status falco-modern-bpf"
 
 # Docker deployment (Falco + VM collectors)
-ssh user@host "docker ps | grep -E 'sib-falco|sib-vmagent|sib-node-exporter'"
+ssh user@host "docker ps | grep -E 'sib-falco|sib-vector|sib-vmagent|sib-node-exporter'"
 
 # Grafana stack (Alloy)
 ssh user@host "docker ps | grep -E 'sib-falco|sib-alloy'"
@@ -312,6 +319,7 @@ ssh user@host "docker logs sib-falco --tail 100"
 
 ### View VM collectors logs
 ```bash
+ssh user@host "docker logs sib-vector --tail 100"
 ssh user@host "docker logs sib-vmagent --tail 100"
 ssh user@host "docker logs sib-node-exporter --tail 100"
 ```
@@ -328,6 +336,7 @@ ssh user@host "docker logs sib-alloy --tail 100"
 ### Test connectivity to central
 ```bash
 # VM stack
+ssh user@host "curl -s http://SIB_SERVER:9428/health"
 ssh user@host "curl -s http://SIB_SERVER:8428/health"
 ssh user@host "curl -s http://SIB_SERVER:2801/healthz"
 
@@ -343,7 +352,7 @@ make deploy-fleet LIMIT=problematic-host
 
 ## mTLS Encryption
 
-For production deployments, enable mutual TLS (mTLS) to encrypt all communication between fleet agents and the SIB server.
+For production deployments, enable mutual TLS (mTLS) for Falco events (Falco → Falcosidekick). Log and metric traffic to storage stays plain HTTP.
 
 ### Quick mTLS Setup
 
@@ -352,10 +361,11 @@ For production deployments, enable mutual TLS (mTLS) to encrypt all communicatio
 make generate-certs
 make generate-fleet-certs
 
-# 2. Enable mTLS on SIB server
-echo "MTLS_ENABLED=true" >> .env
+# 2. Enable mTLS on SIB server: set MTLS_ENABLED=true in .env
+sed -i 's/^MTLS_ENABLED=.*/MTLS_ENABLED=true/' .env
 make install-alerting
 make install-detection
+make install-storage-vm        # or install-storage-grafana (scrapes Sidekick over https)
 
 # 3. Enable mTLS in Ansible
 # Edit ansible/inventory/group_vars/all.yml:
@@ -394,33 +404,35 @@ See [Security Hardening](../docs/security-hardening.md) for complete mTLS docume
    - 9428 (VictoriaLogs) - for Vector logs (VM stack)
    - 3100 (Loki) + 9090 (Prometheus) - for logs/metrics (Grafana stack)
 
-4. **Firewall**: Restrict access to fleet nodes only:
-   ```bash
-   # UFW example: one rule per approved fleet host, not a whole subnet
-   ufw allow from 192.168.1.212 to any port 2801 proto tcp
-   ufw allow from 192.168.1.212 to any port 8428 proto tcp
-   ufw allow from 192.168.1.212 to any port 9428 proto tcp
-   
-   # iptables example (repeat per host)
-   iptables -A INPUT -p tcp --dport 2801 -s 192.168.1.212 -j ACCEPT
-   iptables -A INPUT -p tcp --dport 8428 -s 192.168.1.212 -j ACCEPT
-   iptables -A INPUT -p tcp --dport 9428 -s 192.168.1.212 -j ACCEPT
-   iptables -A INPUT -p tcp --dport 2801 -j DROP
-   iptables -A INPUT -p tcp --dport 8428 -j DROP
-   iptables -A INPUT -p tcp --dport 9428 -j DROP
-   ```
+4. **Firewall**: Restrict these ports to approved fleet hosts. Docker-published ports bypass `ufw` and the `INPUT` chain, so filter in the `DOCKER-USER` chain or on an upstream firewall; see [Security Hardening](../docs/security-hardening.md#4-restrict-fleet-ingress).
+
+## Removing Agents
+
+```bash
+make remove-fleet LIMIT=webserver
+```
+
+This runs right away, without asking; without `LIMIT` it covers the whole fleet. It removes native Falco and Alloy, their configuration, the SIB directories and the `sib-alloy`, `sib-vmagent` and `sib-node-exporter` containers. It leaves `sib-falco` and `sib-vector` running:
+
+```bash
+ssh user@host "docker rm -f sib-falco sib-vector"
+```
+
+Then remove the host from the inventory and run `make refresh-alerts`.
 
 ## File Structure
 
 ```
 ansible/
 ├── inventory/
-│   ├── hosts.yml.example      # Example inventory
+│   ├── hosts.yml.example      # Example inventory (copy to hosts.yml)
 │   └── group_vars/
 │       └── all.yml            # Global variables
 ├── playbooks/
 │   ├── deploy-fleet.yml       # Full deployment
 │   ├── update-rules.yml       # Push rule updates
+│   ├── deploy-certs.yml       # Push mTLS certificates
+│   ├── docker-check.yml       # Check/install Docker
 │   ├── health-check.yml       # Verify fleet health
 │   └── remove-fleet.yml       # Uninstall agents
 ├── roles/
@@ -429,6 +441,11 @@ ansible/
 │   ├── falco/                 # Falco installation
 │   ├── alloy/                 # Alloy installation (Grafana stack)
 │   └── vm_collectors/         # vmagent + node_exporter (VM stack)
+├── scripts/
+│   └── expected-hosts.py      # Hosts the Falco liveness alert expects
+├── compose.yaml               # Ansible control container
+├── Dockerfile
+├── ansible.cfg
 ├── requirements.yml           # Ansible collections
 └── README.md                  # This file
 ```

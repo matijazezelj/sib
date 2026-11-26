@@ -23,7 +23,8 @@ ANTHROPIC_API_KEY_FILE=/app/secrets/anthropic_api_key
 sk-ant-api03-xxxxx
 ```
 
-Then re-run `make install-analysis`.
+Then re-run `make install-analysis`. After only changing a secret file, run
+`make restart-analysis`.
 
 ## Supported Secrets
 
@@ -34,6 +35,10 @@ File-based secrets are read by the AI analysis service only.
 | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY_FILE` |
 | `OPENAI_API_KEY` | `OPENAI_API_KEY_FILE` |
 | `ANALYSIS_API_TOKEN` | `ANALYSIS_API_TOKEN_FILE` |
+
+The Grafana "Analyze with AI" links get their token from `ANALYSIS_API_TOKEN`
+in `.env`, not from `ANALYSIS_API_TOKEN_FILE`. If you use those links, keep the
+token in `.env`.
 
 Falcosidekick output credentials (Slack, PagerDuty, AWS, ...) do not support
 `_FILE` yet; set them in `.env`.
@@ -51,26 +56,7 @@ chmod 644 secrets/anthropic_api_key
 chmod 711 secrets
 ```
 
-## Docker Compose Secrets
-
-For production deployments, you can also use Docker Compose secrets:
-
-```yaml
-services:
-  sib-analysis:
-    secrets:
-      - anthropic_key
-    environment:
-      - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_key
-
-secrets:
-  anthropic_key:
-    file: ./secrets/anthropic_api_key
-```
-
 ## Why File-based Secrets?
 
-1. **Process isolation**: Secrets don't appear in `/proc/*/environ`
-2. **Logging safety**: Secrets won't leak into debug logs or error messages
-3. **Rotation**: Update the file without restarting containers (for some services)
-4. **Integration**: Works with secret managers that write to files (Vault Agent, etc.)
+1. **Environment**: Secrets don't appear in the container's environment
+2. **Integration**: Works with secret managers that write to files (Vault Agent, etc.)

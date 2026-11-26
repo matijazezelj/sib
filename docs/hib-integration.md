@@ -102,24 +102,29 @@ Enable it:
 
   ```yaml
   devbox:
-    ansible_host: 192.168.1.20
+    ansible_host: 192.0.2.20
     falco_custom_rules: [custom_rules.yaml, coding_agent_rules.yaml]
   ```
 
   then `make deploy-fleet LIMIT=devbox` (or `make update-rules LIMIT=devbox`).
 
-Events land in the Events Explorer like any other Falco detection, and the
-standard *Burst of Critical/Error events* alert covers them.
+Events land in the Events Explorer like any other Falco detection, and
+Falcosidekick forwards them to your outputs. No Grafana alert is specific to
+these rules; the general [detection alerts](grafana-alerts.md) apply. *Burst of
+Critical/Error events* needs more than 10 per host in 10 minutes (of these
+rules only the CRITICAL ones count), and *Critical Falco event* is paused by
+default.
 
 ### Testing the rules on a host
 
 `scripts/test-coding-agent-rules.sh` runs Falco privileged with the modern
-eBPF probe for a minute and plays 13 cases that must alert and 9 that must
-not, with stand-in processes named `claude`, `codex`, `bun` and `gh` against a
+eBPF probe for a minute and plays 20 cases that must alert and 13 that must
+not, with stand-in processes (`claude`, `codex`, `bun`, `gh` and others) against a
 throwaway fake home (never real credentials). The positive cases include
 files moved, hard-linked and symlinked into place; the negative cases include `ssh` reading `~/.ssh`, `gh` reading its own
 config, git's credential helper reading `.git-credentials`, an agent CLI reading its own credentials or writing its settings, HIB's
-daemon reading its vault key, and `git init` writing its sample hooks. A case
+daemon reading its vault key, and `git init` writing its sample hooks. Further
+cases cover `HIB_SESSION` and session scopes. A case
 whose command fails (a missing tool) fails too, so a negative case can't pass
 without having run. Run it from a normal shell,
 not from inside Claude Code or Codex: the rules key on agent ancestry, so
@@ -150,7 +155,7 @@ point the collector at that directory:
 
 ```yaml
 devbox:
-  ansible_host: 192.168.1.20
+  ansible_host: 192.0.2.20
   hib_events_dir: /home/alice/.hib/events
 ```
 
@@ -177,7 +182,9 @@ What the collector can read:
   in the JSON line (`{source="hib"} | json`).
 
 The `hostname` is the inventory name, the same as for the host's other logs
-and metrics; HIB's own `host` field is kept as `hib_host`.
+and metrics. Vector keeps HIB's own `host` field as `hib_host`; Alloy sends the
+JSON line unchanged, so there it stays `host` inside the line. The VM stack
+collectors need the Docker deployment.
 
 Both collectors store an event at its own `ts`. Loki silently drops lines more
 than about an hour older than the stream's newest line, so when Alloy first
@@ -212,7 +219,9 @@ and a restart, a later crash fires as usual. A host that last ran HIB more than
 ## End-to-end test
 
 `make e2e` checks the whole chain, from HIB's event log through the collector
-and storage to Grafana's alert rules:
+and storage to Grafana's alert rules. It needs Docker with Compose 2.24 or
+later, Python 3 and `ansible-playbook`; the real HIB part also needs bun and a
+HIB checkout, and is skipped without them.
 
 ```bash
 make e2e                 # Vector -> VictoriaLogs

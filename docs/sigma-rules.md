@@ -5,7 +5,7 @@ title: Sigma Rules - SIEM in a Box
 
 # Sigma Rules Integration
 
-Convert community detection rules to Falco and LogQL formats.
+Convert simple Sigma rules to Falco rules, LogQL or LogsQL.
 
 [← Back to Home](index.md)
 
@@ -13,22 +13,25 @@ Convert community detection rules to Falco and LogQL formats.
 
 ## Overview
 
-[Sigma](https://sigmahq.io/) is the universal language for security detection rules. SIB includes a converter that transforms Sigma rules into:
+[Sigma](https://sigmahq.io/) is a generic format for detection rules. SIB's converter, `sigma/sigma2sib.py`, produces:
 
-1. **Falco rules** — For runtime detection
-2. **LogQL alerts** — For log-based detection in Loki
+1. **Falco rules** for runtime detection
+2. **LogQL alerts** (Loki)
+3. **LogsQL alerts** (VictoriaLogs)
 
-This means you're not locked into any single detection format. The entire Sigma rule ecosystem is available to you.
+It handles only a small part of the Sigma format, and its output can be wrong without any error. Read [What the converter handles](#what-the-converter-handles) and check every converted rule before you load it.
 
 ---
 
 ## Quick Start
 
+The converter runs on the host and needs Python 3 with PyYAML (`pip install pyyaml`, or your distribution's package).
+
 ```bash
-# Convert all Sigma rules in sigma/rules/
+# Convert all Sigma rules in sigma/rules/ to Falco
 make convert-sigma
 
-# Convert a specific rule
+# Convert a specific rule (prints to the terminal, writes no file)
 ./sigma/sigma2sib.py sigma/rules/crypto_mining.yml
 ```
 
@@ -36,15 +39,19 @@ make convert-sigma
 
 ## Included Sample Rules
 
-SIB includes several example Sigma rules:
-
-| Rule | Description | MITRE Tactic |
+| Rule | Description | MITRE ATT&CK |
 |------|-------------|--------------|
-| `crypto_mining.yml` | Detects cryptocurrency miners | Impact (T1496) |
-| `shadow_access.yml` | Password file access | Credential Access (T1003) |
-| `ssh_keys.yml` | SSH private key access | Credential Access (T1552) |
+| `crypto_mining.yml` | Cryptocurrency miners | Impact (T1496) |
+| `shadow_access.yml` | `/etc/shadow` and `/etc/gshadow` access | Credential Access (T1003) |
+| `ssh_keys.yml` | `authorized_keys` changes | Persistence (T1098) |
 | `reverse_shell.yml` | Reverse shell patterns | Execution (T1059) |
-| `container_escape.yml` | Container breakout attempts | Privilege Escalation (T1611) |
+| `container_escape.yml` | Docker and containerd socket access | Privilege Escalation (T1611) |
+
+The converted Falco versions need editing before they detect anything useful:
+
+- `shadow_access`, `ssh_keys` and `container_escape` match on file names, but the output only looks at process starts. Replace `spawned_process` with a file-open condition.
+- `reverse_shell` comes out with its four groups joined by `and`, so it never matches. Change those joins to `or`.
+- `crypto_mining` matches the program name as typed, so `/usr/bin/xmrig` matches and a bare `xmrig` does not.
 
 ---
 
@@ -52,16 +59,16 @@ SIB includes several example Sigma rules:
 
 ### From SigmaHQ Repository
 
-The [SigmaHQ rules repository](https://github.com/SigmaHQ/sigma) contains thousands of community rules.
+The [SigmaHQ rules repository](https://github.com/SigmaHQ/sigma) contains thousands of community rules. Many use features the converter doesn't handle.
 
 ```bash
 # Clone the Sigma rules repo
 git clone https://github.com/SigmaHQ/sigma.git /tmp/sigma
 
 # Copy rules you want
-cp /tmp/sigma/rules/linux/process_creation/*.yml sigma/rules/
+cp /tmp/sigma/rules/linux/process_creation/<rule>.yml sigma/rules/
 
-# Convert to SIB format
+# Convert to Falco
 make convert-sigma
 ```
 
@@ -97,42 +104,36 @@ tags:
 
 ## Converter Output
 
-Running `make convert-sigma` generates Falco rules only (`sigma/rules/converted_falco_rules.yaml`). To also generate LogQL or LogsQL alerts, run the converter directly, e.g. `./sigma/sigma2sib.py sigma/rules/ -o all`, which writes `converted_logql_alerts.yaml` and `converted_logsql_alerts.yaml` next to the input rules. Output formats:
+`make convert-sigma` writes Falco rules only, to `sigma/rules/converted_falco_rules.yaml`. Run the converter directly for the other formats. Its default is `-o all`:
 
-### Falco Rules
+| `-o` | Output (directory input) |
+|------|--------------------------|
+| `falco` | `converted_falco_rules.yaml` |
+| `logql` | `converted_logql_alerts.yaml` |
+| `logsql` | `converted_logsql_alerts.yaml` |
+| `both` | Falco and LogQL |
+| `all` | all three |
+
+The files are written into the input directory.
+
+> **Delete old `converted_*.yaml` files before converting a directory again.** The converter reads them as Sigma rules. A leftover LogQL or LogsQL file becomes a Falco rule named `Unknown Rule` that matches every process start.
+
+A converted Falco rule looks like this (list shortened):
 
 ```yaml
-# Generated from sigma/rules/crypto_mining.yml
-- rule: Sigma - Cryptocurrency Mining Activity
-  desc: Detects cryptocurrency mining processes
+- rule: Crypto Mining Process Detection
+  desc: "Detects known cryptocurrency mining processes"
   condition: >
-    spawned_process and 
-    (proc.name in (xmrig, minerd, cpuminer) or
-     proc.cmdline contains "stratum+tcp")
+    spawned_process and
+    (proc.exe endswith "/xmrig" or proc.exe endswith "/minerd")
   output: >
-    Cryptocurrency mining activity detected 
-    (user=%user.name command=%proc.cmdline container_id=%container.id)
-  priority: WARNING
-  tags: [sigma, mitre_impact, T1496]
+    Sigma Alert: Crypto Mining Process Detection
+    (user=%user.name cmd=%proc.cmdline file=%fd.name)
+  priority: CRITICAL
+  tags: [mitre_impact, mitre_technique_T1496, sigma]
 ```
 
-### LogQL Alerts
-
-```yaml
-# For Loki alerting
-groups:
-  - name: sigma_rules
-    rules:
-      - alert: CryptocurrencyMiningActivity
-        expr: |
-          count_over_time({job="falco"} 
-            |~ "xmrig|minerd|cpuminer|stratum" [5m]) > 0
-        for: 1m
-        labels:
-          severity: warning
-        annotations:
-          summary: Cryptocurrency mining detected
-```
+MITRE tags are carried over (`attack.impact` becomes `mitre_impact`, `attack.t1496` becomes `mitre_technique_T1496`). The MITRE ATT&CK dashboard counts events by the tactic tags.
 
 ---
 
@@ -144,95 +145,34 @@ groups:
 # Append to custom rules
 cat sigma/rules/converted_falco_rules.yaml >> detection/config/rules/custom_rules.yaml
 
-# Restart to apply
-make restart
+# Check that all rule files load, then restart Falco
+make test-rules
+make restart-detection
 ```
 
-Alternatively, copy the file into `detection/config/rules/`, add its path to `rules_files` in `detection/config/falco.yaml.template`, and re-run `make install-detection`. Files copied there are not loaded automatically.
+Alternatively, copy the file into `detection/config/rules/`, add `/etc/falco/rules/converted_falco_rules.yaml` to `rules_files` in `detection/config/falco.yaml.template`, and re-run `make install-detection`. Copying alone doesn't load it.
 
-### Add to Loki Alerting (Grafana Stack)
+### LogQL and LogsQL Alerts
 
-```bash
-# Copy into the running Loki container's ruler directory (/loki/rules)
-docker cp sigma/rules/converted_logql_alerts.yaml sib-loki:/loki/rules/
-
-# Restart Loki
-docker compose -f storage/compose-grafana.yaml restart loki
-```
-
-> **Note:** SIB does not ship a host mount for `/loki/rules`, so a file copied this way is lost if the container is recreated. Add your own volume mount for `/loki/rules` in `storage/compose-grafana.yaml` to persist it.
-
-> **Note:** This applies to the Grafana stack (`STACK=grafana`). For VictoriaLogs, use LogsQL alerts with `-o logsql`.
+SIB doesn't copy these files anywhere and sets up no alert delivery for them (no Alertmanager, no vmalert). Use the queries as a starting point for your own alert rules, and test each one. Values containing spaces, quotes or `-` can produce invalid LogQL. The queries match the listed strings only, not the field they came from.
 
 ---
 
-## Sigma Rule Syntax
+## What the converter handles
 
-### Basic Structure
+| Sigma feature | Result |
+|---------------|--------|
+| Fields in a selection | Joined with `and`; a list of values is joined with `or` |
+| `contains`, `startswith`, `endswith` | Supported |
+| `contains\|all` | Values are joined with `or`, not `and` |
+| `re` and other modifiers | Not converted correctly: `re` is never treated as a regular expression, others become `contains` |
+| `*` wildcards | Handled for single values, not inside lists |
+| Numbers as single values, keyword lists | Dropped. A rule left with no conditions matches every process start |
+| `condition` | Not parsed. If it contains `1 of` or `any of`, every clause is joined with `or`, otherwise with `and`. `or` and `not` are ignored |
+| Aggregations, correlation | Not supported |
+| `logsource` category | Ignored for Falco: every rule starts with `spawned_process`, so only process rules work as written |
 
-```yaml
-title: Rule Name
-id: unique-uuid
-status: experimental|test|stable
-description: What this rule detects
-author: Author Name
-date: YYYY/MM/DD
-logsource:
-    category: process_creation|file_event|network_connection
-    product: linux|windows|macos
-detection:
-    selection:
-        FieldName: value
-        FieldName|modifier: value
-    condition: selection
-level: informational|low|medium|high|critical
-tags:
-    - attack.tactic
-    - attack.technique_id
-```
-
-### Detection Modifiers
-
-| Modifier | Description | Example |
-|----------|-------------|---------|
-| `contains` | Substring match | `CommandLine|contains: wget` |
-| `startswith` | Prefix match | `FilePath|startswith: /tmp` |
-| `endswith` | Suffix match | `FileName|endswith: .sh` |
-| `re` | Regex match | `CommandLine|re: .*base64.*` |
-| `all` | All values must match | `selection|all: true` |
-
-### Conditions
-
-```yaml
-# Simple
-condition: selection
-
-# Multiple selections with AND
-condition: selection1 and selection2
-
-# Multiple selections with OR
-condition: selection1 or selection2
-
-# Negation
-condition: selection and not filter
-
-# Aggregation
-condition: selection | count() > 10
-```
-
----
-
-## Supported Sigma Categories
-
-The converter supports these Sigma log sources:
-
-| Category | Maps to |
-|----------|---------|
-| `process_creation` | Falco spawned_process events |
-| `file_event` | Falco file activity events |
-| `network_connection` | Falco network events |
-| `syslog` | Loki syslog stream |
-| `auditd` | Loki audit logs |
+Falco field mapping: `CommandLine` → `proc.cmdline`, `Image` → `proc.exe`, `ParentImage` → `proc.pname`, `User` → `user.name`, `TargetFilename` → `fd.name`, `SourceIp` → `fd.cip`, `DestinationIp` → `fd.sip`, `DestinationPort` → `fd.sport`, `ProcessName` → `proc.name`, `CurrentDirectory` → `proc.cwd`. Other field names are only lowercased, which usually gives a field Falco doesn't have.
 
 ---
 
@@ -248,28 +188,29 @@ python3 -c "import yaml; yaml.safe_load(open('sigma/rules/myrule.yml'))"
 
 ### Rule Doesn't Trigger
 
-1. Verify the rule is in Falco:
+1. Compare the converted condition with the Sigma rule (see the table above)
+
+2. Verify the rule is in a file Falco loads:
    ```bash
-   docker exec sib-falco cat /etc/falco/rules.d/custom_rules.yaml | grep "rule name"
+   docker exec sib-falco grep "rule name" /etc/falco/rules/custom_rules.yaml
    ```
 
-2. Check Falco logs:
+3. Check Falco logs:
    ```bash
    make logs-falco
    ```
 
-3. Generate a matching event manually and watch logs
+4. Generate a matching event manually and watch logs
 
 ### False Positives
 
-Add filters to the Sigma rule:
+The converter turns `not filter` into a positive match, so don't add filters in the Sigma rule. Add the exclusion to the converted Falco condition:
+
 ```yaml
-detection:
-    selection:
-        CommandLine|contains: wget
-    filter:
-        User: backup_user
-    condition: selection and not filter
+  condition: >
+    spawned_process and
+    proc.cmdline contains "wget"
+    and not user.name = "backup_user"
 ```
 
 ---

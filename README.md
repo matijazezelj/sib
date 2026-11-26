@@ -1,923 +1,115 @@
-# 🛡️ SIB - SIEM in a Box
+# SIB - SIEM in a Box
 
-**One-command security monitoring** for containers and Linux systems, powered by Falco and VictoriaMetrics.
+**One-command security monitoring for Linux hosts and containers**, built on Falco, VictoriaLogs and Grafana.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-🌐 **Website**: [in-a-box-tools.tech](https://in-a-box-tools.tech)
+Website: [in-a-box-tools.tech](https://in-a-box-tools.tech) · Documentation: [docs/](docs/index.md)
 
-SIB provides a complete, self-hosted security monitoring stack for detecting threats in real-time. Built on Falco's runtime security engine with VictoriaLogs for log storage and Grafana for visualization. Loki/Prometheus available as an alternative backend.
+![Security Overview dashboard](docs/assets/images/security-overview.png)
 
-## 🌟 Features
+## What it is
 
-- **Runtime Security**: Detect suspicious behavior in real-time using Falco's eBPF-based syscall monitoring
-- **Alert Forwarding**: Falcosidekick routes alerts to 50+ destinations (Slack, PagerDuty, Loki, etc.)
-- **Log Aggregation**: VictoriaLogs (default) or Loki stores security events with efficient querying
-- **Pre-built Dashboards**: Grafana dashboards for security overview and event exploration
-- **MITRE ATT&CK Coverage**: Dashboard mapping detections to the ATT&CK framework
-- **Demo Mode**: Generate realistic security events to see dashboards in action
-- **Sigma Rules**: Convert Sigma rules to Falco/LogsQL format
-- **Threat Intel**: IP blocklists from Abuse.ch, Spamhaus, and more
-- **Remote Collectors**: Ship logs/metrics from multiple hosts (Vector+vmagent or Alloy)
-- **Fleet Management**: Dockerized Ansible for deploying agents across infrastructure (no local Ansible needed)
-- **Smart Deployment**: Auto-detects Docker, installs from static binaries if needed — works on any Linux
-- **AI-Powered Analysis** *(Beta)*: LLM-based alert analysis with attack vectors, MITRE ATT&CK mapping, and mitigation strategies
-- **One Command Setup**: Get started with `make install`
+SIB is a self-hosted security monitoring stack. Falco watches system calls on the host through eBPF and flags suspicious behaviour: a shell in a container, a read of `/etc/shadow`, a new cron job, a cryptominer. Falcosidekick stores those events in VictoriaLogs (or Loki) and forwards them to Slack, PagerDuty or a webhook, and Grafana shows them on ready-made dashboards. `make install` sets it all up.
 
-## 🏗️ Architecture
+It is meant for homelabs, startups and small security teams who want runtime detection without running a full enterprise SIEM. It is not a network sniffer and not a log-analytics platform; see the [comparison](docs/architecture.md#comparison-with-other-siems) for where Wazuh, Splunk or Elastic fit better.
+
+## Features
+
+- **Runtime detection**: Falco with the `modern_ebpf` driver and 75 rules loaded by default, plus opt-in packs for cloud, web servers and coding agents
+- **MITRE ATT&CK mapping**: every rule is tagged with a tactic, with a coverage dashboard
+- **Dashboards**: security overview, events explorer, MITRE ATT&CK, fleet overview, host risk scores
+- **Alert forwarding**: Slack, Discord, PagerDuty, Opsgenie, Teams, Telegram, Elasticsearch, generic webhooks, and any other Falcosidekick output
+- **Grafana alerts**: Falco liveness, pipeline health and detection spikes
+- **Two storage stacks**: VictoriaLogs + VictoriaMetrics (default) or Loki + Prometheus
+- **Fleet**: Falco sensors and log/metric collectors on remote hosts, deployed with a Dockerized Ansible, with mTLS
+- **Threat intel**: IP blocklists from abuse.ch, Spamhaus, NetAPI and others, turned into a Falco rule
+- **Sigma**: convert Sigma rules to Falco rules or LogsQL
+- **AI analysis** *(optional, beta)*: LLM analysis of a single alert, with sensitive data obfuscated first; works with a local Ollama model
+- **Demo mode**: `make demo` generates about 30 events so the dashboards have data
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              SIEM in a Box                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐     ┌─────────────────┐     ┌───────────────────────────┐ │
-│  │    Falco     │     │  Falcosidekick  │     │      VictoriaLogs         │ │
-│  │  (Detection) │────▶│   (Fan-out)     │────▶│      (Log Storage)        │ │
-│  │  modern_ebpf │     │                 │     │                           │ │
-│  └──────────────┘     └─────────────────┘     └───────────────────────────┘ │
-│                                                            │                 │
-│                                                            ▼                 │
-│  ┌──────────────┐                             ┌───────────────────────────┐ │
-│  │ node_exporter│                             │        Grafana            │ │
-│  │   (Metrics)  │────────────────────────────▶│   • Security Overview     │ │
-│  └──────────────┘                             │   • Events Explorer       │ │
-│         │                                     │   • MITRE ATT&CK          │ │
-│         ▼                                     │   • Fleet Overview        │ │
-│  ┌──────────────┐                             └───────────────────────────┘ │
-│  │VictoriaMetrics│                                         ▲                │
-│  │   (Metrics)  │──────────────────────────────────────────┘                │
-│  └──────────────┘                                                           │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────┐    ┌───────────────┐    ┌───────────────────┐
+│    Falco     │───▶│ Falcosidekick │───▶│   VictoriaLogs    │
+│ (modern_ebpf)│    │   (fan-out)   │    │  (events, logs)   │
+└──────────────┘    └───────┬───────┘    └─────────┬─────────┘
+                            │                      ▼
+                            ▼            ┌───────────────────┐
+                   Slack, PagerDuty,     │      Grafana      │
+                   webhook, ...          │ dashboards, alerts│
+┌──────────────┐    ┌───────────────┐    └───────────────────┘
+│ node_exporter│───▶│VictoriaMetrics│──────────────▲
+└──────────────┘    └───────────────┘
 ```
 
-## 📋 Prerequisites
+With `STACK=grafana`, Loki and Prometheus replace VictoriaLogs and VictoriaMetrics. Remote hosts can run their own Falco sensor and collectors that report to this server. See [Architecture](docs/architecture.md).
 
-- **Docker CE** 20.10+ from [docker.com](https://docs.docker.com/engine/install/) with Docker Compose v2+, or **Podman** 4.0+ in rootful mode with podman-compose
-  - ⚠️ Podman must run as root (rootful mode) — Falco requires kernel access to monitor syscalls
-- **Linux kernel** 5.8+ (for modern_ebpf driver)
-- **4GB+ RAM** recommended
+## Quick start
 
-> ⚠️ **Note**: Docker Desktop is not supported. Install Docker CE (Community Edition) directly from docker.com or use Podman.
-
-### Hardware Requirements
-
-| Deployment | CPU | RAM | Disk | Notes |
-|------------|-----|-----|------|-------|
-| **SIB Server** (single host) | 2 cores | 4GB | 20GB | Runs Falco + full stack |
-| **SIB Server** (with fleet) | 4 cores | 8GB | 50GB+ | More storage for logs from multiple hosts |
-| **Fleet Agent** | 1 core | 512MB | 1GB | Falco + collectors (vmagent or Alloy) |
-
-> 💡 **Not a network sniffer!** SIB uses Falco's eBPF-based syscall monitoring — it watches what programs do at the kernel level, not network packets. No mirror ports, TAPs, or bridge interfaces needed. Just install on any Linux host and it sees everything that host does.
+You need a Linux host with kernel 5.8+, Docker CE 20.10+ with Compose v2 (or rootful Podman 4.0+) and 4 GB of RAM. Docker Desktop is not supported. Details in [Installation](docs/installation.md).
 
 ```bash
-# Docker CE
-docker --version          # Should be 20.10+
-docker compose version    # Should be v2+
-
-# Or Podman
-podman --version          # Should be 4.0+
-podman-compose --version  # Alternative to docker compose
-
-# Kernel (both)
-uname -r                  # Should be 5.8+ for eBPF
-```
-
-## 🚀 Quick Start
-
-```bash
-# Clone the repository
 git clone https://github.com/matijazezelj/sib.git
 cd sib
-
-# Configure environment
-cp .env.example .env
-# Edit .env if needed (defaults work for local testing)
-
-# Install everything
+cp .env.example .env    # defaults work for a local test
 make install
-
-# Verify it's working
 ./scripts/test-pipeline.sh
 ```
 
-### Storage Backend
-
-SIB supports two monitoring stacks. Choose based on your preferences:
-
-| Stack | Components | Best For |
-|-------|------------|----------|
-| **`vm`** (default) | VictoriaLogs + VictoriaMetrics + node_exporter | 10x less RAM, faster queries, recommended |
-| **`grafana`** | Loki + Prometheus | Grafana ecosystem, native integration |
-
-```bash
-# In .env - choose your stack (one simple setting)
-STACK=vm         # Default - VictoriaMetrics ecosystem (recommended)
-STACK=grafana    # Alternative - Grafana ecosystem (Loki + Prometheus)
-```
-
-The `make install` command automatically:
-- Deploys the correct storage stack
-- Configures Falcosidekick to send alerts to the chosen backend
-- Sets up Grafana with the appropriate datasources and dashboards
-- For VM stack: includes node_exporter for host metrics
-
-## 🌐 Access Points
-
-| Service | URL | Stack |
-|---------|-----|-------|
-| **Grafana** | http://localhost:3000 | Both |
-| **Sidekick API** | http://localhost:2801 | Both |
-| **Loki** | http://localhost:3100 | `grafana` only |
-| **Prometheus** | http://localhost:9090 | `grafana` only |
-| **VictoriaLogs** | http://localhost:9428 | `vm` only |
-| **VictoriaMetrics** | http://localhost:8428 | `vm` only |
-
-Grafana login: `admin` with the password in `.env` (`GRAFANA_ADMIN_PASSWORD`, generated on install)
-
-> **Note:** Only the services for your selected `STACK` will be running.
-
-> 🔒 **Safe defaults:** Grafana, Falcosidekick, storage APIs, and AI analysis bind to `127.0.0.1` by default. To expose them on a LAN, set `GRAFANA_BIND_ADDR=0.0.0.0`, `SIDEKICK_BIND_ADDR=0.0.0.0`, `STORAGE_BIND=0.0.0.0`, or `ANALYSIS_BIND=0.0.0.0` intentionally.
-
-> ⚠️ **Fleet Security Note:** If fleet hosts send events to Sidekick on `2801`,
-> require mTLS with a distinct client certificate per sensor and restrict the
-> listener to each approved source address. Do not expose plain HTTP or allow an
-> entire subnet merely because it is convenient:
-> ```bash
-> SIB_SERVER_IP=192.168.1.25 ./scripts/generate-certs.sh
-> ./scripts/generate-client-cert.sh docker-vm
-> # UFW example: one approved sensor, not the whole LAN
-> ufw allow from 192.168.1.212 to any port 2801 proto tcp
-> ```
->
-> On each remote sensor set `SIDEKICK_URL=https://<central-host>:2801/`,
-> `FALCO_CLIENT_CERT_NAME=<sensor-name>`, and `MTLS_ENABLED=true`. Copy only the
-> CA certificate and that sensor's certificate/private key to its protected
-> `certs/` tree. Keep central storage and Falcosidekick deployed once; run one
-> Falco sensor per independent kernel.
-
-## 🎯 What Gets Detected?
-
-| Category | Examples |
-|----------|----------|
-| **Credential Access** | Reading /etc/shadow, SSH key access |
-| **Container Security** | Shells in containers, privileged operations |
-| **File Integrity** | Writes to /etc, sensitive config changes |
-| **Process Anomalies** | Unexpected binaries, shell spawning |
-| **Persistence** | Cron modifications, systemd changes |
-| **Cryptomining** | Mining processes, pool connections |
-
-## 🔍 Comparison (Wazuh, Splunk, Elastic)
-
-| Tool | Pros | Cons | Best for |
-|------|------|------|----------|
-| **SIB** | One-command setup, Falco runtime detection, curated Grafana dashboards, self-hosted | Not a full log SIEM platform, Linux-only detection | Homelabs, startups, lean SecOps teams | 
-| **Wazuh** | Strong host-based SIEM, broad OS support, built-in agents | Heavier setup, more tuning required, multi-component stack | Organizations needing HIDS + log SIEM | 
-| **Splunk** | Powerful search/analytics, enterprise-grade scale | Expensive at scale, complex operations | Large enterprises with budget and dedicated SIEM team | 
-| **Elastic SIEM** | Flexible, open-source core, great search | Requires careful sizing/tuning, operational overhead | Teams already using Elastic Stack | 
-
-**Takeaway:** SIB prioritizes **speed of deployment** and **actionable runtime detection**. For large-scale log analytics and complex compliance reporting, Wazuh/Splunk/Elastic may be a better fit.
-
-## 📊 Dashboards
-
-### Security Overview
-- Total events, Critical/Error/Warning/Notice counts
-- Events over time by priority
-- Events by rule (pie chart)
-- **🚨 Critical Events panel** - Dedicated view for high-priority events
-- Recent security events log
-
-### Events Explorer
-- Query help with LogQL examples
-- Event volume by rule
-- Filterable log view (hostname, priority and rule dropdowns in the Loki and AI-analysis variants; the base VictoriaLogs variant has none)
-
-### MITRE ATT&CK Coverage
-- Detection events mapped to ATT&CK tactics
-- Visual matrix showing coverage across 12 tactics
-- Events over time by tactic
-- Technique breakdown and priority distribution
-- **Hostname filter** to focus on specific hosts
-
-### Fleet Overview
-- Active hosts with collectors
-- CPU, memory, disk usage per host
-- Network traffic graphs
-- Log volume by host
-- **Hostname selector** to filter all panels by host
-
-### Risk Scores
-- Host risk assessment based on event severity and frequency
-
-### UniFi Logs (`vm` stack)
-- UniFi syslog events and sender overview
-
-## 🛠️ Commands
-
-```bash
-# Installation (reads STACK from .env: vm or grafana)
-make install              # Install all stacks (auto-configures based on STACK)
-make uninstall            # Remove everything
-
-# Storage (Manual override)
-make install-storage-vm              # Install VictoriaLogs + VictoriaMetrics (default)
-make install-storage-grafana         # Install Loki + Prometheus (alternative)
-
-# Management
-make start                # Start all services
-make stop                 # Stop all services
-make restart              # Restart all services
-make status               # Show service status
-make health               # Quick health check
-make doctor               # Diagnose common issues
-
-# Logs
-make logs                 # Tail all logs
-make logs-falco           # Tail Falco logs
-make logs-sidekick        # Tail Falcosidekick logs
-make logs-storage         # Tail storage logs (auto-detects stack)
-make logs-grafana         # Tail Grafana logs
-
-# Demo & Testing
-make demo                 # Run comprehensive security demo (~30 events)
-make demo-quick           # Run quick demo (1s delay)
-make test-alert           # Generate a test security alert
-make refresh-alerts       # Regenerate Grafana alert rules (expected Falco hosts) and reload
-./scripts/test-pipeline.sh  # Run full pipeline test
-
-# Threat Intel & Sigma
-make update-threatintel   # Download threat intel feeds
-make convert-sigma        # Convert Sigma rules to Falco rules
-
-# AI Analysis (Optional)
-make install-analysis     # Install AI analysis API (integrated with Grafana)
-make logs-analysis        # View analysis API logs
-
-# Utilities
-make open                 # Open Grafana in browser
-make info                 # Show all endpoints
-
-# Backup & Restore
-make backup               # Create timestamped backup of configs, rules, and Grafana dashboards
-make restore              # Restore from a backup file
-```
-
-## 📚 Documentation
-
-- [docs/installation.md](docs/installation.md)
-- [docs/minimal-install.md](docs/minimal-install.md)
-- [docs/quickstart.md](docs/quickstart.md)
-- [docs/security-hardening.md](docs/security-hardening.md)
-- [docs/troubleshooting.md](docs/troubleshooting.md)
-- [docs/faq.md](docs/faq.md)
-- [ROADMAP.md](ROADMAP.md)
-- Kubernetes deployment: [sib-k8s](https://github.com/matijazezelj/sib-k8s)
-- VictoriaLogs backend: [docs/victorialogs.md](docs/victorialogs.md)
-- Grafana alert rules (Falco liveness, Slack/webhook/Telegram, shared Grafana): [docs/grafana-alerts.md](docs/grafana-alerts.md)
-
-## 📁 Project Structure
-
-```
-sib/
-├── Makefile                    # Main entry point
-├── .env.example                # Environment template (STACK config)
-├── scripts/
-│   └── test-pipeline.sh        # Pipeline verification script
-├── detection/                  # Falco stack
-│   ├── compose.yaml
-│   └── config/
-│       ├── falco.yaml.template # Falco config template (modern_ebpf; falco.yaml is generated)
-│       └── rules/
-│           └── custom_rules.yaml  # Custom detection rules
-├── alerting/                   # Falcosidekick
-│   ├── compose.yaml
-│   └── config/
-│       ├── config.yaml         # Generated from .env on install (do not edit)
-│       └── custom-outputs.yaml.example  # Optional user-managed extra outputs
-├── storage/                    # Log storage backends
-│   ├── compose-vm.yaml         # VictoriaLogs + VictoriaMetrics (default)
-│   ├── compose-grafana.yaml    # Loki + Prometheus (alternative)
-│   └── config/
-│       ├── loki-config.yml
-│       └── prometheus.yml
-├── grafana/                    # Dashboards
-│   ├── compose.yaml
-│   └── provisioning/
-│       ├── datasources/
-│       │   └── templates/      # Datasource templates
-│       └── dashboards/
-│           ├── loki/           # Loki-specific dashboards
-│           └── victorialogs/   # VictoriaLogs-specific dashboards
-├── ansible/                    # Fleet management (Dockerized)
-│   ├── inventory/
-│   │   ├── hosts.yml.example   # Host inventory template
-│   │   └── group_vars/all.yml  # Deployment settings
-│   ├── roles/
-│   │   ├── falco/              # Falco deployment role
-│   │   ├── vm_collectors/      # Vector + vmagent deployment (VM stack)
-│   │   ├── alloy/              # Alloy deployment role (Grafana stack)
-│   │   ├── certs/              # mTLS certificate distribution
-│   │   └── common/             # Shared tasks (Docker checks, etc.)
-│   └── playbooks/
-├── collectors/                 # Remote host collectors
-│   ├── compose-vm.yaml         # VM stack collectors (Vector + vmagent)
-│   ├── compose-grafana.yaml    # Grafana stack collectors (Alloy)
-│   ├── config/
-│   │   ├── vector.toml         # Vector log shipping config
-│   │   ├── vmagent.yml         # vmagent metrics scraping config
-│   │   └── config.alloy        # Alloy configuration (Grafana stack)
-│   └── scripts/
-│       └── deploy.sh           # Remote deployment script
-└── examples/
-    └── rules/                  # Example custom rules
-```
-
-## 🔧 Configuration
-
-### Custom Rules
-
-Add detection rules in `detection/config/rules/custom_rules.yaml`:
-
-```yaml
-- rule: Detect Cryptocurrency Mining
-  desc: Detect cryptocurrency mining processes
-  condition: >
-    spawned_process and 
-    proc.name in (xmrig, minerd, cpuminer)
-  output: "Crypto miner detected (user=%user.name cmd=%proc.cmdline)"
-  priority: CRITICAL
-  tags: [cryptomining, mitre_impact]
-```
-
-### Alert Outputs
-
-Configure outputs in `.env`, then re-run `make install-alerting` to apply:
-
-```bash
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
-SLACK_CHANNEL=#security-alerts
-SLACK_MINIMUM_PRIORITY=warning
-
-PAGERDUTY_ROUTING_KEY=your-routing-key
-PAGERDUTY_MINIMUM_PRIORITY=critical
-```
-
-Slack, Discord, PagerDuty, Opsgenie, Teams, and Elasticsearch have `.env` settings.
-For any of Falcosidekick's other outputs, copy
-`alerting/config/custom-outputs.yaml.example` to `custom-outputs.yaml` — it is
-appended to the generated config and never overwritten.
-
-Generic authenticated webhooks can also be configured without editing the
-generated YAML:
-
-```bash
-WEBHOOK_ADDRESS=http://incident-handler.example:8644/webhooks/falco
-WEBHOOK_HEADER_NAME=X-Gitlab-Token
-WEBHOOK_HEADER_VALUE=replace-with-route-secret
-WEBHOOK_MINIMUM_PRIORITY=warning
-```
-
-This is suitable for event-driven agents such as Hermes Agent: Falcosidekick
-forwards the raw Falco event, the webhook starts an incident-triage run, and
-the agent can deliver its verified result to Telegram. Use HTTPS or a trusted
-management network because a static header secret is sent with each request.
-
-For an agent-backed output, start at `critical` and retain lower-priority events
-in VictoriaLogs for periodic tuning. Do not invoke an LLM for every warning:
-normal NSS reads of `/etc/passwd`, healthcheck probes, package-maintenance
-traffic, and arbitrary high destination ports are high-volume telemetry rather
-than useful incident triggers. Add exclusions only after correlating the exact
-rule, process, container, and command over multiple occurrences; never suppress
-an entire detection class merely because remediation requires a human.
-
-The bundled rules already exclude these proven-safe cases:
-
-- world-readable `/etc/passwd` from the sensitive-file list;
-- Pi-hole writes below `/etc/pihole/` and its gravity update temp-file activity;
-- Falcosidekick healthchecks inspect `/proc/net/tcp{,6}` instead of opening a
-  certificate-less connection to the mTLS listener;
-- routine `env` invocations (explicit `printenv` and `/proc/*/environ` reads remain);
-- arbitrary destination ports above 60000 (known abused ports remain);
-- qBittorrent peer traffic from `qbittorrent-nox`, including peers on commonly
-  abused ports—the same ports remain monitored for every other process;
-- root-container detection on the container's PID 1 only, rather than every
-  root-owned healthcheck and child process;
-- local read-only VictoriaLogs queries using `curl --data-urlencode` against
-  `127.0.0.1:9428`; curl POST/upload detection remains active elsewhere.
-- host-side Wazuh syscollector reads of `/etc/shadow` and `/etc/sudoers`, plus
-  its `/etc/.pwd.lock` update; other processes and sensitive paths remain;
-- Unbound DNS responses from remote port 53 that happen to land on a locally
-  suspicious-numbered ephemeral port; non-DNS use of those ports remains.
-- read-only `modprobe -n`/`--dry-run` checks and Docker's exact
-  `modprobe -q -- veth…` network-device alias probes; actual kernel module
-  insertion/removal remains Critical.
-
-Falcosidekick's Loki-compatible output uses a host-only `loki.hostport` and a
-separate endpoint: `/insert/loki/api/v1/push` for VictoriaLogs or
-`/loki/api/v1/push` for Loki. Combining `/insert` into `hostport` makes
-Falcosidekick append its default endpoint to the wrong path and silently stops
-event retention after a restart.
-
-The generated config contains output credentials and is mode `0640`, not
-`0600`: Falcosidekick runs as uid `1234`, so Compose adds only the configured
-`SIDECAR_CONFIG_GID` as a supplementary group. Mode `0600` makes the bind mount
-unreadable inside the container, silently starts Falcosidekick with no enabled
-outputs, and still leaves its `/ping` healthcheck green.
-
-> ⚠️ `alerting/config/config.yaml` is regenerated on every install. Do not hand-edit it.
-
-### Environment Variables
-
-Key variables in `.env`:
-
-```bash
-# Auto-generated on install (leave as CHANGE_ME to regenerate)
-GRAFANA_ADMIN_PASSWORD=<auto-generated>
-GRAFANA_PORT=3000
-LOKI_PORT=3100
-PROMETHEUS_PORT=9090
-SIDEKICK_PORT=2801
-```
-
-## 🔒 Security Notes
-
-- Internal services (Loki, Prometheus) bind to localhost only
-- Grafana and Sidekick API bind to `127.0.0.1` by default; set `GRAFANA_BIND_ADDR` / `SIDEKICK_BIND_ADDR` to `0.0.0.0` to expose them (e.g. for fleet support, preferably with mTLS)
-- Falco requires privileged access for syscall monitoring
-- Grafana's admin password is generated into `.env` on install; rotate it for production
-- **mTLS available** for encrypted fleet communication
-
-### Hardening Checklist
-
-- Restrict external ports to trusted IPs
-- Put Grafana behind TLS + auth (reverse proxy)
-- Rotate default credentials before production use
-- Set retention limits for Loki/Prometheus
-- Back up Grafana and Loki volumes
-- Enable mTLS for production fleet deployments (`make generate-certs`)
-
-See [docs/security-hardening.md](docs/security-hardening.md) for full guidance.
-
-## 🤖 AI-Powered Alert Analysis (Beta)
-
-SIB includes an optional AI-powered analysis feature that uses LLMs to analyze security alerts and provide:
-
-- **Attack Vector Identification** - What technique is being used
-- **MITRE ATT&CK Mapping** - Tactic and technique IDs
-- **Risk Assessment** - Severity, confidence, and potential impact
-- **Mitigation Strategies** - Immediate, short-term, and long-term actions
-- **False Positive Assessment** - Likelihood and common legitimate causes
-
-### Privacy-First Design
-
-Sensitive data is **obfuscated before sending to the LLM**:
-- IPs → `[INTERNAL-IP-1]`, `[EXTERNAL-IP-1]`
-- Usernames → `[USER-1]`
-- Hostnames → `[HOST-1]`
-- Container IDs → `[CONTAINER-1]`
-- Secrets/credentials → `[REDACTED-<label>]`
-
-The analyzer auto-detects the storage backend from the `STACK` env var — it queries VictoriaLogs when `STACK=vm` (default) or Loki when `STACK=grafana`.
-
-### Quick Start
-
-```bash
-# Install the Analysis API service
-make install-analysis
-```
-
-Your server's IP is auto-detected, and an `ANALYSIS_API_TOKEN` is generated into `.env`
-if you haven't set one. Then open Grafana and use the Events Explorer dashboard to
-analyze any event with AI — the provisioned data links carry the token for you.
-
-> 🔒 Every endpoint except `/health` requires that token (`Authorization: Bearer <token>`
-> or `?token=<token>`). Analysis triggers billed LLM calls, so do not run this API
-> without one. If you rotate the token in `.env`, re-run `make install-analysis` to
-> refresh the dashboard links.
-
-### Grafana Integration
-
-Once installed, the **Events Explorer** dashboard includes a table where you can click any event to analyze it with AI:
-
-1. Open **Events Explorer** dashboard in Grafana
-2. Scroll to the **"🤖 Select Event to Analyze"** table
-3. Click on any log line to see the **"🤖 Analyze with AI"** link
-4. View the analysis with attack vectors, MITRE mapping, and mitigations
-
-![AI Analysis Result](docs/assets/images/ai-analysis-obfuscation-and-alert.png)
-
-The analysis page shows:
-- **Original Alert** - The raw event
-- **What Was Sent to AI** - The obfuscated version (your sensitive data stays private)
-- **Attack Vector & MITRE ATT&CK** mapping
-- **Risk Assessment** with severity and confidence
-- **Mitigations** (immediate, short-term, long-term)
-- **False Positive Assessment**
-
-Browse past analyses from the API history page:
-
-![Analysis History](docs/assets/images/ai-api-history.png)
-
-### LLM Providers
-
-| Provider | Privacy | Setup |
-|----------|---------|-------|
-| **Anthropic** (default) | ⚠️ Data sent to API (obfuscated) | Set `ANTHROPIC_API_KEY`; starts on Haiku 5.5, escalates failed answers to Sonnet 5.5 |
-| OpenAI | ⚠️ Data sent to API (obfuscated) | Set `OPENAI_API_KEY` |
-| **Ollama** (fully local) | ✅ Data stays on-premises | `ollama pull qwen2.5:14b`, set `LLM_PROVIDER=ollama` |
-
-Configure in `analysis/config.yaml`. See [analysis/README.md](analysis/README.md) for full documentation.
-
-## 📡 Remote Collectors
-
-Deploy lightweight collectors to ship logs and metrics from remote hosts to your central SIB server.
-
-### Collector Stacks
-
-| SIB Stack | Collectors | Components |
-|-----------|------------|------------|
-| `vm` (default) | VM Collectors | Vector (logs) + vmagent + node_exporter (metrics) |
-| `grafana` | Alloy | Grafana Alloy (logs + metrics) |
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Hub and Spoke Model                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   Host A     │    │   Host B     │    │   Host C     │                   │
-│  │ (Collectors) │    │ (Collectors) │    │ (Collectors) │                   │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                   │
-│         │                   │                   │                            │
-│         │           Logs  +  Metrics (Remote Write)                         │
-│         │                   │                   │                            │
-│         └───────────────────┼───────────────────┘                            │
-│                             ▼                                                │
-│                   ┌──────────────────┐                                       │
-│                   │    SIB Server    │                                       │
-│                   │  ┌────────────┐  │                                       │
-│                   │  │VictoriaLogs│  │  ◀── Logs (or Loki for grafana stack)│
-│                   │  └────────────┘  │                                       │
-│                   │  ┌────────────┐  │                                       │
-│                   │  │VictoriaM.  │  │  ◀── Metrics (or Prometheus)         │
-│                   │  └────────────┘  │                                       │
-│                   │  ┌────────────┐  │                                       │
-│                   │  │  Grafana   │  │  ◀── Fleet Overview dashboard        │
-│                   │  └────────────┘  │                                       │
-│                   └──────────────────┘                                       │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Enable Remote Mode
-
-On the SIB server, enable external access for collectors:
-
-```bash
-make enable-remote
-```
-
-This exposes storage endpoints externally:
-- **VM stack**: VictoriaLogs (9428), VictoriaMetrics (8428)
-- **Grafana stack**: Loki (3100), Prometheus (9090)
-
-Ensure your firewall is configured appropriately.
-
-### Deploy Collector to Remote Host
-
-```bash
-# Using the Makefile (recommended)
-make deploy-collector HOST=user@remote-host
-
-# Or using the deploy script directly
-./collectors/scripts/deploy.sh user@192.168.1.50 192.168.1.163
-```
-
-The deploy script will:
-1. Copy collector configuration to the remote host
-2. Configure the SIB server address
-3. Start collectors via Docker Compose
-4. Verify the deployment
-
-### What Gets Collected
-
-| Type | Sources | Labels (`grafana` stack, Alloy) |
-|------|---------|--------|
-| **System Logs** | `/var/log/syslog`, `/var/log/messages` | `job="syslog"` |
-| **Auth Logs** | `/var/log/auth.log`, `/var/log/secure` | `job="auth"` |
-| **Kernel Logs** | `/var/log/kern.log` | `job="kernel"` |
-| **Journal** | systemd journal | `job="journal"` |
-| **Docker Logs** | All containers | `job="docker"`, `container=...` |
-| **Node Metrics** | CPU, memory, disk, network | `job="node"` |
-
-The `job` labels are set only by Alloy (`grafana` stack). On the default `vm` stack, Vector tags every log with just `host` and `collector="vector"`.
-
-All data is tagged with `host` (hostname of the remote machine).
-
-### Manual Deployment
-
-If you prefer manual deployment:
-
-```bash
-# On the remote host
-mkdir -p ~/sib-collector/config
-
-# For VM stack (default): copy Vector and vmagent configs
-scp collectors/config/vector.toml user@remote:~/sib-collector/config/
-scp collectors/config/vmagent.yml user@remote:~/sib-collector/config/
-scp collectors/compose-vm.yaml user@remote:~/sib-collector/compose.yaml
-
-# For Grafana stack: copy Alloy config
-# scp collectors/config/config.alloy user@remote:~/sib-collector/config/
-# scp collectors/compose-grafana.yaml user@remote:~/sib-collector/compose.yaml
-
-# Edit configs - replace SIB_SERVER with your SIB server IP
-
-# Start the collector
-ssh user@remote "cd ~/sib-collector && SIB_SERVER=192.168.1.100 HOSTNAME=\$(hostname) docker compose up -d"
-```
-
-### Verify Collector is Working
-
-```bash
-# VM stack (default) - check Vector and vmagent
-ssh user@remote "docker logs sib-vector --tail 20"
-ssh user@remote "docker logs sib-vmagent --tail 20"
-
-# Grafana stack - check Alloy
-# ssh user@remote "docker logs sib-alloy --tail 20"
-
-# Query logs on SIB server
-curl -s "http://localhost:9428/select/logsql/query?query=*" | head   # VM stack
-# curl -s "http://localhost:3100/loki/api/v1/query?query={job=~\".+\"}" | head  # Grafana stack
-
-# Check metrics
-curl -s 'http://localhost:8428/api/v1/query?query=node_uname_info'   # VM stack
-# curl -s 'http://localhost:9090/api/v1/query?query=node_uname_info'  # Grafana stack
-```
-
-See [collectors/README.md](collectors/README.md) for detailed configuration.
-
-### Fleet Overview Dashboard
-
-The **Fleet Overview** dashboard in Grafana shows:
-- Number of active hosts with collectors
-- CPU, memory, disk utilization per host
-- Network traffic graphs
-- Log volume by host
-
-## 🚀 Fleet Management with Ansible
-
-For managing multiple hosts at scale, SIB includes a Dockerized Ansible setup. **No local Ansible installation required.**
-
-### Deployment Strategy
-
-SIB supports both **native packages** and **Docker containers**:
-
-| Strategy | Description |
-|----------|-------------|
-| `docker` | Run agents as containers. **Recommended for simplicity.** |
-| `native` | Falco from repo as systemd service |
-| `auto` (default) | Use Docker if available, otherwise native |
-
-> **Note:** VM stack collectors (Vector, vmagent, node_exporter) always run as Docker containers. The strategy setting primarily affects Falco deployment.
-
-> ⚠️ **LXC Limitation:** Falco cannot run in LXC containers due to kernel access restrictions. Use VMs or run Falco on the LXC host itself.
-
-### Quick Start
-
-```bash
-# Configure your hosts
-cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
-vim ansible/inventory/hosts.yml  # Add your servers
-
-# Test connectivity
-make fleet-ping
-
-# Deploy to all hosts
-make deploy-fleet
-
-# Or target specific hosts
-make deploy-fleet LIMIT=webserver
-```
-
-### Fleet Commands
-
-| Command | Description |
-|---------|-------------|
-| `make deploy-fleet` | Deploy Falco + collectors to all fleet hosts, then run `make refresh-alerts` |
-| `make update-rules` | Push detection rules to fleet (Docker or native, detected per host) |
-| `make fleet-certs` | Push mTLS certificates to fleet hosts without a full redeploy |
-| `make fleet-health` | Check health of all agents |
-| `make fleet-docker-check` | Check/install Docker on fleet hosts |
-| `make fleet-ping` | Test SSH connectivity |
-| `make fleet-shell` | Open shell in Ansible container |
-| `make remove-fleet` | Remove agents from fleet |
-
-See [ansible/README.md](ansible/README.md) for detailed configuration options.
-
-## 🎭 Demo Mode
-
-Generate realistic security events **locally on your SIB server** — no fleet setup required! Perfect for first-time users, demonstrations, or testing detection capabilities.
-
-```bash
-# Run comprehensive demo (~30 events across 12 MITRE ATT&CK categories)
-make demo
-
-# Quick demo with 1-second delays
-make demo-quick
-```
-
-The demo spins up a temporary container and triggers various Falco rules. Watch your Grafana dashboards light up in real-time at http://localhost:3000.
-
-### Demo Coverage
-
-The demo script generates events across these MITRE ATT&CK categories:
-
-| Tactic | Events Generated |
-|--------|------------------|
-| **Credential Access** | Shadow file access, /etc/passwd reads |
-| **Execution** | Shell spawning, script execution |
-| **Persistence** | Cron job creation, systemd manipulation |
-| **Defense Evasion** | Log clearing, history deletion |
-| **Discovery** | System enumeration, network scanning |
-| **Impact** | Crypto miner detection |
-| **Container Escape** | Docker socket access, namespace breakout |
-| **Lateral Movement** | SSH key access, authorized_keys reads |
-| **File Integrity** | /etc/ file modifications |
-
-Each event triggers corresponding Falco rules and flows through to Grafana in real-time.
-
-## 📐 Sigma Rules Integration
-
-[Sigma](https://sigmahq.io/) is the universal language for security detection rules. SIB includes a converter to translate Sigma rules to Falco rules and LogsQL alerts (VictoriaLogs).
-
-```bash
-# Convert all Sigma rules in sigma/rules/
-make convert-sigma
-
-# Convert to LogsQL for VictoriaLogs
-./sigma/sigma2sib.py sigma/rules/ -o logsql
-
-# Convert a specific rule
-./sigma/sigma2sib.py sigma/rules/crypto_mining.yml
-```
-
-### Included Sample Rules
-
-| Rule | Description | MITRE Tactic |
-|------|-------------|--------------|
-| `crypto_mining.yml` | Detects cryptocurrency miners | Impact (T1496) |
-| `shadow_access.yml` | Password file access | Credential Access (T1003) |
-| `ssh_keys.yml` | SSH private key access | Persistence (T1098) |
-| `reverse_shell.yml` | Reverse shell patterns | Execution (T1059) |
-| `container_escape.yml` | Container breakout attempts | Privilege Escalation (T1611) |
-
-### Adding More Sigma Rules
-
-1. Download rules from the [Sigma community rules repo](https://github.com/SigmaHQ/sigma)
-2. Place `.yml` files in `sigma/rules/`
-3. Run `make convert-sigma`
-4. Copy generated Falco rules to `detection/config/rules/custom_rules.yaml`
-
-## 🎯 MITRE ATT&CK Coverage
-
-SIB includes a MITRE ATT&CK dashboard that maps all detections to the ATT&CK framework, providing visibility into your security coverage.
-
-### Dashboard Features
-
-- **Tactic Coverage**: 12 stat panels showing detection counts for each ATT&CK tactic
-- **Timeline View**: Events over time grouped by tactic
-- **Technique Breakdown**: Table showing most-triggered techniques
-- **Priority Distribution**: Pie chart of event severities
-
-### Covered Tactics
-
-The dashboard tracks events across all ATT&CK tactics:
-
-```
-┌──────────────┬───────────────┬────────────────┬───────────────────┐
-│ Initial      │ Execution     │ Persistence    │ Privilege         │
-│ Access       │               │                │ Escalation        │
-├──────────────┼───────────────┼────────────────┼───────────────────┤
-│ Defense      │ Credential    │ Discovery      │ Lateral           │
-│ Evasion      │ Access        │                │ Movement          │
-├──────────────┼───────────────┼────────────────┼───────────────────┤
-│ Collection   │ Command &     │ Exfiltration   │ Impact            │
-│              │ Control       │                │                   │
-└──────────────┴───────────────┴────────────────┴───────────────────┘
-```
-
-### Viewing the Dashboard
-
-1. Open Grafana at http://localhost:3000
-2. Navigate to **Dashboards** → **MITRE ATT&CK Coverage**
-3. Run `make demo` to generate events across multiple tactics
-
-## 🕵️ Threat Intelligence
-
-SIB can enrich detections with threat intelligence from public IP blocklists.
-
-```bash
-# Download/update threat intel feeds
-make update-threatintel
-```
-
-### Included Feeds
-
-| Source | Feed Type | URL |
-|--------|-----------|-----|
-| **Feodo Tracker** | C&C IPs | abuse.ch |
-| **SSL Blacklist** | SSL abuse IPs | abuse.ch |
-| **Emerging Threats** | Compromised IPs | rules.emergingthreats.net |
-| **Spamhaus DROP** | Spam/DDoS | spamhaus.org |
-| **Blocklist.de** | Attack IPs | blocklist.de |
-| **CINSscore** | Bad reputation | cinsscore.com |
-| **NetAPI** | Honeypot attack IPs | netapi.com |
-
-### Generated Files
-
-After running `make update-threatintel`:
-
-```
-threatintel/
-├── feeds/                      # Individual feed downloads
-│   ├── feodotracker.txt
-│   ├── sslbl.txt
-│   ├── et_compromised.txt
-│   ├── spamhaus_drop.txt
-│   ├── netapi_honeypot.txt
-│   ├── blocklist_ssh.txt
-│   ├── blocklist_all.txt
-│   ├── ci_army.txt
-│   └── combined_blocklist.txt  # Unified blocklist
-├── falco_threatintel_rules.yaml # Generated Falco rules
-└── lookup-ip.sh                # IP lookup utility
-```
-
-### Using Threat Intel
-
-```bash
-# Look up an IP against all feeds
-./threatintel/lookup-ip.sh 1.2.3.4
-
-# Add generated rules to Falco
-cat threatintel/falco_threatintel_rules.yaml >> detection/config/rules/custom_rules.yaml
-make restart
-```
-
-### Automating Updates
-
-Add to crontab to update feeds daily:
-
-```bash
-# Update threat intel every day at 2 AM
-0 2 * * * cd /path/to/sib && make update-threatintel
-```
-
-## 🐛 Troubleshooting
-
-### Falco won't start
-
-```bash
-# Check kernel version (need 5.8+ for modern_ebpf)
-uname -r
-
-# Check Falco logs
-docker logs sib-falco
-
-# Verify privileged mode is working
-docker run --rm --privileged alpine echo "OK"
-```
-
-### No events in Grafana
-
-```bash
-# Run the pipeline test
-./scripts/test-pipeline.sh
-
-# Check Falcosidekick is receiving events
-docker logs sib-sidekick --tail 20
-
-# Query Loki directly (Grafana stack)
-curl -s "http://localhost:3100/loki/api/v1/query?query={source=\"syscall\"}" | jq .
-
-# Query VictoriaLogs directly (VM stack — default)
-curl -s 'http://localhost:9428/select/logsql/query?query=source:syscall&limit=5'
-```
-
-## 📜 License
-
-Apache 2.0 License - See [LICENSE](LICENSE) for details.
-
-## 🙏 Acknowledgments
-
-- [Falco](https://falco.org/) - Cloud native runtime security
-- [Falcosidekick](https://github.com/falcosecurity/falcosidekick) - Alert routing
-- [Grafana](https://grafana.com/) - Observability platform
-- [Loki](https://grafana.com/oss/loki/) - Log aggregation
-- [Prometheus](https://prometheus.io/) - Metrics monitoring
-- [VictoriaMetrics](https://victoriametrics.com/) - Fast metrics & logs storage (thanks [@valyala](https://github.com/valyala) for the suggestion!)
+Open Grafana at http://localhost:3000 and log in as `admin` with the `GRAFANA_ADMIN_PASSWORD` generated into `.env`. Run `make demo` to see the dashboards fill up.
+
+Everything listens on `127.0.0.1` by default. Read [Security Hardening](docs/security-hardening.md) before exposing anything.
+
+## Documentation
+
+| Page | What it covers |
+|------|----------------|
+| [Installation](docs/installation.md) | Prerequisites, hardware sizing, step-by-step install |
+| [Minimal Install](docs/minimal-install.md) | Core stack only, smallest footprint |
+| [Quick Start](docs/quickstart.md) | First run, demo mode, first alert |
+| [Architecture](docs/architecture.md) | Components, data flow, storage stacks, project layout, comparison with other SIEMs |
+| [Configuration](docs/configuration.md) | Every `.env` setting, alert outputs, bind addresses |
+| [Commands](docs/commands.md) | All `make` targets, grouped by purpose |
+| [Dashboards](docs/dashboards.md) | Service URLs and what each Grafana dashboard shows |
+| [Detection Rules](docs/detection.md) | Rule packs, what is detected, MITRE ATT&CK coverage, custom rules, built-in tuning |
+| [Grafana Alerts](docs/grafana-alerts.md) | Falco liveness, pipeline and spike alerts; Slack, webhook or Telegram notification |
+| [Fleet Management](docs/fleet.md) | Remote collectors, Ansible deployment, mTLS for remote sensors |
+| [AI Analysis](docs/ai-analysis.md) | LLM alert analysis, providers, obfuscation, API token |
+| [Sigma Rules](docs/sigma-rules.md) | Converting Sigma rules to Falco and LogsQL |
+| [Threat Intelligence](docs/threat-intel.md) | Blocklist feeds, generated Falco rule, IP lookup |
+| [HIB Integration](docs/hib-integration.md) | Coding-agent rules and HIB's security event log |
+| [HIB Event Spec](docs/hib-events-spec.md) | The event format shared between HIB and SIB |
+| [AIB Integration](docs/aib-integration.md) | Asset enrichment for AI analysis from Assets in a Box |
+| [VictoriaMetrics Stack](docs/victorialogs.md) | The default storage backend |
+| [Kubernetes](docs/kubernetes.md) | Running SIB on Kubernetes with [sib-k8s](https://github.com/matijazezelj/sib-k8s) |
+| [Security Hardening](docs/security-hardening.md) | Production checklist, TLS, mTLS, secrets |
+| [Upgrade Guide](docs/upgrade.md) | Version-to-version upgrade notes |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and fixes |
+| [FAQ](docs/faq.md) | Common questions |
+
+Also: [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md), [SECURITY.md](SECURITY.md), and the component READMEs in [analysis/](analysis/README.md), [ansible/](ansible/README.md) and [collectors/](collectors/README.md).
+
+## Compared with Wazuh, Splunk and Elastic
+
+SIB favours fast deployment and runtime detection on Linux. It is not a full log SIEM: for large-scale log analytics, broad OS coverage or compliance reporting, Wazuh, Splunk or Elastic may fit better. The [comparison table](docs/architecture.md#comparison-with-other-siems) has the details.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: open an [issue](https://github.com/matijazezelj/sib/issues) or a [pull request](https://github.com/matijazezelj/sib/pulls). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Thanks to Slava Olesik ([@slavaolesik](https://github.com/slavaolesik)) for the NetAPI honeypot feed in 0.9.1, SIB's first external contribution.
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
+
+## Acknowledgments
+
+- [Falco](https://falco.org/): cloud native runtime security
+- [Falcosidekick](https://github.com/falcosecurity/falcosidekick): alert routing
+- [Grafana](https://grafana.com/): dashboards and alerting
+- [Loki](https://grafana.com/oss/loki/): log aggregation
+- [Prometheus](https://prometheus.io/): metrics
+- [VictoriaMetrics](https://victoriametrics.com/): fast metrics and log storage (thanks [@valyala](https://github.com/valyala) for the suggestion)

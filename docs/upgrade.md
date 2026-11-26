@@ -18,14 +18,19 @@ nav_order: 9
    git pull origin main
    ```
 
-3. Regenerate configs (picks up any template changes):
+3. Read the version-specific notes below, and compare your `.env` with
+   `.env.example`. Versions pinned in `.env` (`FALCO_VERSION`,
+   `VICTORIALOGS_VERSION`, ...) override the new defaults:
    ```bash
-   make install-alerting install-detection
+   diff .env .env.example
    ```
 
-4. Restart all services:
+4. Re-run the installer. It regenerates configs and recreates containers that
+   changed (`make restart` alone does neither):
    ```bash
-   make restart
+   make install
+   make install-analysis   # only if you use AI analysis
+   make deploy-fleet       # only if you have fleet hosts
    ```
 
 5. Verify everything is healthy:
@@ -211,13 +216,15 @@ make restore BACKUP=backups/<name> # restore data (Loki → VictoriaLogs migrati
 
 ## Rolling back
 
-If something goes wrong after upgrading, restore from backup and check out the
-previous version:
+If something goes wrong after upgrading, check out the previous version and
+restore from backup:
 
 ```bash
-make restore BACKUP=backups/<name> # restore storage volumes
-git checkout <previous-tag>        # revert code
-make install-alerting install-detection && make restart
+git checkout <previous-tag>               # revert code
+cp backups/<name>/dot-env .env            # make restore doesn't restore .env
+make restore BACKUP=backups/<name>        # volumes, dashboards, rules, alerting config
+make install
+make install-analysis                     # only if you use AI analysis
 ```
 
 ## Getting help
