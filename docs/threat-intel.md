@@ -13,7 +13,7 @@ Enrich detections with IOC feeds from public blocklists.
 
 ## Overview
 
-SIB can automatically download and integrate threat intelligence feeds, enriching your detections with known malicious IPs, domains, and indicators of compromise (IOCs).
+SIB downloads public IP blocklists and turns them into Falco rules for connections to and from the listed addresses and ranges. Only IPv4 is used; domains, URLs and file hashes are not.
 
 ---
 
@@ -199,6 +199,7 @@ ExecStartPost=/usr/bin/cp threatintel/falco_threatintel_rules.yaml detection/con
 
 Enable the timer:
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable --now sib-threatintel.timer
 ```
 
@@ -206,29 +207,38 @@ sudo systemctl enable --now sib-threatintel.timer
 
 ## Adding Custom Feeds
 
-Edit `threatintel/update-feeds.sh` to add your own feeds:
+Add an entry to the `FEEDS` array in `threatintel/update-feeds.sh`, as
+`name|url|kind`:
 
 ```bash
-# Add a custom feed
-CUSTOM_FEED="https://example.com/blocklist.txt"
-curl -s "$CUSTOM_FEED" > feeds/custom_feed.txt
+FEEDS=(
+    "feodotracker|https://feodotracker.abuse.ch/downloads/ipblocklist.txt|c2"
+    # ...
+    "custom_feed|https://example.com/blocklist.txt|ip"
+)
 ```
+
+- `name`: the file name under `threatintel/feeds/` (`<name>.txt`).
+- `kind`: `ip` for attack sources. `c2` for command-and-control servers, which
+  also go into `threatintel_c2_ips` and its rule.
+- Position matters: when a cap cuts a list, entries higher in the array win.
+
+Then run `make update-threatintel`. A file you only drop into `feeds/` is not
+combined or loaded.
 
 ### Feed Format
 
-Feeds should be plain text with one IP per line:
+Plain text, one address or range per line. The first word of each line counts,
+and anything after `#` or `;` is ignored:
 ```
+# comment
 1.2.3.4
 5.6.7.8
-# Comments are ignored
-10.0.0.1
+1.10.16.0/20
 ```
 
-CIDR notation is also supported:
-```
-192.168.0.0/16
-10.0.0.0/8
-```
+Ranges must be between `/8` and `/32`. Private, loopback, link-local, CGNAT,
+multicast, reserved and documentation addresses are dropped.
 
 ---
 
@@ -243,7 +253,6 @@ CIDR notation is also supported:
 ### Spamhaus
 
 - [DROP List](https://www.spamhaus.org/drop/) - Don't Route Or Peer
-- [EDROP List](https://www.spamhaus.org/drop/) - Extended DROP
 
 ### Emerging Threats
 
@@ -268,11 +277,17 @@ CIDR notation is also supported:
 
 ### Large Blocklists
 
-If you have very large blocklists (>100k IPs):
+The generated lists are capped. Raise or lower the caps with environment
+variables; they are not read from `.env`, so set them in the cron line or
+systemd unit too:
 
-1. **Split into multiple lists**: Falco handles multiple smaller lists better
-2. **Use CIDR where possible**: `10.0.0.0/8` is more efficient than 16M individual IPs
-3. **Consider sampling**: For very large feeds, sample or prioritize high-confidence IOCs
+```bash
+MAX_THREATINTEL_IPS=60000 MAX_THREATINTEL_NETS=2000 make update-threatintel
+```
+
+`THREATINTEL_OFFLINE=1` rebuilds the rules from the feed files already
+downloaded. `THREATINTEL_DIR` changes where feeds and generated files go
+(default `threatintel/`).
 
 ### Memory Usage
 
@@ -296,9 +311,11 @@ Some feeds may require specific user agents or have rate limits.
 
 ### Rules Not Triggering
 
-1. Verify rules are loaded:
+1. Verify the rules file is listed in Falco's config and was loaded:
    ```bash
-   docker exec sib-falco cat /etc/falco/rules.d/custom_rules.yaml | grep threat_intel
+   grep threatintel detection/config/falco.yaml   # line must not be commented out
+   docker exec sib-falco ls /etc/falco/rules/falco_threatintel_rules.yaml
+   make logs-falco   # look for rule loading errors
    ```
 
 2. Check the IP is in the list:
@@ -314,10 +331,12 @@ Some feeds may require specific user agents or have rate limits.
 
 ### Too Many False Positives
 
-Some feeds are aggressive. Consider:
-- Using only high-confidence feeds (Feodo, Spamhaus DROP)
-- Adding exclusions for known-good IPs
-- Reducing priority from CRITICAL to WARNING
+Some feeds are aggressive. `falco_threatintel_rules.yaml` is overwritten on
+every update, so make changes in `threatintel/update-feeds.sh`:
+- Remove noisy feeds from `FEEDS` (Feodo Tracker and Spamhaus DROP are the
+  high-confidence ones)
+- Add exclusions for known-good IPs, or change a rule's priority, in the rules
+  block of the script
 
 ---
 

@@ -97,21 +97,22 @@ uname -r  # Need 5.8+
 **Cause**: Too many rules or very active system
 
 **Solutions**:
-1. Disable unused rules in `detection/config/rules/`
-2. Increase rule buffer size in `detection/config/falco.yaml` (generated from `falco.yaml.template` by `make install-detection`; edit the template)
-3. Use output rate limiting
+1. Disable rules you don't need (`enabled: false`, or remove a file from `rules_files` in `detection/config/falco.yaml.template`)
+2. Run `make install-detection` after editing the template
+
+If Falco drops events, raise `buf_size_preset` in `scripts/generate-falco-config.sh` (it writes the engine block of `falco.yaml`), then run `make install-detection`.
 
 ### No Falco Events
 
 ```bash
-# Generate a test event
-make test-alert
+# Trigger a detection (make test-alert only tests Falcosidekick, not Falco)
+docker run --rm alpine cat /etc/shadow
 
 # Check if Falco sees it
 docker logs sib-falco --tail 20
 
-# Verify syscall source is working
-docker exec sib-falco falco --list
+# Check that the syscall source was opened
+docker logs sib-falco 2>&1 | grep -i "syscall"
 ```
 
 ---
@@ -141,11 +142,12 @@ docker exec sib-falco falco --list
 
    **Loki (Grafana stack):**
    ```bash
-   curl -s "http://localhost:3100/loki/api/v1/query?query={source=\"syscall\"}" | jq '.data.result | length'
+   curl -sG http://localhost:3100/loki/api/v1/query_range \
+     --data-urlencode 'query={source="syscall"}' | jq '.data.result | length'
    ```
 
 4. **Check Grafana datasource**:
-   - Go to Grafana → Settings → Data sources
+   - Go to Grafana → Connections → Data sources
    - Click on VictoriaLogs or Loki → Click "Test" button
 
 ### VictoriaLogs Query Returns Empty
@@ -155,7 +157,7 @@ docker exec sib-falco falco --list
 curl http://localhost:9428/health
 
 # Check what fields exist
-curl "http://localhost:9428/select/logsql/field_names"
+curl "http://localhost:9428/select/logsql/field_names?query=*"
 
 # Try a simple query
 curl "http://localhost:9428/select/logsql/query?query=*&limit=10"
@@ -171,7 +173,7 @@ curl http://localhost:3100/ready
 curl http://localhost:3100/loki/api/v1/labels
 
 # Try a simple query
-curl -G http://localhost:3100/loki/api/v1/query --data-urlencode 'query={job=~".+"}'
+curl -G http://localhost:3100/loki/api/v1/query_range --data-urlencode 'query={source="syscall"}'
 ```
 
 ### Sidekick Not Forwarding
@@ -182,18 +184,19 @@ Check the generated `alerting/config/config.yaml` (it is rewritten on every `mak
 ```yaml
 loki:
   hostport: "http://sib-victorialogs:9428"
+  endpoint: "/insert/loki/api/v1/push"
 ```
 
 **Loki (Grafana stack):**
 ```yaml
 loki:
   hostport: "http://sib-loki:3100"
+  endpoint: "/loki/api/v1/push"
 ```
 
-Regenerate and restart after changes:
+Regenerate after changes (this also restarts Sidekick):
 ```bash
 make install-alerting
-docker compose -f alerting/compose.yaml restart
 ```
 
 `make install-alerting` fails if Falcosidekick can't read its config (`Error when reading config file`). It then runs with defaults: plain HTTP, no mTLS, no outputs. The file's group must match `SIDECAR_CONFIG_GID` in `.env`. The generator sets it, which only fails if you aren't a member of that group (it then warns): set `SIDECAR_CONFIG_GID` to a group you're in, usually your own (`id -g`). A half-configured Telegram output (`TELEGRAM_TOKEN` without `TELEGRAM_CHAT_ID`, or the reverse) also fails the install; see [Grafana Alerts](grafana-alerts.md#notifications).
@@ -213,7 +216,7 @@ With `MTLS_ENABLED=true`, a plain `http://` scrape of Sidekick's `/metrics` is r
 docker logs sib-grafana | grep -i dashboard
 
 # Re-provision dashboards
-docker compose -f grafana/compose.yaml restart
+make install-grafana
 ```
 
 ### Dashboards Show "No Data"
@@ -233,8 +236,9 @@ docker logs sib-grafana
 # - Port 3000 already in use
 # - Permission issues on data directory
 
-# Try with fresh data
-docker volume rm grafana_grafana-data
+# Last resort: start with fresh data. Deletes everything created in the
+# Grafana UI (dashboards, users, password changes).
+make uninstall-grafana
 make install-grafana
 ```
 
@@ -287,7 +291,7 @@ curl -s http://SIB_SERVER:9090/-/ready
    ```bash
    curl 'http://localhost:8428/api/v1/label/host/values'
    ```
-4. Check logs `hostname` field in VictoriaLogs:
+4. Check logs in VictoriaLogs. Falco events and Ansible-deployed collectors use the `hostname` field (collectors started with `make deploy-collector` label their logs `host`):
    ```bash
    curl 'http://localhost:9428/select/logsql/query?query=hostname:*|stats+by(hostname)+count()&limit=10'
    ```
@@ -312,7 +316,7 @@ A host that was never redeployed since the alert was added has no `falco` scrape
 ### Analysis Returns Empty
 
 ```bash
-# Check Ollama is running
+# With LLM_PROVIDER=ollama, check Ollama is running
 curl http://localhost:11434/api/tags
 
 # Check analysis service logs
@@ -324,19 +328,17 @@ curl "http://localhost:5000/health"
 
 ### Ollama Connection Refused
 
-Ensure Ollama is accessible from Docker:
+The analysis container must be able to reach Ollama. `localhost` is the container itself; the default `host.docker.internal` is the Docker host. Make Ollama listen on an address the container can reach (`OLLAMA_HOST`), set `OLLAMA_URL` in `.env` if it runs elsewhere, and firewall the port:
+
 ```bash
-# Check analysis/config.yaml
-# Use host.docker.internal for Ollama on host machine
-analysis:
-  ollama:
-    url: http://host.docker.internal:11434
+OLLAMA_URL=http://192.0.2.10:11434
 ```
+
+Then run `make install-analysis`.
 
 ### Slow Analysis
 
-- Use smaller models (`llama3.1:8b` instead of larger)
-- Enable caching in config
+- Use a smaller Ollama model (`OLLAMA_MODEL` in `.env`, for example `llama3.1:8b`), then `make install-analysis`
 - Consider cloud LLM providers (OpenAI/Anthropic)
 
 ---
@@ -348,38 +350,29 @@ analysis:
 ```bash
 # Check container memory
 docker stats
-
-# VictoriaLogs - already uses 10x less RAM than Loki
-
-# For Grafana stack - reduce Loki retention
-# Edit storage/config/loki-config.yml
-retention_period: 168h  # Reduce from default
-
-# VictoriaMetrics - already uses 10x less RAM than Prometheus
-
-# For Grafana stack - limit Prometheus retention
-# Edit storage/config/prometheus.yml
-storage.tsdb.retention.time: 7d
 ```
+
+The VM stack (default) uses less memory than the Grafana stack. To keep less data, see [retention settings](security-hardening.md#6-reduce-data-retention).
 
 ### Disk Space Full
 
 ```bash
 # Check disk usage
 df -h
-du -sh /var/lib/docker/*
+sudo du -sh /var/lib/docker/*
+docker system df -v
 
-# Clean up old data
+# Remove unused images, stopped containers and build cache (not volume data).
+# Affects every project on this Docker host.
 docker system prune -a
-
-# Reduce log retention (see above)
 ```
+
+To free space used by logs and metrics, [reduce retention](security-hardening.md#6-reduce-data-retention).
 
 ### Slow Dashboard Loading
 
 1. Reduce time range for queries
-2. Add more specific label filters
-3. Increase Grafana memory limit in compose.yaml
+2. Add more specific filters
 
 ---
 
@@ -410,6 +403,8 @@ sudo netstat -tulpn | grep 3000
 # Change SIB ports in .env file
 GRAFANA_PORT=3001
 ```
+
+Re-run the component's install target (here `make install-grafana`). `make status`, `make health` and `./scripts/test-pipeline.sh` still check the default Grafana and Sidekick ports.
 
 ### Cannot Pull Images
 

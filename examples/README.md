@@ -16,84 +16,34 @@ examples/
 
 ## Quick Demo
 
-Run all example scenarios:
+Generate sample events (runs `scripts/demo.sh`):
 ```bash
 make demo
 ```
 
 ## Example Rules
 
-### AWS Rules
-Detect AWS credential abuse:
-```yaml
-- rule: AWS Credentials in Environment
-  desc: Detect AWS credentials in environment variables
-  condition: >
-    spawned_process and
-    (proc.env contains "AWS_ACCESS_KEY" or
-     proc.env contains "AWS_SECRET")
-  output: "AWS creds in env (cmd=%proc.cmdline)"
-  priority: WARNING
-```
+| File | Covers |
+|------|--------|
+| `rules/aws.yaml` | AWS credential access, metadata service, CLI enumeration |
+| `rules/web.yaml` | Web shells, uploads, database abuse, reverse shells |
+| `rules/k8s.yaml` | Kubernetes audit events. Needs the `k8saudit` plugin, which SIB doesn't configure |
 
-### Kubernetes Rules
-Detect K8s misconfigurations:
-```yaml
-- rule: Privileged Pod Created
-  desc: Detect creation of privileged pod
-  condition: >
-    kevt and
-    k8s.pod.privileged=true
-  output: "Privileged pod (pod=%k8s.pod.name ns=%k8s.ns.name)"
-  priority: WARNING
-```
-
-### Web Application Rules
-Detect common web attacks:
-```yaml
-- rule: SQL Injection Attempt
-  desc: Detect SQL injection patterns
-  condition: >
-    inbound and
-    fd.rip != "127.0.0.1" and
-    (evt.buffer contains "UNION SELECT" or
-     evt.buffer contains "1=1")
-  output: "SQL injection attempt (src=%fd.cip)"
-  priority: WARNING
-```
+These are examples and are not loaded or checked by SIB. To try one, copy it to
+`detection/config/rules/`, add it to `rules_files` (below) and run
+`make test-rules`.
 
 ## Test Scenarios
 
-### 1. Container Shell
-Spawn a shell in a container:
-```bash
-docker run --rm alpine sh -c "echo test"
-```
-
-### 2. Sensitive File Access
-Access shadow file:
-```bash
-docker run --rm alpine cat /etc/shadow
-```
-
-### 3. Network Tool
-Use netcat in container:
-```bash
-docker run --rm alpine nc -v google.com 80
-```
-
-### 4. Package Installation
-Install package in container:
-```bash
-docker run --rm alpine apk add curl
-```
+Commands that trigger specific rules, with the expected rule names, are in
+[scenarios/README.md](scenarios/README.md).
 
 ## Adding Your Own Rules
 
 1. Append your rule to `detection/config/rules/custom_rules.yaml`, or create a new YAML file in `detection/config/rules/` and add its path to `rules_files` in `detection/config/falco.yaml.template` (files not listed there are not loaded)
 2. Follow the Falco rule format
-3. Restart Falco (`make restart-detection`; after editing the template, re-run `make install-detection`)
-4. Validate: `make test-rules`
+3. Validate: `make test-rules`
+4. Restart Falco (`make restart-detection`; after editing the template, re-run `make install-detection`)
 
 ## Rule Writing Tips
 

@@ -9,7 +9,7 @@ certs/
 ├── ca/                     # Certificate Authority
 │   ├── ca.crt             # CA certificate (public - safe to distribute)
 │   └── ca.key             # CA private key (SECRET - protect this!)
-├── server/                 # Server certificates (for Falcosidekick, storage)
+├── server/                 # Server certificate (for Falcosidekick)
 │   ├── server.crt         # Server certificate
 │   ├── server.key         # Server private key
 │   └── server.cnf         # OpenSSL config with SANs
@@ -42,6 +42,17 @@ Generate certificates for all hosts in Ansible inventory:
 make generate-fleet-certs
 ```
 
+Creating certificates doesn't enable mTLS. Set `MTLS_ENABLED=true` in `.env`
+and reinstall (Falco then talks to Sidekick over https); see
+[Security Hardening](../docs/security-hardening.md#5-enable-mtls-for-fleet-communication).
+
+The server certificate covers localhost, SIB's container names and the host's
+detected IPv4 addresses (not `172.*`). Set `SIB_SERVER_IP` or `SERVER_CN` (a DNS
+name) when running `make generate-certs` if fleet hosts use another address.
+
+The server key is group-readable (`0640`). Falcosidekick reads it through
+`SIDECAR_CONFIG_GID`, so that must be the key file's group.
+
 ## Security Notes
 
 - **NEVER commit private keys (*.key files) to version control**
@@ -63,7 +74,7 @@ make generate-fleet-certs
 Verify all certificates:
 
 ```bash
-./scripts/generate-certs.sh verify
+make verify-certs
 ```
 
 Or manually verify a certificate:
@@ -83,11 +94,16 @@ openssl x509 -in certs/server/server.crt -noout -dates
 
 If you need to regenerate certificates (e.g., CA compromise, expiration):
 
-1. **Regenerate CA** (invalidates ALL existing certs):
+1. **Regenerate CA** (invalidates ALL existing certs). `make rotate-certs`
+   renews the CA, the server certificate, the `local` client certificate and
+   the fleet certificates (answer `y` to both prompts; it needs an Ansible
+   inventory). The `metrics-scraper` certificate is reissued by the next
+   storage install, which notices it no longer matches the CA:
    ```bash
-   ./scripts/generate-certs.sh ca
-   ./scripts/generate-certs.sh server
-   ./scripts/generate-fleet-certs.sh --force
+   make rotate-certs
+   make install-storage-vm   # or install-storage-grafana
+   make restart-alerting restart-detection
+   make deploy-fleet
    ```
 
 2. **Regenerate server cert only**:

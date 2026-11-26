@@ -15,9 +15,9 @@ Datasources are provisioned based on the `STACK` setting in `.env`:
 | Datasource | Stack | Description |
 |------------|-------|-------------|
 | **VictoriaLogs** | `vm` | Security events and logs |
-| **VictoriaMetrics** | `vm` | Host and service metrics |
+| **Prometheus** (points at VictoriaMetrics) | `vm` | Host and service metrics |
 | **Loki** | `grafana` | Security events and logs |
-| **Prometheus** | `grafana` | Metrics from Falcosidekick |
+| **Prometheus** | `grafana` | Metrics |
 
 ## Dashboards
 
@@ -32,32 +32,36 @@ SIB ships 11 dashboards — 5 for the Loki backend and 6 for VictoriaLogs (only 
 | **Risk Scores** | Host risk assessment based on event severity and frequency |
 | **UniFi Logs** | UniFi syslog events and senders (VictoriaLogs only) |
 
-> **Note:** The Loki Events Explorer (and the AI-analysis variants installed by `make install-analysis`) has hostname, priority and rule dropdowns. The base VictoriaLogs Events Explorer has none.
+> **Note:** The Loki Events Explorer (also its AI-analysis variant, installed by `make install-analysis`) has hostname, priority and rule dropdowns. The VictoriaLogs Events Explorer has none; its AI-analysis variant has a severity filter.
 
 ## Alert Rules
 
 `make install-grafana` also provisions alert rules into the **SIB** folder:
 Falco liveness for every expected host (from the Ansible inventory), pipeline
 health (Falco drops, Sidekick down or failing), detection spikes
-(Critical/Error bursts, a host or rule far above its daily average) and
-resources (disk, memory, storage backends). Set `GRAFANA_ALERT_WEBHOOK_URL` in
-`.env` to get notified. See
+(Critical/Error bursts, a host or rule far above its daily average),
+resources (disk, memory, storage backends) and
+[HIB](../docs/hib-integration.md) events. To get notified, set
+`GRAFANA_ALERT_WEBHOOK_URL` or `GRAFANA_ALERT_TELEGRAM_BOT_TOKEN` and
+`GRAFANA_ALERT_TELEGRAM_CHAT_ID` in `.env`, then run `make install-grafana`.
+After editing the Ansible inventory, run `make refresh-alerts`. See
 [docs/grafana-alerts.md](../docs/grafana-alerts.md).
 
 ## Access
 
-Open http://localhost:3000
+Open http://localhost:3000. It listens on loopback only; change
+`GRAFANA_BIND_ADDR` and `GRAFANA_PORT` in `.env`.
 
 Default credentials:
 - Username: `admin`
-- Password: Set in `.env` file
+- Password: `GRAFANA_ADMIN_PASSWORD` in `.env` (applies when the database is first created)
 
 ## Adding Custom Dashboards
 
 1. Create dashboard in Grafana UI
 2. Export as JSON (Share > Export > Save to file)
 3. Place in `provisioning/dashboards/victorialogs/` (`vm` stack) or `provisioning/dashboards/loki/` (`grafana` stack)
-4. Restart Grafana
+4. Run `make restart-grafana`
 
 ## LogQL Examples
 
@@ -65,17 +69,17 @@ Query Falco events in Loki:
 
 ```logql
 # All events
-{job="falco"}
+{source="syscall"}
 
 # Critical and error events
-{job="falco"} | json | priority =~ "Critical|Error"
+{source="syscall", priority=~"Critical|Error"}
 
-# Events from specific container
-{job="falco"} | json | container_name = "my-app"
+# Events mentioning a container
+{source="syscall"} |= "my-app"
 
 # Events matching rule
-{job="falco"} | json | rule = "Terminal shell in container"
+{source="syscall", rule="Terminal shell in container"}
 
 # Count events by priority
-sum by (priority) (count_over_time({job="falco"} [1h]))
+sum by (priority) (count_over_time({source="syscall"}[1h]))
 ```

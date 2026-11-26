@@ -27,26 +27,28 @@ Open Grafana at http://localhost:3000 and watch the dashboards light up!
 
 ## Understanding the Demo
 
-The `make demo` command generates realistic security events across all MITRE ATT&CK categories. The demo spins up a temporary container and triggers various Falco rules.
+The `make demo` command generates sample security events across 12 MITRE ATT&CK categories. It starts temporary containers and runs commands in them; some only imitate an attack, so not every step triggers a Falco rule.
 
 ### Demo Coverage
 
 | Tactic | Events Generated |
 |--------|------------------|
-| **Credential Access** | Shadow file access, /etc/passwd reads |
+| **Initial Access** | Simulated curl-to-shell and reverse shell commands |
+| **Credential Access** | Shadow file access, /etc/passwd and authorized_keys reads |
 | **Execution** | Shell spawning, script execution |
 | **Persistence** | Cron job creation, systemd manipulation |
 | **Defense Evasion** | Log clearing, history deletion |
-| **Discovery** | System enumeration, network scanning |
-| **Impact** | Crypto miner detection |
-| **Container Escape** | Docker socket access, namespace breakout |
-| **Lateral Movement** | SSH key access, authorized_keys reads |
-| **File Integrity** | /etc/ file modifications |
+| **Discovery** | System, network, process and account enumeration |
+| **Impact** | Fake crypto miner process, file deletion |
+| **Exfiltration** | Archiving sensitive files, simulated uploads and DNS lookups |
+| **Container Security** | Docker socket check, privileged container, host mount |
+| **Lateral Movement** | SSH client in a container, port scan |
+| **File Integrity** | /etc/ and /usr/bin modifications |
 
 ### Demo Options
 
 ```bash
-# Full comprehensive demo (~30 events with 3s delays)
+# Full demo (~30 events with 3s delays)
 make demo
 
 # Quick demo (1-second delays)
@@ -59,6 +61,8 @@ make test-alert
 ---
 
 ## Exploring the Dashboards
+
+Dashboards are in the **SIEM in a Box / VictoriaLogs** folder (**SIEM in a Box / Loki** on the Grafana stack). Their names end in the backend, for example "Security Overview (VictoriaLogs)".
 
 ### Security Overview
 
@@ -80,9 +84,9 @@ Navigate to **Dashboards** → **Events Explorer**
 ![Events Explorer](assets/images/events-explorer.png)
 
 Features:
-- Query help with LogQL examples
+- Query help (LogsQL on the VM stack, LogQL on the Grafana stack)
 - Event volume by rule
-- Filterable log view with priority and rule filters
+- Log view; hostname, priority and rule filters on the Grafana stack only
 
 ### MITRE ATT&CK Coverage
 
@@ -113,7 +117,7 @@ Monitor multiple hosts:
 
 ## Verifying the Pipeline
 
-Run the pipeline test to ensure everything is working:
+Run the pipeline test to ensure everything is working (needs `jq`; it uses `sudo` to trigger an event):
 
 ```bash
 ./scripts/test-pipeline.sh
@@ -123,7 +127,7 @@ This script:
 1. Checks if all containers are running
 2. Generates a test event
 3. Verifies the event reaches VictoriaLogs
-4. Confirms Grafana can query the event
+4. Checks that the Grafana API is up
 
 Expected output:
 ```
@@ -186,7 +190,7 @@ make open
 make info
 
 # Backup & Restore
-make backup               # Create timestamped backup of configs, rules, and dashboards
+make backup               # Timestamped backup of data volumes, dashboards, config and .env
 make restore BACKUP=backups/<name>  # Restore from a backup directory
 ```
 
@@ -218,7 +222,7 @@ Now that you've seen SIB in action:
 1. **Add custom rules** — See [Custom Rules](#custom-rules) below
 2. **Deploy to fleet** — [Fleet Management](fleet.md)
 3. **Enable AI analysis** — [AI Analysis](ai-analysis.md)
-4. **Update threat intel** — Run `make update-threatintel`
+4. **Add threat intel** — `make update-threatintel`, then enable the rules ([Threat Intelligence](threat-intel.md))
 
 ---
 
@@ -239,7 +243,8 @@ Add your own detection rules in `detection/config/rules/custom_rules.yaml`:
 
 After adding rules:
 ```bash
-make restart
+make test-rules
+make restart-detection
 ```
 
 Rules in other files copied into `detection/config/rules/` are not loaded automatically: either append them to `custom_rules.yaml`, or add the file path to `rules_files` in `detection/config/falco.yaml.template` and re-run `make install-detection`.

@@ -32,6 +32,7 @@ This excludes:
 - Docker CE 20.10+ or Podman 4.0+ (rootful)
 - Linux kernel 5.8+
 - 4GB RAM
+- `git`, `make`, `curl`, `openssl`, and `jq` for the pipeline test
 
 ---
 
@@ -47,6 +48,8 @@ make install
 ---
 
 ## Minimal + Manual (If You Prefer Explicit Steps)
+
+After cloning and `cp .env.example .env`, set `GRAFANA_ADMIN_PASSWORD` in `.env`. These targets don't generate it; only `make install` does.
 
 ```bash
 # For VictoriaMetrics stack (default, recommended)

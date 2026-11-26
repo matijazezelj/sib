@@ -23,6 +23,16 @@ navigation:
     url: /installation
   - title: Quick Start
     url: /quickstart
+  - title: Architecture
+    url: /architecture
+  - title: Configuration
+    url: /configuration
+  - title: Commands
+    url: /commands
+  - title: Dashboards
+    url: /dashboards
+  - title: Detection Rules
+    url: /detection
   - title: Fleet Management
     url: /fleet
   - title: AI Analysis

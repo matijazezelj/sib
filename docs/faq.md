@@ -30,17 +30,19 @@ Yes. Use **Fleet Management** or **Remote Collectors** to ship logs/metrics to y
 No. The stack is self‑hosted. AI analysis is optional. It defaults to Anthropic (cloud); set `LLM_PROVIDER=ollama` to run it fully local.
 
 ## How do I update it?
-Pull the latest changes and restart:
+Back up, pull the latest changes and re-run the installer (`make restart` alone doesn't apply new images or configs):
 ```
+make backup
 git pull
-make restart
+make install
 ```
+Read the [Upgrade Guide](upgrade.md) first.
 
 ## Does it support custom rules?
 Yes. Add rules in detection/config/rules/custom_rules.yaml. Other rule files copied into detection/config/rules/ are not loaded automatically: add the file's path to `rules_files` in detection/config/falco.yaml.template and re-run `make install-detection`.
 
 ## What about retention and disk usage?
-On the default VM stack, set `VICTORIALOGS_RETENTION_PERIOD` and `VICTORIAMETRICS_RETENTION_PERIOD` in `.env`. On the Grafana stack, Loki retention is in storage/config/loki-config.yml and Prometheus retention is in `.env`. Monitor disk usage.
+On the default VM stack, set `VICTORIALOGS_RETENTION_PERIOD` and `VICTORIAMETRICS_RETENTION_PERIOD` in `.env`. On the Grafana stack, Loki retention is in storage/config/loki-config.yml and Prometheus retention is in `.env`. See [how to apply changes](security-hardening.md#6-reduce-data-retention). Monitor disk usage.
 
 ---
 

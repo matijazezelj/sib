@@ -33,58 +33,44 @@ make logs-analysis
 
 Once installed, the **Events Explorer** dashboard shows a "🤖 Analyze with AI" link when you click on a log entry. Other dashboards do not have it.
 
+Set your API key in `.env` first. For the link to work from another machine, see [Quick Start](../docs/ai-analysis.md#quick-start).
+
 ### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/analyze` | GET | Web interface with beautiful HTML results |
+| `/` | GET | API home page |
+| `/analyze` | GET | HTML result page |
 | `/api/analyze` | POST | JSON API for programmatic access |
 | `/health` | GET | Health check endpoint |
-| `/api/health/all` | GET | Aggregated health from all SIB services (Falco, Sidekick, storage, Grafana). Returns JSON with each service's status |
+| `/api/health/all` | GET | Health of Falcosidekick, storage, Grafana and the API itself, as JSON |
 | `/history` | GET | List past analyses |
 | `/history/<id>` | GET | View a specific cached analysis |
+| `/api/history` | GET | List past analyses as JSON (`?limit=50`) |
 
-### Environment Variables
+### Configuration
 
-Configure in `analysis/compose.yaml`:
+Provider, models, API keys, the API token and the bind address are set in `.env`; run `make install-analysis` after changing them. The full list is in [AI Analysis: Configuration](../docs/ai-analysis.md#configuration).
 
-```yaml
-environment:
-  - OLLAMA_URL=http://<ollama-host>:11434       # Your Ollama server (when LLM_PROVIDER=ollama)
-  - OLLAMA_MODEL=qwen2.5:14b                    # Model to use
-  - LOKI_URL=http://loki:3100                   # Loki for storing results
-  - STACK=vm                                     # Storage backend: vm or grafana (auto-detected)
-  - VICTORIALOGS_URL=http://sib-victorialogs:9428  # VictoriaLogs URL (when STACK=vm)
-  - ANALYSIS_CACHE_TTL=86400                     # Cache TTL in seconds (default: 24h)
-```
+The obfuscation level is set in `config.yaml` (see [Obfuscation Levels](#obfuscation-levels)); run `make restart-analysis` after editing it.
 
-The obfuscation level is not an environment variable; set `obfuscation_level` in `config.yaml` (see [Obfuscation Levels](#obfuscation-levels)).
-
-> **Docker Secrets:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN` can be loaded from a file by setting the matching `_FILE` variable in `.env`. `./secrets` is mounted read-only at `/app/secrets`, so use e.g. `ANTHROPIC_API_KEY_FILE=/app/secrets/anthropic_api_key`. See `secrets/README.md`.
+> **Docker Secrets:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `ANALYSIS_API_TOKEN` can be loaded from a file by setting the matching `_FILE` variable in `.env`. `./secrets` is mounted read-only at `/app/secrets`, so use e.g. `ANTHROPIC_API_KEY_FILE=/app/secrets/anthropic_api_key`. See [secrets/README.md](../secrets/README.md).
 
 ## Privacy & Security
 
 ### What Gets Sent to the LLM
 
-**NEVER sent (obfuscated before analysis):**
+With the default `standard` level:
+
 | Data Type | Example | Replaced With |
 |-----------|---------|---------------|
-| IP Addresses | `192.168.1.100` | `[INTERNAL-IP-1]` or `[EXTERNAL-IP-1]` |
-| Hostnames | `prod-web-01.acme.com` | `[HOST-1]` |
-| Usernames | `jsmith` | `[USER-1]` |
-| File Paths | `/home/jsmith/secrets.txt` | `/home/[USER-1]/[FILE-1].txt` |
-| Container IDs | `a1b2c3d4e5f6` | `[CONTAINER-1]` |
-| Secrets/Keys | `AKIA...` | `[REDACTED-SECRET]` |
-| Email Addresses | `user@company.com` | `[EMAIL-1]` |
+| IP addresses | `192.0.2.10` | `[IP-INTERNAL-1]` or `[IP-EXTERNAL-1]` |
+| User names (`user=`, `uid=`, `User `) | `user=jsmith` | `user=[USER-1]` |
+| Container IDs (12+ hex characters) | `a1b2c3d4e5f6` | `[CONTAINER-1]` |
+| Secrets in known formats | `AKIA...` | `[REDACTED-AWS-KEY]` |
+| E-mail addresses | `user@example.com` | `[EMAIL-1]` |
 
-**Sent (structural information only):**
-- Alert rule name (e.g., "Read sensitive file untrusted")
-- Alert priority (Critical, Error, Warning, Notice)
-- Command structure (binary names, flags - not arguments with sensitive data)
-- Syscall types (open, execve, connect, etc.)
-- Network ports (preserved for analysis)
-- File extensions and types
-- Container image names (public images only)
+Everything else is sent as is: rule name, priority, command lines and arguments, file paths, host names. `root` and common service accounts are kept. The `paranoid` level also replaces dotted host names and file names.
 
 ### Obfuscation Levels
 
@@ -92,44 +78,43 @@ Configure in `config.yaml`:
 
 ```yaml
 analysis:
-  enabled: true
   obfuscation_level: standard  # minimal, standard, paranoid
 ```
 
 | Level | Description |
 |-------|-------------|
-| `minimal` | Only secrets and credentials obfuscated |
-| `standard` | IPs, hostnames, users, paths obfuscated (recommended) |
-| `paranoid` | Everything except alert type and priority obfuscated |
+| `minimal` | Only secrets in known formats |
+| `standard` | Also IPs, e-mails, container IDs and user names (default) |
+| `paranoid` | Also dotted host names, file names and secret-like strings |
+
+No level replaces single-label host names (`web-01`) or user names inside file paths. Check what would be sent with the dry run below.
 
 ## Storage Backend
 
-The analyzer auto-detects the storage backend from the `STACK` environment variable. When `STACK=vm`, it queries VictoriaLogs instead of Loki for log context.
+The analyzer picks the storage backend from the `STACK` variable. With `STACK=vm` (default) it reads and stores alerts in VictoriaLogs, with `STACK=grafana` in Loki.
 
 ## LLM Providers
 
 ### Option 1: Local (Ollama) - Fully Local, Best for Privacy
 
-No data leaves your network. Select it with `LLM_PROVIDER=ollama` (Anthropic is the default provider). Requires ~8GB RAM for good models.
+No data leaves your network. Anthropic is the default provider, so select Ollama in `.env`. Requires ~8GB RAM for good models.
 
-```yaml
-analysis:
-  provider: ollama
-  ollama:
-    url: http://localhost:11434
-    model: qwen2.5:14b  # default; or mistral, mixtral
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://192.0.2.10:11434   # an address the container can reach
+OLLAMA_MODEL=qwen2.5:14b
 ```
+
+The default `host.docker.internal` URL reaches Ollama on the Docker host; Ollama must listen beyond 127.0.0.1. See [Ollama Setup](../docs/ai-analysis.md#ollama-setup-fully-local).
 
 ### Option 2: OpenAI API
 
-Better quality, data sent to OpenAI (obfuscated).
+Better quality, data sent to OpenAI (obfuscated). In `.env`:
 
-```yaml
-analysis:
-  provider: openai
-  openai:
-    api_key: ${OPENAI_API_KEY}
-    model: gpt-4o-mini
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=gpt-4o   # default
 ```
 
 ### Option 3: Anthropic API (default)
@@ -152,9 +137,11 @@ answer that fails that check, is refused, or is cut off goes to the next tier:
 the same model one effort level up first, then the next model up at a lower
 effort. Server-side refusal fallbacks are turned on for tiers above Haiku.
 
-Each result carries an `llm` block with the tiers tried, tokens and estimated
-cost, so you can see what alerts actually cost. To pin one model instead, set
-`ANTHROPIC_MODEL` (and optionally `ANTHROPIC_EFFORT`).
+The CLI prints the tiers tried and the estimated cost; with `--json` each result
+has an `llm` block with tokens as well. To pin one model, delete `tiers` from
+`config.yaml` and set `ANTHROPIC_MODEL` (and optionally `ANTHROPIC_EFFORT`) in
+`.env`, then run `make install-analysis` and `make restart-analysis`. While
+`tiers` is present, `ANTHROPIC_MODEL` has no effect.
 
 ## Usage
 
@@ -169,9 +156,10 @@ cost, so you can see what alerts actually cost. To pin one model instead, set
 
 All endpoints except `/health` require the token from `ANALYSIS_API_TOKEN` in `.env`,
 passed either as an `Authorization: Bearer` header or a `token=` query parameter.
+Run these from the repository root.
 
 ```bash
-TOKEN=$(grep '^ANALYSIS_API_TOKEN=' ../.env | cut -d= -f2)
+TOKEN=$(grep '^ANALYSIS_API_TOKEN=' .env | cut -d= -f2)
 
 # Analyze a specific event
 curl -H "Authorization: Bearer $TOKEN" \
@@ -189,7 +177,7 @@ curl -X POST http://localhost:5000/api/analyze \
 
 ### Caching
 
-Analysis results are cached to avoid repeated LLM calls for the same event. Cache is stored in `/app/cache` (persisted via Docker volume).
+Results from `GET /analyze` (the Grafana link) are cached to avoid repeated LLM calls for the same event. The JSON API and CLI are not cached. The cache is stored in `/app/cache` (persisted via Docker volume).
 
 - Cache entries expire after `ANALYSIS_CACHE_TTL` seconds (default: 24 hours)
 - Cache keys are normalized: timestamps, numeric IDs, IPs, and container IDs are stripped so similar events share a cache key
@@ -203,54 +191,33 @@ Set `AIB_BASE_URL` in your `.env` to enable it — see **[docs/aib-integration.m
 
 ## How It Works
 
-1. **Alert Ingested** → Falco detects suspicious activity
-2. **AIB Enrichment** *(optional)* → Asset metadata, blast radius, and audit findings fetched
-3. **Obfuscation** → Sensitive data replaced with tokens
+Analysis runs on demand, from the Grafana link, the API or the CLI.
+
+1. **Alert received** → rule name and alert text
+2. **Obfuscation** → Sensitive data replaced with tokens
+3. **AIB Enrichment** *(optional)* → Asset metadata, blast radius, and audit findings fetched, then obfuscated the same way
 4. **LLM Analysis** → Security-focused prompt analyzes the alert (with asset context if available)
-5. **Enrichment** → Response parsed and attached to alert
-6. **Storage** → Enriched alert stored in the active storage backend (VictoriaLogs or Loki) with analysis labels
+5. **Storage** → The result can be stored in VictoriaLogs or Loki with `source=analysis` (the Grafana link does this by default; the API needs `store: true`, the CLI `--store`)
 
 ## Example Output
 
 **Original Alert:**
 ```
-Read sensitive file untrusted: user=jsmith file=/etc/shadow 
-process=cat container=a1b2c3d4 image=nginx:latest
+Read sensitive file untrusted: user=jsmith file=/etc/shadow
+process=cat container=a1b2c3d4e5f6 image=nginx:latest
 ```
 
 **Obfuscated (sent to LLM):**
 ```
-Read sensitive file untrusted: user=[USER-1] file=/etc/shadow 
+Read sensitive file untrusted: user=[USER-1] file=/etc/shadow
 process=cat container=[CONTAINER-1] image=nginx:latest
 ```
 
-**LLM Analysis:**
-```json
-{
-  "attack_vector": "Credential Access - /etc/shadow contains password hashes",
-  "mitre_attack": {
-    "tactic": "Credential Access",
-    "technique": "T1003.008 - /etc/passwd and /etc/shadow"
-  },
-  "risk_level": "High",
-  "impact": "Attacker may extract password hashes for offline cracking",
-  "mitigations": [
-    "Investigate why nginx container needs to read /etc/shadow",
-    "Review container security context - should not have CAP_DAC_READ_SEARCH",
-    "Consider using read-only root filesystem",
-    "Implement runtime protection to block sensitive file access"
-  ],
-  "next_steps": [
-    "Check for other suspicious activity from this container",
-    "Review container image for vulnerabilities",
-    "Verify this is not a legitimate debugging session"
-  ]
-}
-```
+The model answers with JSON; see the [API response](../docs/ai-analysis.md#json-api).
 
 ## Example Analysis Output
 
-Here are real examples from analyzing alerts via the API:
+Examples in the format the CLI prints:
 
 ### Critical Alert - Defense Evasion
 

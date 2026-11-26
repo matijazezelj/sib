@@ -41,10 +41,10 @@ This will:
 
 ```bash
 # Check if an IP is in any blocklist
-./threatintel/lookup-ip.sh 185.220.101.1
+./threatintel/lookup-ip.sh 1.2.3.4
 
-# Output:
-# Checking 185.220.101.1 against threat intel feeds...
+# Output (exact addresses only; ranges aren't checked):
+# Checking 1.2.3.4 against threat intel feeds...
 #   ⚠️  FOUND in feodotracker
 #   ⚠️  FOUND in sslbl
 #   🚨 IP is in combined blocklist!
@@ -72,15 +72,16 @@ Then, once, add this line to `rules_files` in
   - /etc/falco/rules/falco_threatintel_rules.yaml
 ```
 
-After later feed updates, copy the file again and run `make restart-detection`.
+After later feed updates, copy the file again. Falco reloads a changed rules
+file by itself.
 
 ## Automated Updates
 
 Schedule regular feed updates via cron:
 
 ```bash
-# Update every 6 hours
-0 */6 * * * /path/to/sib/threatintel/update-feeds.sh
+# Update every 6 hours and copy the rules to Falco
+0 */6 * * * cd /path/to/sib && make update-threatintel && cp threatintel/falco_threatintel_rules.yaml detection/config/rules/
 ```
 
 ## Feed Files
@@ -119,34 +120,32 @@ The lists are `threatintel_ips` (addresses, at most `MAX_THREATINTEL_IPS`,
 default 10000), `threatintel_nets` (ranges such as Spamhaus DROP, at most
 `MAX_THREATINTEL_NETS`, default 2000) and `threatintel_c2_ips`. When the cap
 cuts a list, it keeps the feeds in priority order: the C2 feeds first, then
-Emerging Threats, CINSscore, Spamhaus, blocklist.de. Only public IPv4
+Emerging Threats, CINSscore, Spamhaus, NetAPI, blocklist.de. Only public IPv4
 addresses and ranges are kept. The rules are generated, not loaded: see
-[docs/threat-intel.md](../docs/threat-intel.md) for adding them to Falco.
+[Enable Threat Intel Rules in Falco](#enable-threat-intel-rules-in-falco).
 
-## CrowdSec Integration (Optional)
+## Settings
 
-For advanced threat intel with IP reputation scoring:
+Environment variables for `update-feeds.sh` / `make update-threatintel` (not
+read from `.env`):
 
-```bash
-# Install CrowdSec
-curl -s https://install.crowdsec.net | sudo sh
-
-# Configure CrowdSec bouncer
-sudo cscli bouncers add sib-bouncer
-
-# CrowdSec will automatically:
-# - Block known malicious IPs
-# - Share threat intel with the community
-# - Provide real-time IP reputation
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_THREATINTEL_IPS` | `10000` | Addresses loaded into Falco |
+| `MAX_THREATINTEL_NETS` | `2000` | Ranges loaded into Falco |
+| `THREATINTEL_OFFLINE` | `0` | `1`: don't download, use the feed files already there |
+| `THREATINTEL_DIR` | `threatintel/` | Where feeds and generated files live |
 
 ## Adding Custom Feeds
 
-Edit `update-feeds.sh` to add your own feeds:
+Add an entry to the `FEEDS` array in `update-feeds.sh`, as `name|url|kind`:
 
 ```bash
-# Add a custom feed
-download_feed "my_custom_feed" "https://example.com/blocklist.txt"
+"custom_feed|https://example.com/blocklist.txt|ip"
 ```
 
-The feed should be a text file with one IP per line.
+`kind` is `ip`, or `c2` for command-and-control servers. Entries higher in the
+array win when a cap applies.
+
+The feed should be a text file with one public IPv4 address or range (`/8` to
+`/32`) per line; `#` and `;` start comments.

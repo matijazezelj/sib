@@ -29,6 +29,7 @@ Get SIB up and running on your system.
 
 - **Linux kernel** 5.8+ (for modern_ebpf driver)
 - **4GB+ RAM** recommended
+- `git`, `make`, `curl` and `openssl`; `jq` for `./scripts/test-pipeline.sh`
 
 ```bash
 # Docker CE
@@ -86,6 +87,8 @@ That's it! Your SIB instance is now running.
 | Loki | http://localhost:3100 | Localhost only | Grafana |
 | Prometheus | http://localhost:9090 | Localhost only | Grafana |
 
+`STORAGE_BIND` changes the storage binding. The VM stack also listens for syslog on `127.0.0.1:5514/udp` (`SYSLOG_BIND_ADDR`, `SYSLOG_PORT`).
+
 ---
 
 ## Step-by-Step Installation
@@ -118,6 +121,9 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin 
 ```
 
 **RHEL/CentOS/Fedora:**
+
+Add Docker's repository first, as described for your distribution in the [Docker docs](https://docs.docker.com/engine/install/).
+
 ```bash
 # Install Docker
 sudo dnf install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -196,12 +202,13 @@ To view your password:
 grep GRAFANA_ADMIN_PASSWORD .env
 ```
 
-To change it:
-1. Log in to Grafana at http://localhost:3000
-2. Click your profile icon (bottom left)
-3. Select "Change password"
+`.env` only sets the password when Grafana's database is first created. To change it later:
 
-Or regenerate by setting `GRAFANA_ADMIN_PASSWORD=CHANGE_ME` in `.env` and running `make install` again.
+```bash
+docker exec sib-grafana grafana cli admin reset-admin-password 'new-password'
+```
+
+Then put the same value in `GRAFANA_ADMIN_PASSWORD` in `.env` (`make refresh-alerts` uses it).
 
 ### Enable Remote Access
 
@@ -210,7 +217,7 @@ If you want to collect logs from other hosts:
 make enable-remote
 ```
 
-This exposes VictoriaLogs (9428) and VictoriaMetrics (8428) externally — or Loki (3100) and Prometheus (9090) if using the Grafana stack. Configure your firewall appropriately.
+This exposes VictoriaLogs (9428) and VictoriaMetrics (8428) externally — or Loki (3100) and Prometheus (9090) if using the Grafana stack. Fleet Falco sensors also need Falcosidekick: set `SIDEKICK_BIND_ADDR=0.0.0.0` in `.env` and run `make install-alerting`. [Restrict access](security-hardening.md#4-restrict-fleet-ingress) to these ports.
 
 ### Enable mTLS (Recommended for Production)
 
@@ -220,8 +227,8 @@ For encrypted communication between components:
 # Generate certificates
 make generate-certs
 
-# Enable mTLS
-echo "MTLS_ENABLED=true" >> .env
+# Enable mTLS in .env
+#   MTLS_ENABLED=true
 
 # Reinstall with mTLS
 make install-alerting
@@ -229,7 +236,7 @@ make install-detection
 make install-storage-vm   # or install-storage-grafana: scrapes Sidekick over https
 ```
 
-> **Tip:** For fresh installs, set `MTLS_ENABLED=true` and run `make generate-certs` **before** `make install`. See [Security Hardening](security-hardening.md) for the complete fresh install workflow.
+> **Tip:** For fresh installs, do the same before `make install`. See [Security Hardening](security-hardening.md#5-enable-mtls-for-fleet-communication).
 
 ### Install AI Analysis (Optional)
 
@@ -243,14 +250,14 @@ See [AI Analysis](ai-analysis.md) for configuration details.
 
 ## Component Installation
 
-Install components individually if needed:
+Install components individually if needed. Create `.env` first and set `GRAFANA_ADMIN_PASSWORD`: only `make install` generates it.
 
 ```bash
-make install-detection       # Falco
-make install-alerting        # Falcosidekick
 make install-storage-vm      # VictoriaLogs + VictoriaMetrics (default)
 make install-storage-grafana # Loki + Prometheus (alternative)
-make install-grafana         # Grafana dashboards
+make install-grafana         # Grafana dashboards and alert rules
+make install-alerting        # Falcosidekick
+make install-detection       # Falco
 make install-analysis        # AI analysis (optional)
 ```
 
@@ -259,13 +266,12 @@ make install-analysis        # AI analysis (optional)
 ## Uninstallation
 
 ```bash
-# Stop and remove all containers
+# Remove all containers, volumes (logs, metrics, dashboards) and the network.
+# Destructive; asks for confirmation.
 make uninstall
-
-# Remove all data (logs, metrics, etc.)
-# Warning: This is destructive!
-docker volume prune
 ```
+
+`.env` and `certs/` are kept.
 
 ---
 
@@ -297,7 +303,8 @@ docker logs sib-sidekick --tail 20
 curl -s "http://localhost:9428/select/logsql/query?query=*" | jq .
 
 # Or query Loki directly (Grafana stack)
-curl -s "http://localhost:3100/loki/api/v1/query?query={source=\"syscall\"}" | jq .
+curl -sG http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={source="syscall"}' | jq .
 ```
 
 ### Permission Denied Errors

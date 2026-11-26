@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- Documentation: the README is now a short overview, and the detail lives in `docs/`, with new pages for architecture, configuration (every `.env` setting), commands (every `make` target), dashboards and detection rules. The existing pages and component READMEs were checked against the code and corrected. The dashboard screenshots were retaken on the VictoriaLogs stack.
+
 ---
 
 ## [0.9.1] - 2026-11-25
