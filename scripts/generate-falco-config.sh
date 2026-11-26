@@ -149,6 +149,12 @@ build_engine_config "$DRIVER" > "$ENGINE_TMP"
 if [ "$MTLS_ENABLED" = "true" ]; then
     echo "  mTLS enabled — using HTTPS to Falcosidekick"
     SIDEKICK_URL="${SIDEKICK_URL:-https://sib-sidekick:2801/}"
+    # With mTLS, Sidekick only speaks TLS: an http:// URL (such as the one an
+    # older .env.example set) would make every alert fail to deliver.
+    if [[ "$SIDEKICK_URL" == http://* ]]; then
+        echo "  SIDEKICK_URL uses http:// but mTLS is on; using https:// instead"
+        SIDEKICK_URL="https://${SIDEKICK_URL#http://}"
+    fi
     awk -v engine_file="$ENGINE_TMP" \
         -v priority="$FALCO_PRIORITY" \
         -v buffered="$FALCO_BUFFERED_OUTPUTS" \
