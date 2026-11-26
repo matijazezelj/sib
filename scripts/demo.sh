@@ -350,11 +350,32 @@ main() {
     echo -e "    • Events Explorer    - Detailed event analysis"
     echo -e "    • MITRE ATT&CK       - Attack matrix coverage"
     echo ""
-    echo -e "  ${YELLOW}Quick queries in Grafana:${NC}"
-    echo -e "    • ${CYAN}{source=\"syscall\", priority=\"Critical\"}${NC}"
-    echo -e "    • ${CYAN}{source=\"syscall\"} |= \"shadow\"${NC}"
-    echo -e "    • ${CYAN}{source=\"syscall\"} | json | tags=~\"mitre.*\"${NC}"
+    echo -e "  ${YELLOW}Quick queries in Grafana (Explore):${NC}"
+    if [ "$(demo_stack)" = "grafana" ]; then
+        # Loki: LogQL
+        echo -e "    • ${CYAN}{source=\"syscall\", priority=\"Critical\"}${NC}"
+        echo -e "    • ${CYAN}{source=\"syscall\"} |= \"shadow\"${NC}"
+        echo -e "    • ${CYAN}{source=\"syscall\"} | json | tags=~\"mitre.*\"${NC}"
+    else
+        # VictoriaLogs: LogsQL
+        echo -e "    • ${CYAN}source:syscall priority:Critical${NC}"
+        echo -e "    • ${CYAN}source:syscall shadow${NC}"
+        echo -e "    • ${CYAN}source:syscall tags:~\"mitre_\"${NC}"
+    fi
     echo ""
+}
+
+# The storage stack, from STACK in .env (vm unless set): it decides the query language.
+demo_stack() {
+    local env_file
+    env_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+    if [ -n "${STACK:-}" ]; then
+        echo "$STACK"
+    elif [ -f "$env_file" ] && grep -q '^STACK=grafana' "$env_file"; then
+        echo grafana
+    else
+        echo vm
+    fi
 }
 
 # Run with optional quick mode
