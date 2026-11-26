@@ -225,10 +225,13 @@ install-analysis: network ## Install AI Analysis API service
 	@echo "$(CYAN)🤖 Installing AI Analysis API...$(RESET)"
 	@# Generate an API token if unset — the API triggers billed LLM calls
 	@if [ ! -f .env ]; then cp .env.example .env; fi
-	@if ! grep -q "^ANALYSIS_API_TOKEN=" .env 2>/dev/null; then \
+	@# With ANALYSIS_API_TOKEN_FILE set, the API reads the token from that file instead
+	@if grep -q "^ANALYSIS_API_TOKEN_FILE=." .env 2>/dev/null; then :; \
+	elif ! grep -q "^ANALYSIS_API_TOKEN=" .env 2>/dev/null; then \
 		echo "ANALYSIS_API_TOKEN=CHANGE_ME" >> .env; \
 	fi
-	@if grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env 2>/dev/null; then \
+	@if ! grep -q "^ANALYSIS_API_TOKEN_FILE=." .env 2>/dev/null && \
+	    grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env 2>/dev/null; then \
 		TOKEN=$$(openssl rand -hex 24); \
 		if [ "$$(uname)" = "Darwin" ]; then \
 			sed -i '' "s|^ANALYSIS_API_TOKEN=.*|ANALYSIS_API_TOKEN=$$TOKEN|" .env; \
@@ -251,6 +254,15 @@ install-analysis: network ## Install AI Analysis API service
 	fi; \
 	echo "  Analysis API host: $$host (override with ANALYSIS_HOST in .env)"; \
 	set -a; . ./.env 2>/dev/null || true; set +a; \
+	if [ -n "$$ANALYSIS_API_TOKEN_FILE" ]; then \
+		tf="secrets/$${ANALYSIS_API_TOKEN_FILE#/app/secrets/}"; \
+		if [ -r "$$tf" ]; then \
+			ANALYSIS_API_TOKEN=$$(tr -d '[:space:]' < "$$tf"); \
+		else \
+			echo "$(YELLOW)⚠ ANALYSIS_API_TOKEN_FILE is set but $$tf can't be read: dashboard links will have no token$(RESET)"; \
+			ANALYSIS_API_TOKEN=; \
+		fi; \
+	fi; \
 	STACK=$${STACK:-vm}; \
 	if [ "$$STACK" = "vm" ]; then \
 		echo "$(CYAN)Using VictoriaLogs Events Explorer dashboard...$(RESET)"; \
@@ -556,7 +568,7 @@ doctor: ## Diagnose common issues
 	@test -f .env && echo "  $(GREEN)✓$(RESET) .env file exists" || echo "  $(YELLOW)!$(RESET) .env file missing (copy from .env.example)"
 	@if [ -f .env ]; then \
 		grep -q "^GRAFANA_ADMIN_PASSWORD=\(CHANGE_ME\)\?$$" .env && echo "  $(YELLOW)!$(RESET) Default password in use - please change" || echo "  $(GREEN)✓$(RESET) Password has been changed"; \
-		grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env && echo "  $(YELLOW)!$(RESET) Analysis API token not set - API is unauthenticated" || echo "  $(GREEN)✓$(RESET) Analysis API token is set"; \
+		! grep -q "^ANALYSIS_API_TOKEN_FILE=." .env && grep -q "^ANALYSIS_API_TOKEN=\(CHANGE_ME\)\?$$" .env && echo "  $(YELLOW)!$(RESET) Analysis API token not set - API is unauthenticated" || echo "  $(GREEN)✓$(RESET) Analysis API token is set"; \
 	fi
 	@echo ""
 	@echo "$(CYAN)Checking network...$(RESET)"
