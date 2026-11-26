@@ -33,4 +33,15 @@ grep -q 'client_key: /etc/falco/certs/clients/docker-vm.key' "$TMP/remote.yaml"
 grep -q 'ca_cert: /etc/falco/certs/ca/ca.crt' "$TMP/remote.yaml"
 grep -q 'mtls: true' "$TMP/remote.yaml"
 
+# mTLS with an http:// URL (an older .env.example set one): switched to https.
+FALCO_CONFIG_OUTPUT="$TMP/upgrade.yaml" \
+FALCO_ENV_FILE="$TMP/nonexistent.env" \
+FALCO_DRIVER_TYPE=modern_ebpf \
+MTLS_ENABLED=true \
+SIDEKICK_URL=http://sib-sidekick:2801/ \
+    "$ROOT/scripts/generate-falco-config.sh" >/dev/null
+
+grep -q 'url: "https://sib-sidekick:2801/"' "$TMP/upgrade.yaml"
+grep -q 'mtls: true' "$TMP/upgrade.yaml"
+
 echo "falco config tests: PASS"
