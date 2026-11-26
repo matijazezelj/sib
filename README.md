@@ -18,7 +18,7 @@ It is meant for homelabs, startups and small security teams who want runtime det
 
 - **Runtime detection**: Falco with the `modern_ebpf` driver and 75 rules loaded by default, plus opt-in packs for cloud, web servers and coding agents
 - **MITRE ATT&CK mapping**: every rule is tagged with a tactic, with a coverage dashboard
-- **Dashboards**: security overview, events explorer, MITRE ATT&CK, fleet overview, host risk scores
+- **Dashboards**: security overview, events explorer, MITRE ATT&CK, fleet overview, host risk scores, coding agents (HIB)
 - **Alert forwarding**: Slack, Discord, PagerDuty, Opsgenie, Teams, Telegram, Elasticsearch, generic webhooks, and any other Falcosidekick output
 - **Grafana alerts**: Falco liveness, pipeline health and detection spikes
 - **Two storage stacks**: VictoriaLogs + VictoriaMetrics (default) or Loki + Prometheus

@@ -43,6 +43,7 @@ All of these listen on `127.0.0.1` by default. To reach them from another machin
 | MITRE ATT&CK Coverage | ✓ | ✓ |
 | Fleet Overview | ✓ | ✓ |
 | Host Risk Scores | ✓ | ✓ |
+| Coding Agents (HIB) | ✓ | ✓ |
 | UniFi Logs | ✓ | |
 
 Run `make demo` to fill them with sample events ([Quick Start](quickstart.md)).
@@ -121,6 +122,20 @@ A per-host risk score from the number and severity of Falco events.
 The score is `Critical × 25 + Error × 10 + Warning × 3 + Notice × 1`, rated Low below 10,000, Medium up to 50,000, High up to 100,000 and Critical above.
 
 ![Host Risk Scores](assets/images/risk-scores.png)
+
+## Coding Agents (HIB)
+
+Coding agents run through [HIB](hib-integration.md): HIB's own security events and the Falco coding-agent rules, side by side.
+
+- HIB daemons up, agent sessions, critical HIB events, denied tool calls, setup problems (refused hash key, no sandbox or session scopes, test mode), Falco coding-agent hits
+- HIB daemons per host (version, heartbeats, starts, stops) and heartbeats over time
+- HIB events by type and by severity; agent sessions with their model and session scope
+- Critical and security HIB events, and the full HIB event log
+- Falco coding-agent alerts, by rule and by HIB session and scope
+
+The Falco panels need `coding_agent_rules.yaml` enabled and the HIB panels need HIB's event log collected; see [HIB Integration](hib-integration.md).
+
+![Coding Agents (HIB)](assets/images/hib-dashboard.png)
 
 ## UniFi Logs (`vm` stack)
 
