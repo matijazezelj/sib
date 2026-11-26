@@ -50,9 +50,25 @@ for svc in $SERVICES; do
 done
 echo ""
 
+# Sidekick's health, checked from inside the Falco container: that is the path
+# alerts take, and it works without publishing Sidekick's port on the host.
+# With mTLS, Sidekick needs Falco's client certificate.
+sidekick_healthz() {
+    if [ "${MTLS_ENABLED:-false}" = "true" ]; then
+        local c="${FALCO_CLIENT_CERT_NAME:-local}"
+        docker exec sib-falco curl -s -o /dev/null -w "%{http_code}" \
+            --cacert /etc/falco/certs/ca/ca.crt \
+            --cert "/etc/falco/certs/clients/$c.crt" --key "/etc/falco/certs/clients/$c.key" \
+            https://sib-sidekick:2801/healthz 2>/dev/null || echo "000"
+    else
+        docker exec sib-falco curl -s -o /dev/null -w "%{http_code}" \
+            http://sib-sidekick:2801/healthz 2>/dev/null || echo "000"
+    fi
+}
+
 echo "[2/7] Network Connectivity"
 echo "---"
-HTTP_CODE=$(docker exec sib-falco curl -s -o /dev/null -w "%{http_code}" http://sib-sidekick:2801/healthz 2>/dev/null || echo "000")
+HTTP_CODE=$(sidekick_healthz)
 if [ "$HTTP_CODE" = "200" ]; then
     pass "Falco -> Sidekick: OK"
 else

@@ -20,12 +20,27 @@ NC='\033[0m'
 # Load stack configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/../.env" ]; then
-    source "$SCRIPT_DIR/../.env"
+    set -a; source "$SCRIPT_DIR/../.env"; set +a
 fi
 
 STACK="${STACK:-vm}"
-SIDEKICK_URL="${SIDEKICK_URL:-http://localhost:2801}"
 TIMEOUT=60
+
+# Sidekick's health, checked from inside the Falco container: that is the path
+# alerts take, and it works without publishing Sidekick's port on the host.
+# With mTLS, Sidekick needs Falco's client certificate.
+sidekick_healthz() {
+    if [ "${MTLS_ENABLED:-false}" = "true" ]; then
+        local c="${FALCO_CLIENT_CERT_NAME:-local}"
+        docker exec sib-falco curl -s -o /dev/null -w "%{http_code}" \
+            --cacert /etc/falco/certs/ca/ca.crt \
+            --cert "/etc/falco/certs/clients/$c.crt" --key "/etc/falco/certs/clients/$c.key" \
+            https://sib-sidekick:2801/healthz 2>/dev/null || echo "000"
+    else
+        docker exec sib-falco curl -s -o /dev/null -w "%{http_code}" \
+            http://sib-sidekick:2801/healthz 2>/dev/null || echo "000"
+    fi
+}
 
 # Set URLs based on stack
 if [ "$STACK" = "vm" ]; then
@@ -56,7 +71,7 @@ check_logs_ready() {
 }
 
 for i in {1..30}; do
-    if check_logs_ready && curl -sf "${SIDEKICK_URL}/healthz" >/dev/null 2>&1; then
+    if check_logs_ready && [ "$(sidekick_healthz)" = "200" ]; then
         break
     fi
     sleep 1
@@ -68,7 +83,7 @@ if ! check_logs_ready; then
     exit 1
 fi
 
-if ! curl -sf "${SIDEKICK_URL}/healthz" >/dev/null 2>&1; then
+if [ "$(sidekick_healthz)" != "200" ]; then
     echo -e "${RED}✗ Falcosidekick is not ready${NC}"
     exit 1
 fi
