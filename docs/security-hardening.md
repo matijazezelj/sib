@@ -82,19 +82,18 @@ For encrypted and authenticated communication between fleet agents and SIB serve
 # 2. Generate certificates (CA, server, local client)
 make generate-certs
 
-# 3. Enable mTLS: set these two in .env
+# 3. Enable mTLS in .env
 #      MTLS_ENABLED=true
-#      SIDEKICK_URL=https://sib-sidekick:2801/
 
 # 4. (Re)install to apply
 make install
 ```
 
-`SIDEKICK_URL` matters: `.env.example` sets it to `http://`, and that value overrides the mTLS default.
+With mTLS on, Falco sends to `https://sib-sidekick:2801/`; an `http://` `SIDEKICK_URL` is switched to `https://`.
 
 Fleet hosts verify the server certificate against the address they connect to. It includes the server's detected IPv4 addresses (not `172.*` ones). To name another, generate the certificates with `SIB_SERVER_IP=192.0.2.10 make generate-certs`, or `SERVER_CN=sib.example.com` for a DNS name.
 
-With mTLS on, `./scripts/test-pipeline.sh` and the first-alert check at the end of `make install` can't reach Sidekick. Use `make test-mtls` and `make test-alert`.
+`./scripts/test-pipeline.sh` and the first-alert check at the end of `make install` check Sidekick from inside the Falco container, with its client certificate when mTLS is on. `make test-mtls` tests the connection on its own.
 
 With mTLS on, Falcosidekick's listener requires a client certificate, so
 `make install-storage-vm` / `install-storage-grafana` generate a scrape config
@@ -134,7 +133,7 @@ make deploy-fleet  # Uses mtls_enabled from inventory
 | `make generate-fleet-certs` | Generate certs for all fleet hosts |
 | `make fleet-certs` | Push certs to fleet hosts without a full redeploy |
 | `make verify-certs` | Verify certificate chain |
-| `make rotate-certs` | Regenerate CA, server and fleet certs (see [certs/README.md](https://github.com/matijazezelj/sib/blob/main/certs/README.md) for the local and scraper certs) |
+| `make rotate-certs` | Regenerate the CA, server, local and fleet certs; then reinstall storage to reissue the scraper cert (see [certs/README.md](https://github.com/matijazezelj/sib/blob/main/certs/README.md)) |
 | `make test-mtls` | Test mTLS connection |
 
 ### Certificate Locations

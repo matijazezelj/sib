@@ -77,9 +77,8 @@ For production deployments, enable mTLS to require client certificate authentica
 # Generate certificates (if not already done)
 make generate-certs
 
-# Set these two in .env
+# Enable mTLS in .env
 #   MTLS_ENABLED=true
-#   SIDEKICK_URL=https://sib-sidekick:2801/
 
 # Reinstall Sidekick, Falco (its client) and storage (it scrapes /metrics)
 make install-alerting

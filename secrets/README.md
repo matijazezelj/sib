@@ -36,9 +36,9 @@ File-based secrets are read by the AI analysis service only.
 | `OPENAI_API_KEY` | `OPENAI_API_KEY_FILE` |
 | `ANALYSIS_API_TOKEN` | `ANALYSIS_API_TOKEN_FILE` |
 
-The Grafana "Analyze with AI" links get their token from `ANALYSIS_API_TOKEN`
-in `.env`, not from `ANALYSIS_API_TOKEN_FILE`. If you use those links, keep the
-token in `.env`.
+With `ANALYSIS_API_TOKEN_FILE` set, `make install-analysis` puts the token from
+that file into the Grafana "Analyze with AI" links. Re-run it after changing
+the token.
 
 Falcosidekick output credentials (Slack, PagerDuty, AWS, ...) do not support
 `_FILE` yet; set them in `.env`.

@@ -42,8 +42,8 @@ Generate certificates for all hosts in Ansible inventory:
 make generate-fleet-certs
 ```
 
-Creating certificates doesn't enable mTLS. Set `MTLS_ENABLED=true` and
-`SIDEKICK_URL=https://sib-sidekick:2801/` in `.env` and reinstall; see
+Creating certificates doesn't enable mTLS. Set `MTLS_ENABLED=true` in `.env`
+and reinstall (Falco then talks to Sidekick over https); see
 [Security Hardening](../docs/security-hardening.md#5-enable-mtls-for-fleet-communication).
 
 The server certificate covers localhost, SIB's container names and the host's
@@ -95,13 +95,12 @@ openssl x509 -in certs/server/server.crt -noout -dates
 If you need to regenerate certificates (e.g., CA compromise, expiration):
 
 1. **Regenerate CA** (invalidates ALL existing certs). `make rotate-certs`
-   renews the CA, server and fleet certificates (answer `y` to both prompts; it
-   needs an Ansible inventory). It leaves the `local` and `metrics-scraper`
-   client certificates signed by the old CA, so renew those too:
+   renews the CA, the server certificate, the `local` client certificate and
+   the fleet certificates (answer `y` to both prompts; it needs an Ansible
+   inventory). The `metrics-scraper` certificate is reissued by the next
+   storage install, which notices it no longer matches the CA:
    ```bash
    make rotate-certs
-   ./scripts/generate-certs.sh client
-   rm certs/clients/metrics-scraper.crt certs/clients/metrics-scraper.key
    make install-storage-vm   # or install-storage-grafana
    make restart-alerting restart-detection
    make deploy-fleet

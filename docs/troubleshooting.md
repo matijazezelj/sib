@@ -328,7 +328,7 @@ curl "http://localhost:5000/health"
 
 ### Ollama Connection Refused
 
-The analysis container must be able to reach Ollama. `localhost` is the container itself, and `host.docker.internal` (the default) doesn't resolve on Docker CE for Linux. Make Ollama listen on an address the container can reach (`OLLAMA_HOST`), set it in `.env`, and firewall the port:
+The analysis container must be able to reach Ollama. `localhost` is the container itself; the default `host.docker.internal` is the Docker host. Make Ollama listen on an address the container can reach (`OLLAMA_HOST`), set `OLLAMA_URL` in `.env` if it runs elsewhere, and firewall the port:
 
 ```bash
 OLLAMA_URL=http://192.0.2.10:11434

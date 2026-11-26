@@ -45,11 +45,7 @@ make enable-remote
 make deploy-collector HOST=user@remote-host
 ```
 
-On the VM stack the script does not pass the server address to the containers, so they send to `localhost`. Set it afterwards:
-
-```bash
-ssh user@remote-host 'cd ~/sib-collector && echo "SIB_SERVER=192.0.2.10" > .env && HOSTNAME=$(hostname) docker compose up -d'
-```
+On the VM stack the script writes `SIB_SERVER` to `~/sib-collector/.env` on the remote host; vmagent sends metrics there.
 
 ### 3. Verify Connection
 

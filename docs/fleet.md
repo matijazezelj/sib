@@ -292,11 +292,7 @@ make deploy-collector HOST=user@remote-host
 
 The script copies the collector configuration to `~/sib-collector` on the remote host and starts it with Docker Compose, using the `STACK` from your `.env`.
 
-On the VM stack the script does not pass the server address to the containers, so they send to `localhost`. Set it afterwards:
-
-```bash
-ssh user@remote-host 'cd ~/sib-collector && echo "SIB_SERVER=192.0.2.10" > .env && HOSTNAME=$(hostname) docker compose up -d'
-```
+On the VM stack it also writes `SIB_SERVER` to `~/sib-collector/.env`, which vmagent uses for its remote-write address.
 
 ### Full Manual Setup (VM Stack)
 

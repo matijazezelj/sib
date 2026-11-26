@@ -37,7 +37,7 @@ Falco monitors system calls to detect:
 | `FALCO_HOSTNAME` | `sib-host` | Container hostname |
 | `FALCO_DRIVER_TYPE` | auto-detected | `modern_ebpf`, `ebpf` or `kmod`; written to `.env` on install |
 | `MTLS_ENABLED` | `false` | Send to Sidekick with a client certificate |
-| `SIDEKICK_URL` | `http://sib-sidekick:2801/` | Sidekick address; use `https://` with mTLS |
+| `SIDEKICK_URL` | `http://sib-sidekick:2801/` | Sidekick address; `https://` is used automatically with mTLS |
 | `FALCO_CLIENT_CERT_NAME` | `local` | Client certificate in `certs/clients/` |
 
 Key settings in the generated config:

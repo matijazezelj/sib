@@ -105,7 +105,7 @@ OLLAMA_URL=http://192.0.2.10:11434   # an address the container can reach
 OLLAMA_MODEL=qwen2.5:14b
 ```
 
-On Linux Docker Engine the default `host.docker.internal` URL does not resolve; see [Ollama Setup](../docs/ai-analysis.md#ollama-setup-fully-local).
+The default `host.docker.internal` URL reaches Ollama on the Docker host; Ollama must listen beyond 127.0.0.1. See [Ollama Setup](../docs/ai-analysis.md#ollama-setup-fully-local).
 
 ### Option 2: OpenAI API
 

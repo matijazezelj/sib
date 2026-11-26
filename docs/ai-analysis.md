@@ -111,7 +111,7 @@ OLLAMA_URL=http://192.0.2.10:11434   # an address the container can reach
 OLLAMA_MODEL=qwen2.5:14b
 ```
 
-The default URL, `http://host.docker.internal:11434`, does not resolve in this container on Linux Docker Engine, so set `OLLAMA_URL` to the host's IP there. Ollama also has to listen on that address (`OLLAMA_HOST=0.0.0.0` on the Ollama side; restrict access with a firewall).
+The default URL, `http://host.docker.internal:11434`, points at the Docker host (the compose file maps it with `host-gateway`, so it works on Linux too). Ollama has to listen on an address the container can reach, not only on 127.0.0.1 (`OLLAMA_HOST=0.0.0.0` on the Ollama side; restrict access with a firewall). For Ollama on another machine, set `OLLAMA_URL` to its address.
 
 ### OpenAI Setup
 
@@ -177,7 +177,7 @@ The obfuscation level is set in `analysis/config.yaml` (`obfuscation_level: mini
 
 The cache applies to `GET /analyze`, which the Grafana link uses. The JSON API and the CLI call the model every time.
 
-- Cache entries expire after `ANALYSIS_CACHE_TTL` seconds (default: 24 hours). The compose file does not pass this variable from `.env`, so setting it there has no effect
+- Cache entries expire after `ANALYSIS_CACHE_TTL` seconds (default: 24 hours; set it in `.env`)
 - Cache keys are normalized: timestamps, numeric IDs, IPs, and container IDs are stripped so similar alerts share a single cache entry
 - Duplicate requests increment a `dedup_count` counter rather than re-running analysis
 - A failed analysis is cached too (see [Troubleshooting](#troubleshooting))
@@ -203,7 +203,7 @@ OPENAI_API_KEY_FILE=/app/secrets/openai_api_key
 
 When a `_FILE` variant is set, the service reads the key from that file at startup.
 
-The Grafana links are built from `ANALYSIS_API_TOKEN` in `.env`. If you use `ANALYSIS_API_TOKEN_FILE`, keep both values the same, or the links return 401.
+With `ANALYSIS_API_TOKEN_FILE` set, `make install-analysis` reads the token for the Grafana links from that file (`/app/secrets/<name>` in the container is `./secrets/<name>` on the host).
 
 ---
 

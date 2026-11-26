@@ -57,7 +57,7 @@ Grafana alert notifications (`GRAFANA_ALERT_WEBHOOK_URL`, `GRAFANA_ALERT_WEBHOOK
 | `FALCO_BUFFERED_OUTPUTS` | `false` | Keep `false` for low-latency delivery. Buffered output can hold back sparse events. |
 | `FALCO_TIME_FORMAT` | `iso8601` | `iso8601` or `rfc2822`. |
 | `FALCO_DRIVER_TYPE` | auto | Not in `.env.example`. Detected on install (`modern_ebpf` on kernel 5.8+, `ebpf` otherwise) and written to `.env`. Set it to force a driver. |
-| `SIDEKICK_URL` | `http://sib-sidekick:2801/` | Where Falco sends events. On a remote sensor, point it at the central server, e.g. `https://192.0.2.10:2801/`. |
+| `SIDEKICK_URL` | `http://sib-sidekick:2801/` (`https://` with mTLS) | Where Falco sends events; with mTLS an `http://` value is switched to `https://`. On a remote sensor, point it at the central server, e.g. `https://192.0.2.10:2801/`. |
 | `FALCO_CLIENT_CERT_NAME` | `local` | Client certificate name under `certs/clients/` when mTLS is on. Use one per sensor. |
 
 ## Falcosidekick

@@ -120,6 +120,8 @@ A per-host risk score from the number and severity of Falco events.
 
 The score is `Critical × 25 + Error × 10 + Warning × 3 + Notice × 1`, rated Low below 10,000, Medium up to 50,000, High up to 100,000 and Critical above.
 
+![Host Risk Scores](assets/images/risk-scores.png)
+
 ## UniFi Logs (`vm` stack)
 
 Syslog from UniFi devices, received on the VictoriaLogs syslog listener.

@@ -227,9 +227,8 @@ For encrypted communication between components:
 # Generate certificates
 make generate-certs
 
-# Enable mTLS: set these two in .env
+# Enable mTLS in .env
 #   MTLS_ENABLED=true
-#   SIDEKICK_URL=https://sib-sidekick:2801/
 
 # Reinstall with mTLS
 make install-alerting

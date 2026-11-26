@@ -158,7 +158,7 @@ The Events Explorer dashboard includes AI analysis links that send events to the
 If Grafana shows "Plugin not registered" (offline or restricted networks), install manually:
 
 ```bash
-docker exec sib-grafana grafana cli plugins install victoriametrics-logs-datasource
+docker exec sib-grafana grafana cli plugins install victoriametrics-logs-datasource 0.34.0
 docker restart sib-grafana
 ```
 
