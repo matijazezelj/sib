@@ -216,6 +216,26 @@ heartbeats. Only a stop that is HIB's last word silences it: after a clean stop
 and a restart, a later crash fires as usual. A host that last ran HIB more than
 24 hours ago is forgotten.
 
+## How it looks
+
+The **Coding Agents (HIB)** dashboard (one per stack, in the SIB dashboards
+folder) shows HIB daemons and sessions per host, HIB events by type and
+severity, the critical and security events, and Falco's coding agent alerts
+with the session and scope each one came from:
+
+![Coding Agents (HIB) dashboard](assets/images/hib-dashboard.png)
+
+The HIB alert group in Grafana after a test-mode run with scripted agent
+turns, wrong-token requests and a refused hash key:
+
+![HIB alerts firing](assets/images/hib-alerts.png)
+
+A Falco coding agent alert in the Events Explorer: a real Claude Code turn
+under HIB ran `cat ~/.pgpass`, and `session=` and `cgroups=` name its HIB
+session and scope:
+
+![Falco coding agent alert](assets/images/hib-falco-alert.png)
+
 ## End-to-end test
 
 `make e2e` checks the whole chain, from HIB's event log through the collector
