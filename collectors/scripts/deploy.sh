@@ -12,6 +12,11 @@ fi
 
 REMOTE_HOST="$1"
 SIB_SERVER="$2"
+# It goes into configs and a compose .env: a host name or address only.
+if ! [[ "$SIB_SERVER" =~ ^[A-Za-z0-9.:-]+$ ]]; then
+    echo "Invalid SIB server address: $SIB_SERVER" >&2
+    exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COLLECTORS_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -57,6 +62,9 @@ else
     scp "$TEMP_VMAGENT" "$REMOTE_HOST:~/sib-collector/config/vmagent.yml"
     scp "$COLLECTORS_DIR/compose-vm.yaml" "$REMOTE_HOST:~/sib-collector/compose.yaml"
     rm "$TEMP_CONFIG" "$TEMP_VMAGENT"
+    # vmagent's remote-write URL comes from SIB_SERVER in compose.yaml; keep it
+    # in the project's .env so a later 'docker compose up' there uses it too.
+    ssh "$REMOTE_HOST" "echo 'SIB_SERVER=$SIB_SERVER' > ~/sib-collector/.env"
 
     echo "[2/4] Starting collector containers..."
     ssh "$REMOTE_HOST" "cd ~/sib-collector && HOSTNAME=\$(hostname) docker compose up -d"
